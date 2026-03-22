@@ -1,0 +1,369 @@
+import { useChat } from "@/lib/stores/useChat";
+import { useGame, getModelColor } from "@/lib/stores/useGame";
+import { apiFetch } from "@/lib/utils";
+import { useEffect, useRef, useState, useCallback } from "react";
+
+export function ChatBubble() {
+  const { isOpen, activeRobotId, messages, isLoading, inputText, setInputText, sendMessage, closeChat } = useChat();
+  const models = useGame((s) => s.models);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [bgSending, setBgSending] = useState(false);
+  const [size, setSize] = useState({ width: 420, height: 500 });
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
+  const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number; dir: string } | null>(null);
+
+  const sendToBackground = async () => {
+    if (!inputText.trim() || bgSending) return;
+    const msgText = inputText.trim();
+    setBgSending(true);
+    try {
+      const currentMsgs = useChat.getState().messages;
+      useChat.setState({
+        messages: [...currentMsgs, { role: "user", content: msgText }],
+        inputText: "",
+      });
+      setInputText("");
+
+      const res = await apiFetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msgText, robotId: activeRobotId }),
+      });
+
+      if (!res.ok) throw new Error("Failed");
+
+      useChat.setState({
+        messages: [...useChat.getState().messages, { role: "assistant", content: "تم إرسال المهمة للتنفيذ بالخلفية. يمكنك إغلاق الصفحة والرجوع لاحقاً لرؤية النتيجة من زر 📋 المهام الخلفية" }],
+      });
+    } catch (_e) {
+      useChat.setState({
+        messages: [...useChat.getState().messages, { role: "assistant", content: "حدث خطأ في إرسال المهمة" }],
+      });
+    }
+    setBgSending(false);
+  };
+
+  const handleMouseDown = useCallback((e: React.MouseEvent, dir: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    resizeRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: size.width,
+      startH: size.height,
+      dir,
+    };
+  }, [size]);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('input, button')) return;
+    e.preventDefault();
+    setIsDragging(true);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPosX: position.x,
+      startPosY: position.y,
+    };
+  }, [position]);
+
+  useEffect(() => {
+    if (!isResizing && !isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging && dragRef.current) {
+        const { startX, startY, startPosX, startPosY } = dragRef.current;
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+        setPosition({ x: startPosX + deltaX, y: startPosY + deltaY });
+      }
+      if (isResizing && resizeRef.current) {
+        const { startX, startY, startW, startH, dir } = resizeRef.current;
+        let newW = startW;
+        let newH = startH;
+
+        if (dir.includes("e")) newW = Math.max(320, Math.min(900, startW + (e.clientX - startX)));
+        if (dir.includes("w")) newW = Math.max(320, Math.min(900, startW - (e.clientX - startX)));
+        if (dir.includes("s")) newH = Math.max(300, Math.min(800, startH + (e.clientY - startY)));
+        if (dir.includes("n")) newH = Math.max(300, Math.min(800, startH - (e.clientY - startY)));
+
+        setSize({ width: newW, height: newH });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setIsResizing(false);
+      dragRef.current = null;
+      resizeRef.current = null;
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing, isDragging]);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+    if (isOpen && !isLoading && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [messages, isLoading]);
+
+  if (!isOpen) return null;
+
+  const activeModel = models.find((m) => m.id === activeRobotId);
+  const robotName = activeModel ? `Sillar ${activeModel.name}` : "Sillar AI";
+  const robotColor = activeModel ? getModelColor(activeModel.index) : "#4fc3f7";
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    if (e.key === "Enter" && !isLoading) {
+      sendMessage();
+    }
+    if (e.key === "Escape") {
+      closeChat();
+    }
+  };
+
+  const edgeStyle = (cursor: string, pos: React.CSSProperties): React.CSSProperties => ({
+    position: "absolute",
+    ...pos,
+    cursor,
+    zIndex: 150,
+    background: "rgba(255,255,255,0.1)",
+    pointerEvents: "auto",
+  });
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: "absolute",
+        top: `calc(50% + ${position.y}px)`,
+        left: `calc(50% + ${position.x}px)`,
+        transform: "translate(-50%, -50%)",
+        width: `${size.width}px`,
+        height: `${size.height}px`,
+        background: "rgba(15, 15, 25, 0.95)",
+        borderRadius: "16px",
+        border: `2px solid ${robotColor}`,
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "Inter, sans-serif",
+        zIndex: 100,
+        boxShadow: `0 0 30px ${robotColor}40`,
+        userSelect: isResizing || isDragging ? "none" : "auto",
+        cursor: isDragging ? "grabbing" : "default",
+      }}
+    >
+      {/* Draggable header */}
+      <div
+        onMouseDown={handleDragStart}
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "12px 16px",
+          borderBottom: `1px solid ${robotColor}40`,
+          flexShrink: 0,
+          cursor: "grab",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div
+            style={{
+              width: "10px",
+              height: "10px",
+              borderRadius: "50%",
+              background: robotColor,
+              boxShadow: `0 0 8px ${robotColor}`,
+              flexShrink: 0,
+            }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+            <span style={{ color: "white", fontSize: "16px", fontWeight: "bold" }}>
+              {robotName}
+            </span>
+            {activeModel?.modelId && (
+              <span style={{ color: "#aaa", fontSize: "11px", fontWeight: "normal", direction: "ltr" }}>
+                {activeModel.modelId}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={closeChat}
+          style={{
+            background: "none",
+            border: "none",
+            color: "#888",
+            fontSize: "20px",
+            cursor: "pointer",
+            padding: "0 4px",
+          }}
+        >
+          X
+        </button>
+      </div>
+
+      {/* Resize handles */}
+      <div onMouseDown={(e) => handleMouseDown(e, "e")} style={edgeStyle("ew-resize", { top: 0, right: -4, width: 8, height: "100%" })} />
+      <div onMouseDown={(e) => handleMouseDown(e, "w")} style={edgeStyle("ew-resize", { top: 0, left: -4, width: 8, height: "100%" })} />
+      <div onMouseDown={(e) => handleMouseDown(e, "s")} style={edgeStyle("ns-resize", { bottom: -4, left: 0, width: "100%", height: 8 })} />
+      <div onMouseDown={(e) => handleMouseDown(e, "n")} style={edgeStyle("ns-resize", { top: -4, left: 0, width: "100%", height: 8 })} />
+      <div onMouseDown={(e) => handleMouseDown(e, "se")} style={edgeStyle("nwse-resize", { bottom: -4, right: -4, width: 14, height: 14 })} />
+      <div onMouseDown={(e) => handleMouseDown(e, "sw")} style={edgeStyle("nesw-resize", { bottom: -4, left: -4, width: 14, height: 14 })} />
+      <div onMouseDown={(e) => handleMouseDown(e, "ne")} style={edgeStyle("nesw-resize", { top: -4, right: -4, width: 14, height: 14 })} />
+      <div onMouseDown={(e) => handleMouseDown(e, "nw")} style={edgeStyle("nwse-resize", { top: -4, left: -4, width: 14, height: 14 })} />
+
+      {/* Corner resize indicator */}
+      <div style={{
+        position: "absolute",
+        bottom: 4,
+        right: 8,
+        color: `${robotColor}60`,
+        fontSize: "12px",
+        pointerEvents: "none",
+        zIndex: 111,
+      }}>⟋</div>
+
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "12px 16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          minHeight: 0,
+        }}
+      >
+        {messages.length === 0 && (
+          <div style={{ color: "#666", textAlign: "center", fontSize: "13px", marginTop: "20px", direction: "rtl" }}>
+            اكتب رسالة للتحدث مع {robotName}
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            style={{
+              alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+              background: msg.role === "user" ? "#2563eb" : "#333",
+              color: "white",
+              padding: "8px 14px",
+              borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+              maxWidth: "85%",
+              fontSize: "14px",
+              lineHeight: "1.5",
+              direction: "rtl",
+              wordBreak: "break-word",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {msg.content}
+          </div>
+        ))}
+        {isLoading && (
+          <div
+            style={{
+              alignSelf: "flex-start",
+              background: "#333",
+              color: "#aaa",
+              padding: "8px 14px",
+              borderRadius: "14px 14px 14px 4px",
+              fontSize: "14px",
+            }}
+          >
+            ...يكتب
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <div
+        style={{
+          padding: "12px 16px",
+          borderTop: `1px solid ${robotColor}40`,
+          display: "flex",
+          gap: "8px",
+          flexShrink: 0,
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="...اكتب رسالتك"
+          disabled={isLoading}
+          style={{
+            flex: 1,
+            background: "#1a1a2e",
+            border: "1px solid #333",
+            borderRadius: "8px",
+            padding: "10px 14px",
+            color: "white",
+            fontSize: "14px",
+            outline: "none",
+            direction: "rtl",
+          }}
+        />
+        <button
+          onClick={sendToBackground}
+          disabled={isLoading || bgSending || !inputText.trim()}
+          title="نفذ بالخلفية - يشتغل حتى لو سكرت الصفحة"
+          style={{
+            background: "#7c4dff",
+            border: "none",
+            borderRadius: "8px",
+            padding: "10px 10px",
+            color: "white",
+            fontSize: "12px",
+            cursor: isLoading || bgSending || !inputText.trim() ? "not-allowed" : "pointer",
+            opacity: isLoading || bgSending || !inputText.trim() ? 0.5 : 1,
+            fontWeight: "bold",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {bgSending ? "..." : "📋 خلفية"}
+        </button>
+        <button
+          onClick={sendMessage}
+          disabled={isLoading || !inputText.trim()}
+          style={{
+            background: robotColor,
+            border: "none",
+            borderRadius: "8px",
+            padding: "10px 16px",
+            color: "white",
+            fontSize: "14px",
+            cursor: isLoading || !inputText.trim() ? "not-allowed" : "pointer",
+            opacity: isLoading || !inputText.trim() ? 0.5 : 1,
+            fontWeight: "bold",
+          }}
+        >
+          ارسل
+        </button>
+      </div>
+    </div>
+  );
+}

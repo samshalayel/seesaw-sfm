@@ -1,0 +1,499 @@
+```text
+========================================
+TEMPLATES (S0–S3) — DO NOT CHANGE
+Paste these templates exactly. The ONLY allowed edits are the allowed fields you defined.
+========================================
+
+---------- TEMPLATE S0 ----------
+{
+  "nodes": [
+    {
+      "id": "GROUP_ID",
+      "type": "group",
+      "data": { "label": "S0" },
+      "position": { "x": 150, "y": -705 },
+      "width": 1697,
+      "height": 1100,
+      "style": { "width": 1697, "height": 1100, "zIndex": -1 }
+    },
+    {
+      "id": "stage-0-1",
+      "type": "stage-0",
+      "data": {
+        "group": "S0",
+        "label": "Stage 0 — Problem / Technical Lock",
+        "description": "",
+        "aiPercentage": 20,
+        "humanPercentage": 80,
+        "aiResponsibilities": [],
+        "humanResponsibilities": [],
+        "stageNumber": 0,
+        "restrictions": ["لا حلول تنفيذية","لا API","لا UI","لا DB Schema","لا Architecture Stack","لا CRUD","لا Code"],
+        "customFields": {}
+      },
+      "position": { "x": 15, "y": 60 },
+      "width": 300,
+      "height": 208,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "insight-node-2",
+      "type": "insight-node",
+      "data": { "group": "S0", "label": "Insight", "description": "" },
+      "position": { "x": 210, "y": 285 },
+      "width": 300,
+      "height": 297,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "outcome-node-3",
+      "type": "outcome-node",
+      "data": { "group": "S0", "label": "Outcome", "description": "" },
+      "position": { "x": 570, "y": 90 },
+      "width": 300,
+      "height": 299,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "direction-node-4",
+      "type": "direction-node",
+      "data": { "group": "S0", "label": "Direction", "description": "" },
+      "position": { "x": 915, "y": 225 },
+      "width": 300,
+      "height": 299,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "gate-problem-5",
+      "type": "gate-problem",
+      "data": {
+        "group": "S0",
+        "label": "S0 Blocking Gate",
+        "description": "",
+        "gateType": "problem",
+        "decisionAuthority": "Human Only",
+        "gateStatus": "pending",
+        "aiPercentage": 0,
+        "humanPercentage": 100,
+        "gateChecklist": []
+      },
+      "position": { "x": 1095, "y": 540 },
+      "width": 402,
+      "height": 237,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "alignment-gate-6",
+      "type": "alignment-gate",
+      "data": { "group": "S0", "label": "Alignment Gate", "description": "Non-blocking: مراجعة سريعة لتأكيد أن الأطراف تفهم نفس تعريف المشكلة قبل التقدم." },
+      "position": { "x": 1395, "y": 795 },
+      "width": 280,
+      "height": 298,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "evidence-node-7",
+      "type": "evidence-node",
+      "data": {
+        "group": "S0",
+        "label": "Evidence",
+        "mandatory": true,
+        "description": "",
+        "evidenceKey": "s0_docs_pack",
+        "justification": "",
+        "owner": ""
+      },
+      "position": { "x": 1320, "y": 75 },
+      "width": 320,
+      "height": 290,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    }
+  ],
+  "edges": [
+    { "id": "e-s0-insight", "type": "custom", "source": "stage-0-1", "target": "insight-node-2" },
+    { "id": "e-insight-outcome", "type": "custom", "source": "insight-node-2", "target": "outcome-node-3" },
+    { "id": "e-outcome-direction", "type": "custom", "source": "outcome-node-3", "target": "direction-node-4" },
+    { "id": "e-direction-gate", "type": "custom", "source": "direction-node-4", "target": "gate-problem-5" },
+    { "id": "e-gate-alignment", "type": "custom", "source": "gate-problem-5", "target": "alignment-gate-6" },
+    { "id": "e-evidence-gate", "type": "custom", "source": "evidence-node-7", "target": "gate-problem-5", "label": "evidence" }
+  ],
+  "evidence": [],
+  "exportedAt": ""
+}
+
+---------- TEMPLATE S1 ----------
+{
+  "nodes": [
+    {
+      "id": "GROUP_ID",
+      "type": "group",
+      "data": { "label": "S1" },
+      "position": { "x": 150, "y": -705 },
+      "width": 1697,
+      "height": 1100,
+      "style": { "width": 1697, "height": 1100, "zIndex": -1 }
+    },
+    {
+      "id": "stage-1-1",
+      "type": "stage-1",
+      "data": {
+        "group": "S1",
+        "label": "Stage 1 — Product Shape",
+        "description": "",
+        "aiPercentage": 20,
+        "humanPercentage": 80,
+        "aiResponsibilities": [],
+        "humanResponsibilities": [],
+        "stageNumber": 1,
+        "customFields": {}
+      },
+      "position": { "x": 15, "y": 60 },
+      "width": 300,
+      "height": 208,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "insight-node-2",
+      "type": "insight-node",
+      "data": { "group": "S1", "label": "Insight", "description": "" },
+      "position": { "x": 210, "y": 285 },
+      "width": 300,
+      "height": 297,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "outcome-node-3",
+      "type": "outcome-node",
+      "data": { "group": "S1", "label": "Outcome", "description": "" },
+      "position": { "x": 570, "y": 90 },
+      "width": 300,
+      "height": 299,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "direction-node-4",
+      "type": "direction-node",
+      "data": { "group": "S1", "label": "Direction", "description": "" },
+      "position": { "x": 915, "y": 225 },
+      "width": 300,
+      "height": 299,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "gate-problem-5",
+      "type": "gate-problem",
+      "data": {
+        "group": "S1",
+        "label": "S1 Blocking Gate",
+        "description": "",
+        "gateType": "product",
+        "decisionAuthority": "Human Only",
+        "gateStatus": "pending",
+        "aiPercentage": 0,
+        "humanPercentage": 100,
+        "gateChecklist": []
+      },
+      "position": { "x": 1095, "y": 540 },
+      "width": 402,
+      "height": 237,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "alignment-gate-6",
+      "type": "alignment-gate",
+      "data": { "group": "S1", "label": "Alignment Gate", "description": "Non-blocking: مراجعة سريعة لتأكيد أن الأطراف متفقة على شكل المنتج (Actors/Flow/Rules) قبل التقدم." },
+      "position": { "x": 1395, "y": 795 },
+      "width": 280,
+      "height": 298,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "evidence-node-7",
+      "type": "evidence-node",
+      "data": {
+        "group": "S1",
+        "label": "Evidence",
+        "mandatory": true,
+        "description": "",
+        "evidenceKey": "s1_docs_pack",
+        "justification": "",
+        "owner": ""
+      },
+      "position": { "x": 1320, "y": 75 },
+      "width": 320,
+      "height": 290,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    }
+  ],
+  "edges": [
+    { "id": "e-s1-insight", "type": "custom", "source": "stage-1-1", "target": "insight-node-2" },
+    { "id": "e-insight-outcome", "type": "custom", "source": "insight-node-2", "target": "outcome-node-3" },
+    { "id": "e-outcome-direction", "type": "custom", "source": "outcome-node-3", "target": "direction-node-4" },
+    { "id": "e-direction-gate", "type": "custom", "source": "direction-node-4", "target": "gate-problem-5" },
+    { "id": "e-gate-alignment", "type": "custom", "source": "gate-problem-5", "target": "alignment-gate-6" },
+    { "id": "e-evidence-gate", "type": "custom", "source": "evidence-node-7", "target": "gate-problem-5", "label": "evidence" }
+  ],
+  "evidence": [],
+  "exportedAt": ""
+}
+
+---------- TEMPLATE S2 ----------
+{
+  "nodes": [
+    {
+      "id": "GROUP_ID",
+      "type": "group",
+      "data": { "label": "S2" },
+      "position": { "x": 150, "y": -705 },
+      "width": 1697,
+      "height": 1100,
+      "style": { "width": 1697, "height": 1100, "zIndex": -1 }
+    },
+    {
+      "id": "stage-2-1",
+      "type": "stage-2",
+      "data": {
+        "group": "S2",
+        "label": "Stage 2 — Conceptual Architecture Spine",
+        "description": "",
+        "aiPercentage": 25,
+        "humanPercentage": 75,
+        "aiResponsibilities": [],
+        "humanResponsibilities": [],
+        "stageNumber": 2,
+        "customFields": {}
+      },
+      "position": { "x": 15, "y": 60 },
+      "width": 300,
+      "height": 208,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "insight-node-2",
+      "type": "insight-node",
+      "data": { "group": "S2", "label": "Insight", "description": "" },
+      "position": { "x": 210, "y": 285 },
+      "width": 300,
+      "height": 297,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "outcome-node-3",
+      "type": "outcome-node",
+      "data": { "group": "S2", "label": "Outcome", "description": "" },
+      "position": { "x": 570, "y": 90 },
+      "width": 300,
+      "height": 299,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "direction-node-4",
+      "type": "direction-node",
+      "data": { "group": "S2", "label": "Direction", "description": "" },
+      "position": { "x": 915, "y": 225 },
+      "width": 300,
+      "height": 299,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "gate-problem-5",
+      "type": "gate-problem",
+      "data": {
+        "group": "S2",
+        "label": "S2 Blocking Gate",
+        "description": "",
+        "gateType": "architecture",
+        "decisionAuthority": "Human Only",
+        "gateStatus": "pending",
+        "aiPercentage": 0,
+        "humanPercentage": 100,
+        "gateChecklist": []
+      },
+      "position": { "x": 1095, "y": 540 },
+      "width": 402,
+      "height": 237,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "alignment-gate-6",
+      "type": "alignment-gate",
+      "data": { "group": "S2", "label": "Alignment Gate", "description": "Non-blocking: مراجعة سريعة للتأكد أن العمود الفقري المفاهيمي لا يتجاوز النطاق ولا يقفز للتقنيات." },
+      "position": { "x": 1395, "y": 795 },
+      "width": 280,
+      "height": 298,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "evidence-node-7",
+      "type": "evidence-node",
+      "data": {
+        "group": "S2",
+        "label": "Evidence",
+        "mandatory": true,
+        "description": "",
+        "evidenceKey": "s2_docs_pack",
+        "justification": "",
+        "owner": ""
+      },
+      "position": { "x": 1320, "y": 75 },
+      "width": 320,
+      "height": 290,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    }
+  ],
+  "edges": [
+    { "id": "e-s2-insight", "type": "custom", "source": "stage-2-1", "target": "insight-node-2" },
+    { "id": "e-insight-outcome", "type": "custom", "source": "insight-node-2", "target": "outcome-node-3" },
+    { "id": "e-outcome-direction", "type": "custom", "source": "outcome-node-3", "target": "direction-node-4" },
+    { "id": "e-direction-gate", "type": "custom", "source": "direction-node-4", "target": "gate-problem-5" },
+    { "id": "e-gate-alignment", "type": "custom", "source": "gate-problem-5", "target": "alignment-gate-6" },
+    { "id": "e-evidence-gate", "type": "custom", "source": "evidence-node-7", "target": "gate-problem-5", "label": "evidence" }
+  ],
+  "evidence": [],
+  "exportedAt": ""
+}
+
+---------- TEMPLATE S3 ----------
+{
+  "nodes": [
+    {
+      "id": "GROUP_ID",
+      "type": "group",
+      "data": { "label": "S3" },
+      "position": { "x": 150, "y": -705 },
+      "width": 1697,
+      "height": 1100,
+      "style": { "width": 1697, "height": 1100, "zIndex": -1 }
+    },
+    {
+      "id": "stage-3-1",
+      "type": "stage-3",
+      "data": {
+        "group": "S3",
+        "label": "Stage 3 — Production Slice",
+        "description": "",
+        "aiPercentage": 30,
+        "humanPercentage": 70,
+        "aiResponsibilities": [],
+        "humanResponsibilities": [],
+        "stageNumber": 3,
+        "customFields": {}
+      },
+      "position": { "x": 15, "y": 60 },
+      "width": 300,
+      "height": 208,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "insight-node-2",
+      "type": "insight-node",
+      "data": { "group": "S3", "label": "Insight", "description": "" },
+      "position": { "x": 210, "y": 285 },
+      "width": 300,
+      "height": 297,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "outcome-node-3",
+      "type": "outcome-node",
+      "data": { "group": "S3", "label": "Outcome", "description": "" },
+      "position": { "x": 570, "y": 90 },
+      "width": 300,
+      "height": 299,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "direction-node-4",
+      "type": "direction-node",
+      "data": { "group": "S3", "label": "Direction", "description": "" },
+      "position": { "x": 915, "y": 225 },
+      "width": 300,
+      "height": 299,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "gate-problem-5",
+      "type": "gate-problem",
+      "data": {
+        "group": "S3",
+        "label": "S3 Blocking Gate",
+        "description": "",
+        "gateType": "slice",
+        "decisionAuthority": "Human Only",
+        "gateStatus": "pending",
+        "aiPercentage": 0,
+        "humanPercentage": 100,
+        "gateChecklist": []
+      },
+      "position": { "x": 1095, "y": 540 },
+      "width": 402,
+      "height": 237,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "alignment-gate-6",
+      "type": "alignment-gate",
+      "data": { "group": "S3", "label": "Alignment Gate", "description": "Non-blocking: مراجعة سريعة للتأكد أن الـ Slice واحد ومحدد وغير متشعب." },
+      "position": { "x": 1395, "y": 795 },
+      "width": 280,
+      "height": 298,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    },
+    {
+      "id": "evidence-node-7",
+      "type": "evidence-node",
+      "data": {
+        "group": "S3",
+        "label": "Evidence",
+        "mandatory": true,
+        "description": "",
+        "evidenceKey": "s3_docs_pack",
+        "justification": "",
+        "owner": ""
+      },
+      "position": { "x": 1320, "y": 75 },
+      "width": 320,
+      "height": 290,
+      "parentId": "GROUP_ID",
+      "extent": "parent"
+    }
+  ],
+  "edges": [
+    { "id": "e-s3-insight", "type": "custom", "source": "stage-3-1", "target": "insight-node-2" },
+    { "id": "e-insight-outcome", "type": "custom", "source": "insight-node-2", "target": "outcome-node-3" },
+    { "id": "e-outcome-direction", "type": "custom", "source": "outcome-node-3", "target": "direction-node-4" },
+    { "id": "e-direction-gate", "type": "custom", "source": "direction-node-4", "target": "gate-problem-5" },
+    { "id": "e-gate-alignment", "type": "custom", "source": "gate-problem-5", "target": "alignment-gate-6" },
+    { "id": "e-evidence-gate", "type": "custom", "source": "evidence-node-7", "target": "gate-problem-5", "label": "evidence" }
+  ],
+  "evidence": [],
+  "exportedAt": ""
+}
+```

@@ -1,0 +1,21 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.vault-settings.json
+
+# Vault data — contains API keys, never push
+.vaults/
+
+# Env files
+.env
+.env.local
+.env.*
+
+# Large assets
+attached_assets/
+
+# Claude memory
+.claude/
