@@ -4,6 +4,7 @@ import { apiFetch } from "../utils";
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  imageUrl?: string; // base64 data URL للعرض
 }
 
 interface ChatState {
@@ -12,19 +13,25 @@ interface ChatState {
   messages: ChatMessage[];
   isLoading: boolean;
   inputText: string;
+  pendingImage: string | null; // base64 data URL
   chatHistory: Record<string, ChatMessage[]>;
   robotScreens: Record<string, string>;
   isBroadcast: boolean;
   broadcastResults: Record<string, string>;
+  activeProjectKey: string | null;
+  wavingRobotId: string | null;
 
   openChat: (robotId: string, startS0?: boolean) => void;
+  triggerRobotWave: (robotId: string) => void;
   closeChat: () => void;
   setInputText: (text: string) => void;
+  setPendingImage: (img: string | null) => void;
   sendMessage: () => void;
   clearAllChats: () => void;
   setRobotScreen: (robotId: string, content: string) => void;
   startBroadcast: (message: string, workerIds: string[]) => Promise<void>;
   closeBroadcast: () => void;
+  setActiveProject: (key: string | null) => void;
 }
 
 export const useChat = create<ChatState>((set, get) => ({
@@ -33,10 +40,13 @@ export const useChat = create<ChatState>((set, get) => ({
   messages: [],
   isLoading: false,
   inputText: "",
+  pendingImage: null,
   chatHistory: {},
   robotScreens: {},
   isBroadcast: false,
   broadcastResults: {},
+  activeProjectKey: null,
+  wavingRobotId: null,
 
   openChat: (robotId: string, startS0: boolean = false) => {
     const { chatHistory, activeRobotId, messages } = get();
@@ -78,6 +88,10 @@ export const useChat = create<ChatState>((set, get) => ({
 
   setInputText: (text: string) => {
     set({ inputText: text });
+  },
+
+  setPendingImage: (img: string | null) => {
+    set({ pendingImage: img });
   },
 
   clearAllChats: () => {
@@ -164,12 +178,27 @@ export const useChat = create<ChatState>((set, get) => ({
     set({ isBroadcast: false, broadcastResults: {}, robotScreens: {} });
   },
 
-  sendMessage: async () => {
-    const { inputText, messages, activeRobotId, isLoading } = get();
-    if (!inputText.trim() || isLoading) return;
+  setActiveProject: (key: string | null) => {
+    set({ activeProjectKey: key });
+  },
 
-    const userMessage: ChatMessage = { role: "user", content: inputText.trim() };
-    set({ messages: [...messages, userMessage], inputText: "", isLoading: true });
+  triggerRobotWave: (robotId: string) => {
+    set({ wavingRobotId: robotId });
+    setTimeout(() => {
+      set((s) => (s.wavingRobotId === robotId ? { wavingRobotId: null } : {}));
+    }, 2600);
+  },
+
+  sendMessage: async () => {
+    const { inputText, messages, activeRobotId, isLoading, pendingImage } = get();
+    if (!inputText.trim() && !pendingImage || isLoading) return;
+
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: inputText.trim() || "حلّل هذه الصورة",
+      ...(pendingImage ? { imageUrl: pendingImage } : {}),
+    };
+    set({ messages: [...messages, userMessage], inputText: "", pendingImage: null, isLoading: true });
 
     try {
       const currentMessages = get().messages;
@@ -180,7 +209,13 @@ export const useChat = create<ChatState>((set, get) => ({
       const response = await apiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage.content, robotId: activeRobotId, history }),
+        body: JSON.stringify({
+          message: userMessage.content,
+          robotId: activeRobotId,
+          history,
+          projectKey: get().activeProjectKey,
+          ...(pendingImage ? { imageBase64: pendingImage } : {}),
+        }),
       });
 
       const reader = response.body?.getReader();

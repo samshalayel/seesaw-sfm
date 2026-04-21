@@ -2,20 +2,41 @@ import { useChat } from "@/lib/stores/useChat";
 import { useGame, getModelColor } from "@/lib/stores/useGame";
 import { apiFetch } from "@/lib/utils";
 import { useEffect, useRef, useState, useCallback } from "react";
+import React from "react";
 
 export function ChatBubble() {
-  const { isOpen, activeRobotId, messages, isLoading, inputText, setInputText, sendMessage, closeChat } = useChat();
+  const { isOpen, activeRobotId, messages, isLoading, inputText, setInputText, sendMessage, closeChat, activeProjectKey, setActiveProject, pendingImage, setPendingImage } = useChat();
   const models = useGame((s) => s.models);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [bgSending, setBgSending] = useState(false);
+  const [showProjectPanel, setShowProjectPanel] = useState(false);
+  const [projectInput, setProjectInput] = useState("");
+  const [projects, setProjects] = useState<Array<{ id: number; projectKey: string; name: string }>>([]);
   const [size, setSize] = useState({ width: 420, height: 500 });
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number; dir: string } | null>(null);
+
+  const handleImagePick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPendingImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    // reset so same file can be picked again
+    e.target.value = "";
+  };
 
   const sendToBackground = async () => {
     if (!inputText.trim() || bgSending) return;
@@ -127,6 +148,30 @@ export function ChatBubble() {
     }
   }, [messages, isLoading]);
 
+  // تحميل قائمة المشاريع
+  useEffect(() => {
+    if (!isOpen) return;
+    apiFetch("/api/projects").then(r => r.json()).then(setProjects).catch(() => {});
+  }, [isOpen, showProjectPanel]);
+
+  const handleCreateProject = async () => {
+    const key = projectInput.trim().toUpperCase().slice(0, 6);
+    if (!key) return;
+    const res = await apiFetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectKey: key }),
+    });
+    if (res.ok) {
+      const row = await res.json();
+      setActiveProject(row.projectKey);
+      setProjectInput("");
+      setShowProjectPanel(false);
+      const list = await apiFetch("/api/projects").then(r => r.json());
+      setProjects(list);
+    }
+  };
+
   if (!isOpen) return null;
 
   const activeModel = models.find((m) => m.id === activeRobotId);
@@ -209,20 +254,101 @@ export function ChatBubble() {
             )}
           </div>
         </div>
-        <button
-          onClick={closeChat}
-          style={{
-            background: "none",
-            border: "none",
-            color: "#888",
-            fontSize: "20px",
-            cursor: "pointer",
-            padding: "0 4px",
-          }}
-        >
-          X
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Project badge */}
+          <button
+            onClick={() => setShowProjectPanel(p => !p)}
+            title="إدارة المشروع"
+            style={{
+              background: activeProjectKey ? "#16a34a22" : "#1e1e2e",
+              border: `1px solid ${activeProjectKey ? "#16a34a" : "#444"}`,
+              borderRadius: "8px",
+              padding: "3px 10px",
+              color: activeProjectKey ? "#4ade80" : "#666",
+              fontSize: "12px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              letterSpacing: "0.08em",
+              direction: "ltr",
+            }}
+          >
+            {activeProjectKey ? `◈ ${activeProjectKey}` : "+ مشروع"}
+          </button>
+          <button
+            onClick={closeChat}
+            style={{ background: "none", border: "none", color: "#888", fontSize: "20px", cursor: "pointer", padding: "0 4px" }}
+          >
+            X
+          </button>
+        </div>
       </div>
+
+      {/* Project panel */}
+      {showProjectPanel && (
+        <div style={{
+          background: "#0d0d1a",
+          borderBottom: `1px solid #333`,
+          padding: "12px 16px",
+          flexShrink: 0,
+          direction: "rtl",
+        }}>
+          <div style={{ fontSize: "12px", color: "#888", marginBottom: "8px" }}>اختر مشروع أو أنشئ جديد (max 6 أحرف)</div>
+          {/* قائمة المشاريع */}
+          {projects.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+              {projects.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => { setActiveProject(p.projectKey); setShowProjectPanel(false); }}
+                  style={{
+                    background: activeProjectKey === p.projectKey ? "#16a34a22" : "#1e1e2e",
+                    border: `1px solid ${activeProjectKey === p.projectKey ? "#16a34a" : "#444"}`,
+                    borderRadius: "6px",
+                    padding: "3px 10px",
+                    color: activeProjectKey === p.projectKey ? "#4ade80" : "#aaa",
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    letterSpacing: "0.08em",
+                    direction: "ltr",
+                  }}
+                >
+                  {p.projectKey}
+                </button>
+              ))}
+              <button
+                onClick={() => setActiveProject(null)}
+                style={{ background: "#1e1e2e", border: "1px solid #555", borderRadius: "6px", padding: "3px 10px", color: "#888", fontSize: "11px", cursor: "pointer" }}
+              >
+                بدون مشروع
+              </button>
+            </div>
+          )}
+          {/* إنشاء مشروع جديد */}
+          <div style={{ display: "flex", gap: "6px" }}>
+            <input
+              value={projectInput}
+              onChange={e => setProjectInput(e.target.value.toUpperCase().slice(0, 6))}
+              onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") handleCreateProject(); }}
+              placeholder="SUPRT"
+              style={{
+                background: "#1a1a2e", border: "1px solid #444", borderRadius: "6px",
+                padding: "5px 10px", color: "#fff", fontSize: "13px", fontWeight: "bold",
+                width: "90px", letterSpacing: "0.1em", direction: "ltr",
+              }}
+            />
+            <button
+              onClick={handleCreateProject}
+              style={{
+                background: "#6366f115", border: "1px solid #6366f1", borderRadius: "6px",
+                padding: "5px 12px", color: "#818cf8", fontSize: "12px", cursor: "pointer",
+              }}
+            >
+              + جديد
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Resize handles */}
       <div onMouseDown={(e) => handleMouseDown(e, "e")} style={edgeStyle("ew-resize", { top: 0, right: -4, width: 8, height: "100%" })} />
@@ -276,9 +402,19 @@ export function ChatBubble() {
               direction: "rtl",
               wordBreak: "break-word",
               whiteSpace: "pre-wrap",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
             }}
           >
-            {msg.content}
+            {msg.imageUrl && (
+              <img
+                src={msg.imageUrl}
+                alt="uploaded"
+                style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", objectFit: "contain" }}
+              />
+            )}
+            {msg.content && <span>{msg.content}</span>}
           </div>
         ))}
         {isLoading && (
@@ -298,22 +434,92 @@ export function ChatBubble() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Image preview strip */}
+      {pendingImage && (
+        <div style={{
+          padding: "6px 16px",
+          borderTop: `1px solid ${robotColor}40`,
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          flexShrink: 0,
+          background: "#0d0d1a",
+        }}>
+          <div style={{ position: "relative", display: "inline-block" }}>
+            <img
+              src={pendingImage}
+              alt="preview"
+              style={{ height: "56px", borderRadius: "6px", border: `1px solid ${robotColor}60`, objectFit: "cover" }}
+            />
+            <button
+              onClick={() => setPendingImage(null)}
+              style={{
+                position: "absolute",
+                top: -6,
+                right: -6,
+                background: "#e53e3e",
+                border: "none",
+                borderRadius: "50%",
+                width: "18px",
+                height: "18px",
+                color: "white",
+                fontSize: "11px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                lineHeight: 1,
+              }}
+            >×</button>
+          </div>
+          <span style={{ color: "#888", fontSize: "12px", direction: "rtl" }}>صورة جاهزة للإرسال</span>
+        </div>
+      )}
+
       <div
         style={{
           padding: "12px 16px",
-          borderTop: `1px solid ${robotColor}40`,
+          borderTop: pendingImage ? "none" : `1px solid ${robotColor}40`,
           display: "flex",
           gap: "8px",
           flexShrink: 0,
+          alignItems: "center",
         }}
       >
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+        {/* Image attach button */}
+        <button
+          onClick={handleImagePick}
+          disabled={isLoading}
+          title="إرفاق صورة"
+          style={{
+            background: pendingImage ? `${robotColor}30` : "#1a1a2e",
+            border: `1px solid ${pendingImage ? robotColor : "#444"}`,
+            borderRadius: "8px",
+            padding: "10px 10px",
+            color: pendingImage ? robotColor : "#888",
+            fontSize: "16px",
+            cursor: isLoading ? "not-allowed" : "pointer",
+            opacity: isLoading ? 0.5 : 1,
+            flexShrink: 0,
+          }}
+        >
+          📎
+        </button>
         <input
           ref={inputRef}
           type="text"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="...اكتب رسالتك"
+          placeholder={pendingImage ? "...أضف وصفاً (اختياري)" : "...اكتب رسالتك"}
           disabled={isLoading}
           style={{
             flex: 1,
@@ -329,7 +535,7 @@ export function ChatBubble() {
         />
         <button
           onClick={sendToBackground}
-          disabled={isLoading || bgSending || !inputText.trim()}
+          disabled={isLoading || bgSending || (!inputText.trim() && !pendingImage)}
           title="نفذ بالخلفية - يشتغل حتى لو سكرت الصفحة"
           style={{
             background: "#7c4dff",
@@ -338,8 +544,8 @@ export function ChatBubble() {
             padding: "10px 10px",
             color: "white",
             fontSize: "12px",
-            cursor: isLoading || bgSending || !inputText.trim() ? "not-allowed" : "pointer",
-            opacity: isLoading || bgSending || !inputText.trim() ? 0.5 : 1,
+            cursor: isLoading || bgSending || (!inputText.trim() && !pendingImage) ? "not-allowed" : "pointer",
+            opacity: isLoading || bgSending || (!inputText.trim() && !pendingImage) ? 0.5 : 1,
             fontWeight: "bold",
             whiteSpace: "nowrap",
           }}
@@ -348,7 +554,7 @@ export function ChatBubble() {
         </button>
         <button
           onClick={sendMessage}
-          disabled={isLoading || !inputText.trim()}
+          disabled={isLoading || (!inputText.trim() && !pendingImage)}
           style={{
             background: robotColor,
             border: "none",
@@ -356,8 +562,8 @@ export function ChatBubble() {
             padding: "10px 16px",
             color: "white",
             fontSize: "14px",
-            cursor: isLoading || !inputText.trim() ? "not-allowed" : "pointer",
-            opacity: isLoading || !inputText.trim() ? 0.5 : 1,
+            cursor: isLoading || (!inputText.trim() && !pendingImage) ? "not-allowed" : "pointer",
+            opacity: isLoading || (!inputText.trim() && !pendingImage) ? 0.5 : 1,
             fontWeight: "bold",
           }}
         >

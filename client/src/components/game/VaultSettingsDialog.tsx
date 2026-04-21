@@ -22,8 +22,8 @@ const ROOM_OPTIONS = [
   { value: "brC",     label: "🟢 المرحلة 6 — Production Ready" },
 ];
 
-const MODEL_PRESETS = ["Groq", "GPT", "Claude", "GLM", "Grok", "Gemini", "Mistral", "OpenRouter", "OpenCode", "v0", "Devin", "Other"];
-const FREE_MODELS = ["Groq", "GLM", "Gemini", "OpenCode", "v0"];
+const MODEL_PRESETS = ["Groq", "GPT", "Claude", "GLM", "Grok", "Gemini", "Mistral", "OpenRouter", "OpenCode", "v0", "Devin", "HuggingFace", "Other"];
+const FREE_MODELS = ["Groq", "GLM", "Gemini", "OpenCode", "v0", "HuggingFace"];
 
 // الموديلات الشائعة على OpenRouter
 const OPENROUTER_MODELS = [
@@ -37,20 +37,12 @@ const OPENROUTER_MODELS = [
   { label: "💳 GPT-4o Mini", value: "openai/gpt-4o-mini" },
 ];
 
-// موديلات ZhipuAI (OpenCode)
+// موديلات opencode.ai — Go subscription (https://opencode.ai/zen/go/v1)
 const OPENCODE_MODELS = [
-  { label: "🆓 GLM-4.7-Flash", value: "glm-4.7-flash", free: true },
-  { label: "🆓 GLM-4.5-Flash", value: "glm-4.5-flash", free: true },
-  { label: "💳 GLM-5", value: "glm-5", free: false },
-  { label: "💳 GLM-5-Code", value: "glm-5-code", free: false },
-  { label: "💳 GLM-4.7", value: "glm-4.7", free: false },
-  { label: "💳 GLM-4.7-Flashx", value: "glm-4.7-flashx", free: false },
-  { label: "💳 GLM-4.6", value: "glm-4.6", free: false },
-  { label: "💳 GLM-4.5", value: "glm-4.5", free: false },
-  { label: "💳 GLM-4.5-X", value: "glm-4.5-x", free: false },
-  { label: "💳 GLM-4.5-Air", value: "glm-4.5-air", free: false },
-  { label: "💳 GLM-4.5-Airx", value: "glm-4.5-airx", free: false },
-  { label: "💳 GLM-4-32B-128K", value: "glm-4-32b-0414-128k", free: false },
+  { label: "⚡ GLM-5", value: "glm-5", free: false },
+  { label: "⚡ Kimi K2.5", value: "kimi-k2.5", free: false },
+  { label: "⚡ MiMo-V2-Pro", value: "mimo-v2-pro", free: false },
+  { label: "⚡ MiMo-V2-Omni", value: "mimo-v2-omni", free: false },
 ];
 
 // موديلات v0 (Vercel)
@@ -65,20 +57,47 @@ const DEVIN_MODELS = [
   { label: "🤖 devin", value: "devin" },
 ];
 
+// موديلات HuggingFace — Cerebras provider (مجاني، بدون بطاقة)
+// اكتب "huggingface" في الاسم → Cerebras تلقائياً
+// اكتب "huggingface-together" أو "huggingface-novita" لتغيير الـ provider
+const HF_MODELS = [
+  { label: "🆓 Llama 3.1 8B  (سريع)", value: "llama3.1-8b" },
+  { label: "🆓 Llama 3.1 70B", value: "llama3.1-70b" },
+  { label: "🆓 Llama 3.3 70B", value: "llama3.3-70b" },
+  { label: "🆓 Qwen 3 32B", value: "qwen-3-32b" },
+  { label: "🆓 Llama 4 Scout 17B", value: "llama-4-scout-17b-16e-instruct" },
+  { label: "🆓 Llama 4 Maverick 17B", value: "llama-4-maverick-17b-128e-instruct" },
+];
+
 export function VaultSettingsDialog() {
   const isOpen = useGame((s) => s.vaultOpen);
   const closeVault = useGame((s) => s.closeVault);
   const fetchModels = useGame((s) => s.fetchModels);
   const fetchHallWorkers = useGame((s) => s.fetchHallWorkers);
   const setCompanyInfo = useGame((s) => s.setCompanyInfo);
-  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "models" | "ai-worker" | "instructions" | "stats">("company");
+  const setEntranceBg  = useGame((s) => s.setEntranceBg);
+  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "sfm" | "models" | "ai-worker" | "instructions" | "stats">("company");
+  const [pdfIndexLog, setPdfIndexLog] = useState<string[]>([]);
+  const [pdfIndexing, setPdfIndexing] = useState(false);
+  const [pdfIndexes, setPdfIndexes] = useState<{name:string,chunkCount:number,createdAt:string}[]>([]);
 
   const [mainCode, setMainCode] = useState("1977");
   const [managerCode, setManagerCode] = useState("0000");
+  const [stage0Code, setStage0Code] = useState("0000");
+  const [stage1Code, setStage1Code] = useState("0000");
+  const [hallCode,   setHallCode]   = useState("0000");
+  const [hall2Code,  setHall2Code]  = useState("0000");
+  const [brACode,    setBrACode]    = useState("0000");
+  const [brBCode,    setBrBCode]    = useState("0000");
+  const [brCCode,    setBrCCode]    = useState("0000");
 
   const [companyName, setCompanyName] = useState("");
   const [companyLogo, setCompanyLogo] = useState("");
+  const [loginBg, setLoginBg] = useState("");
 
+  const [sfmApiKey, setSfmApiKey] = useState("");
+  const [sfmHasKey, setSfmHasKey] = useState(false);
+  const [hfToken, setHfToken] = useState("");
   const [githubToken, setGithubToken] = useState("");
   const [githubOwner, setGithubOwner] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
@@ -133,7 +152,8 @@ export function VaultSettingsDialog() {
     setHwOrFetching((prev) => ({ ...prev, [idx]: false }));
   };
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const logoFileRef = useRef<HTMLInputElement>(null);
+  const logoFileRef    = useRef<HTMLInputElement>(null);
+  const loginBgFileRef = useRef<HTMLInputElement>(null);
 
   // Drag & Resize state
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -208,6 +228,7 @@ export function VaultSettingsDialog() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedHint, setSavedHint] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ github?: { connected: boolean; user?: string; error?: string }; clickup?: { connected: boolean; workspace?: string; error?: string } } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -218,8 +239,15 @@ export function VaultSettingsDialog() {
         .then((r) => r.json())
         .then((data) => {
           if (data.doors) {
-            setMainCode(data.doors.mainCode || "1977");
-            setManagerCode(data.doors.managerCode || "2024");
+            setMainCode(data.doors.mainCode    || "1977");
+            setManagerCode(data.doors.managerCode || "0000");
+            setStage0Code(data.doors.stage0Code || "0000");
+            setStage1Code(data.doors.stage1Code || "0000");
+            setHallCode(data.doors.hallCode     || "0000");
+            setHall2Code(data.doors.hall2Code   || "0000");
+            setBrACode(data.doors.brACode       || "0000");
+            setBrBCode(data.doors.brBCode       || "0000");
+            setBrCCode(data.doors.brCCode       || "0000");
           }
           if (data.company) {
             const name = data.company.name || "";
@@ -228,6 +256,7 @@ export function VaultSettingsDialog() {
             setCompanyLogo(logo);
             setCompanyInfo(name, logo);
           }
+          if (data.loginBg !== undefined) setLoginBg(data.loginBg || "");
           if (data.github) {
             setGithubToken(data.github.token || "");
             setGithubOwner(data.github.owner || "");
@@ -237,6 +266,13 @@ export function VaultSettingsDialog() {
             setClickupToken(data.clickup.token || "");
             setClickupListId(data.clickup.listId || "");
             setClickupAssignee(data.clickup.assignee || "");
+          }
+          if (data.sfm) {
+            setSfmApiKey(data.sfm.apiKey || "");
+            setSfmHasKey(data.sfm.hasKey || false);
+          }
+          if (data.huggingface) {
+            setHfToken(data.huggingface.token || "");
           }
           if (data.models && Array.isArray(data.models)) {
             setModels(data.models);
@@ -272,22 +308,43 @@ export function VaultSettingsDialog() {
   if (!isOpen) return null;
 
   const handleSave = async () => {
+    // ── Validation: يجب تحديد اسم لكل موديل وهول ووركر ──────────────────
+    const unnamedModel = models.find(m => (m.apiKey.trim()) && !m.name.trim());
+    const unnamedWorker = hallWorkers.find(m => !m.name.trim());
+    if (unnamedModel || unnamedWorker) {
+      setSaveError("⚠️ يجب تحديد اسم المودل قبل الحفظ");
+      setTimeout(() => setSaveError(null), 4000);
+      return;
+    }
+    setSaveError(null);
     setSaving(true);
     setSaved(false);
     try {
-      await apiFetch("/api/vault-settings", {
+      const saveRes = await apiFetch("/api/vault-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          doors: { mainCode: mainCode, managerCode: managerCode },
+          doors: {
+            mainCode, managerCode,
+            stage0Code, stage1Code,
+            hallCode, hall2Code,
+            brACode, brBCode, brCCode,
+          },
           company: { name: companyName, logo: companyLogo },
+          loginBg,
           github: { token: githubToken, owner: githubOwner, repo: githubRepo },
           clickup: { token: clickupToken, listId: clickupListId, assignee: clickupAssignee },
+          sfm: { apiKey: sfmApiKey },
+          huggingface: { token: hfToken },
           models: models.filter(m => m.name.trim() || m.apiKey.trim()),
           hallWorkers: hallWorkers.filter(m => m.name.trim() || m.apiKey.trim()),
           systemPrompt: systemPrompt,
         }),
       });
+      if (!saveRes.ok) {
+        const errData = await saveRes.json().catch(() => ({}));
+        throw new Error(errData.message || errData.error || `HTTP ${saveRes.status}`);
+      }
       // Save default model
       if (defaultModel) {
         await apiFetch("/api/default-model", {
@@ -300,6 +357,7 @@ export function VaultSettingsDialog() {
       await Promise.all([fetchModels(), fetchHallWorkers()]);
       // تحديث شعار الشركة على الجدار فوراً
       setCompanyInfo(companyName, companyLogo);
+      setEntranceBg(loginBg);
       setSaved(true);
       // hint: أين انتقلت الروبوتات
       const nonMain = models.filter(m => (m.name.trim() || m.apiKey.trim()) && m.roomAssignment && m.roomAssignment !== "main");
@@ -310,7 +368,9 @@ export function VaultSettingsDialog() {
         setSavedHint(null);
       }
       setTimeout(() => { setSaved(false); setSavedHint(null); }, 4000);
-    } catch {
+    } catch (err: any) {
+      setSaveError(`❌ فشل الحفظ: ${err?.message || "خطأ غير معروف"}`);
+      setTimeout(() => setSaveError(null), 6000);
     }
     setSaving(false);
   };
@@ -349,6 +409,9 @@ export function VaultSettingsDialog() {
     if (field === "name" && value === "Devin") {
       updated[index].modelId = DEVIN_MODELS[0].value;
     }
+    if (field === "name" && value === "HuggingFace" && !updated[index].modelId) {
+      updated[index].modelId = "llama3.1-8b";
+    }
     setHallWorkers(updated);
   };
 
@@ -370,7 +433,7 @@ export function VaultSettingsDialog() {
     if (field === "name" && value === "OpenRouter" && !updated[index].modelId) {
       updated[index].modelId = OPENROUTER_MODELS[0].value;
     }
-    // عند اختيار OpenCode تلقائياً حدد أول موديل مجاني (GLM-4.7-Flash)
+    // عند اختيار OpenCode تلقائياً حدد GLM-5
     if (field === "name" && value === "OpenCode" && !updated[index].modelId) {
       updated[index].modelId = OPENCODE_MODELS[0].value;
     }
@@ -379,6 +442,9 @@ export function VaultSettingsDialog() {
     }
     if (field === "name" && value === "Devin") {
       updated[index].modelId = DEVIN_MODELS[0].value;
+    }
+    if (field === "name" && value === "HuggingFace" && !updated[index].modelId) {
+      updated[index].modelId = "llama3.1-8b";
     }
     setModels(updated);
   };
@@ -407,11 +473,12 @@ export function VaultSettingsDialog() {
     display: "block",
   };
 
-  const tabs = ["company", "github", "clickup", "models", "ai-worker", "instructions", "stats"] as const;
+  const tabs = ["company", "github", "clickup", "sfm", "models", "ai-worker", "instructions", "stats"] as const;
   const tabLabels: Record<string, string> = {
     company: "الشركة",
     github: "GitHub",
     clickup: "ClickUp",
+    sfm: "🌐 Sillar",
     models: "Models",
     "ai-worker": "🤖 AI Workers",
     instructions: "📋 تعليمات",
@@ -532,6 +599,83 @@ export function VaultSettingsDialog() {
               />
             </div>
 
+            {/* ── صورة الواجهة الرئيسية (sillar-entrance) ── */}
+            <div>
+              <label style={labelStyle}>صورة البوابة الرئيسية</label>
+              <p style={{ color: "#888", fontSize: "11px", margin: "0 0 8px", direction: "rtl" }}>
+                ارفع الصورة — القياس المثالي: 1536 × 1024 px (نسبة 3:2)
+              </p>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", direction: "rtl" }}>
+                <button
+                  onClick={() => loginBgFileRef.current?.click()}
+                  style={{
+                    background: "#1a1a2e",
+                    border: `1px dashed ${accentColor}80`,
+                    borderRadius: "8px",
+                    padding: "8px 16px",
+                    color: accentColor,
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  🏢 رفع صورة البوابة
+                </button>
+                {loginBg && (
+                  <button
+                    onClick={() => setLoginBg("")}
+                    style={{
+                      background: "#f4433620",
+                      border: "1px solid #f4433640",
+                      borderRadius: "6px",
+                      color: "#f44336",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      padding: "6px 12px",
+                    }}
+                  >
+                    استعادة الافتراضية
+                  </button>
+                )}
+              </div>
+              <input
+                ref={loginBgFileRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const data = ev.target?.result as string;
+                    if (data) setLoginBg(data);
+                  };
+                  reader.readAsDataURL(file);
+                  e.target.value = "";
+                }}
+              />
+              {loginBg && (
+                <div style={{
+                  marginTop: "10px",
+                  display: "flex",
+                  justifyContent: "center",
+                  background: "#1a1a2e",
+                  borderRadius: "8px",
+                  padding: "8px",
+                  border: "1px solid #333",
+                }}>
+                  <img
+                    src={loginBg}
+                    alt="Entrance Preview"
+                    style={{ maxWidth: "160px", maxHeight: "107px", objectFit: "contain" }}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* ── شعار الشركة (رفع ملف) ── */}
             <div>
               <label style={labelStyle}>شعار الشركة</label>
@@ -614,17 +758,33 @@ export function VaultSettingsDialog() {
 
             {/* ── باب المدير ── */}
             <div>
-              <label style={labelStyle}>كود باب المدير (4 أرقام)</label>
-              <input
-                type="text"
-                value={managerCode}
+              <label style={labelStyle}>🔑 كود باب المدير (4 أرقام)</label>
+              <input type="text" value={managerCode}
                 onChange={(e) => setManagerCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder="0000"
-                maxLength={4}
-                style={inputStyle}
-              />
+                onKeyDown={(e) => e.stopPropagation()} placeholder="0000" maxLength={4} style={inputStyle} />
             </div>
+
+            {/* ── فاصل ── */}
+            <div style={{ borderTop: "1px solid #333", paddingTop: "4px" }} />
+
+            {/* ── كودات الغرف الداخلية ── */}
+            <div style={{ color: "#aaa", fontSize: "11px", letterSpacing: "1px", marginBottom: "2px" }}>كودات الغرف الداخلية</div>
+            {[
+              { label: "🔵 Stage 1 — Product Shaping",     val: stage0Code, set: setStage0Code },
+              { label: "🟣 Stage 2 — Architecture",         val: stage1Code, set: setStage1Code },
+              { label: "🏭 Production Hall (باب Stage1)",   val: hallCode,   set: setHallCode   },
+              { label: "🔑 Production Hall (باب المدير)",   val: hall2Code,  set: setHall2Code  },
+              { label: "🟡 Stage 4 — Observability",        val: brACode,    set: setBrACode    },
+              { label: "🟤 Stage 5 — Reproducibility",      val: brBCode,    set: setBrBCode    },
+              { label: "🟢 Stage 6 — Production Ready",     val: brCCode,    set: setBrCCode    },
+            ].map(({ label, val, set }) => (
+              <div key={label}>
+                <label style={labelStyle}>{label}</label>
+                <input type="text" value={val}
+                  onChange={(e) => set(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  onKeyDown={(e) => e.stopPropagation()} placeholder="0000" maxLength={4} style={inputStyle} />
+              </div>
+            ))}
 
             {/* ── فاصل ── */}
             <div style={{ borderTop: "1px solid #333", paddingTop: "4px" }} />
@@ -776,6 +936,192 @@ export function VaultSettingsDialog() {
                 placeholder="user@email.com"
                 style={inputStyle}
               />
+            </div>
+          </>
+        ) : activeTab === "sfm" ? (
+          <>
+            {/* شرح */}
+            <div style={{ background: "rgba(34,211,238,0.07)", border: "1px solid rgba(34,211,238,0.2)", borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
+              <div style={{ color: "#22d3ee", fontWeight: "bold", marginBottom: 6, fontSize: 13 }}>🌐 ربط Sillar SFM</div>
+              <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6 }}>
+                أدخل الـ API key الخاص بك من منصة <strong style={{ color: "#e2e8f0" }}>seesaw.sillar.us</strong> حتى يفتح الموقع تلقائياً بدون تسجيل دخول يدوي لما تضغط F عند الموظف البشري.
+              </div>
+            </div>
+
+            {/* حقل الـ API Key */}
+            <div>
+              <label style={labelStyle}>Sillar SFM API Key</label>
+              <input
+                type="password"
+                value={sfmApiKey}
+                onChange={(e) => { setSfmApiKey(e.target.value); setSfmHasKey(false); }}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="sfm_xxxxxxxxxxxxxxxxxxxx"
+                style={inputStyle}
+              />
+              {sfmHasKey && sfmApiKey === "••••••••" && (
+                <div style={{ color: "#4ade80", fontSize: 11, marginTop: 4 }}>✓ مفتاح محفوظ — اتركه كما هو للإبقاء عليه</div>
+              )}
+            </div>
+
+            {/* زر اختبار */}
+            <button
+              onClick={async () => {
+                const key = sfmApiKey.trim();
+                if (!key || key === "••••••••") return;
+                try {
+                  const roomId = localStorage.getItem("roomId") || "default";
+                  const res = await apiFetch("/api/sfm-test", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-room-id": roomId },
+                    body: JSON.stringify({ apiKey: key }),
+                  });
+                  const data = await res.json();
+                  if (data.valid) {
+                    alert(`✅ مفتاح صالح${data.key_name ? ` — ${data.key_name}` : ""}`);
+                  } else {
+                    alert(`❌ المفتاح غير صالح${data.error ? `: ${data.error}` : ""}`);
+                  }
+                } catch {
+                  alert("❌ تعذّر الاتصال");
+                }
+              }}
+              style={{
+                marginTop: 8,
+                padding: "7px 18px",
+                background: "rgba(34,211,238,0.12)",
+                border: "1px solid rgba(34,211,238,0.35)",
+                borderRadius: 6,
+                color: "#22d3ee",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              🔌 اختبار الاتصال
+            </button>
+
+            {/* رابط الحصول على المفتاح */}
+            <div style={{ marginTop: 16, color: "#64748b", fontSize: 12 }}>
+              للحصول على API key:{" "}
+              <span
+                style={{ color: "#22d3ee", cursor: "pointer", textDecoration: "underline" }}
+                onClick={() => window.open("https://seesaw.sillar.us/settings/api", "_blank")}
+              >
+                seesaw.sillar.us/settings/api ↗
+              </span>
+            </div>
+
+            {/* ── HuggingFace ─────────────────────────────────────────── */}
+            <div style={{ marginTop: 24, borderTop: "1px solid rgba(99,102,241,0.2)", paddingTop: 16 }}>
+              <div style={{ color: "#a78bfa", fontWeight: "bold", marginBottom: 8, fontSize: 13 }}>
+                🤗 HuggingFace — Semantic RAG
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+                أدخل HuggingFace Access Token لتفعيل البحث الدلالي (RAG) باستخدام{" "}
+                <strong style={{ color: "#e2e8f0" }}>sentence-transformers/all-MiniLM-L6-v2</strong>.
+                <br />
+                يُحسّن إجابات الروبوتات بإيجاد أجزاء الـ system prompt الأكثر صلة بكل سؤال.
+                <br />
+                يعمل أيضاً مع موديلات HuggingFace النصية (اكتب "huggingface" كاسم الموديل).
+              </div>
+              <label style={labelStyle}>HuggingFace Access Token</label>
+              <input
+                type="password"
+                value={hfToken}
+                onChange={(e) => setHfToken(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="hf_xxxxxxxxxxxxxxxxxxxx"
+                style={inputStyle}
+              />
+              <div style={{ marginTop: 6, color: "#64748b", fontSize: 11 }}>
+                احصل على token مجاني من{" "}
+                <span
+                  style={{ color: "#a78bfa", cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => window.open("https://huggingface.co/settings/tokens", "_blank")}
+                >
+                  huggingface.co/settings/tokens ↗
+                </span>
+              </div>
+            </div>
+
+            {/* ── PDF RAG ─────────────────────────────────────────────── */}
+            <div style={{ marginTop: 18, borderTop: "1px solid #334155", paddingTop: 14 }}>
+              <div style={{ color: "#e2e8f0", fontWeight: "bold", marginBottom: 6, fontSize: 13 }}>
+                📚 فهرسة ملفات PDF للـ RAG
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 10 }}>
+                تحوّل ملفات PDF في <code style={{color:"#a78bfa"}}>client/public/resourc/</code> إلى فهرس دلالي يُغذّي الروبوتات تلقائياً.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                {["histo"].map(pdfName => (
+                  <button
+                    key={pdfName}
+                    disabled={pdfIndexing}
+                    onClick={async () => {
+                      setPdfIndexing(true);
+                      setPdfIndexLog([`⏳ بدء فهرسة ${pdfName}.pdf...`]);
+                      try {
+                        const res = await fetch("/api/pdf/index", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json", "x-room-id": roomId },
+                          body: JSON.stringify({ roomId, pdfName }),
+                        });
+                        const reader = res.body!.getReader();
+                        const dec = new TextDecoder();
+                        while (true) {
+                          const { done, value } = await reader.read();
+                          if (done) break;
+                          const lines = dec.decode(value).split("\n").filter(l => l.startsWith("data:"));
+                          for (const line of lines) {
+                            try {
+                              const d = JSON.parse(line.slice(5));
+                              if (d.progress) setPdfIndexLog(p => [...p, d.progress]);
+                              if (d.done) setPdfIndexLog(p => [...p, `✅ ${pdfName} جاهز!`]);
+                              if (d.error) setPdfIndexLog(p => [...p, `❌ ${d.error}`]);
+                            } catch {}
+                          }
+                        }
+                        const idxRes = await fetch("/api/pdf/indexes");
+                        const idxData = await idxRes.json();
+                        setPdfIndexes(idxData.indexes || []);
+                      } catch(e:any) {
+                        setPdfIndexLog(p => [...p, `❌ ${e.message}`]);
+                      }
+                      setPdfIndexing(false);
+                    }}
+                    style={{
+                      padding: "6px 14px", borderRadius: 8, border: "none", cursor: pdfIndexing ? "not-allowed" : "pointer",
+                      background: pdfIndexing ? "#334155" : "#7c3aed", color: "white", fontSize: 13, fontWeight: "bold",
+                    }}
+                  >
+                    {pdfIndexing ? "⏳ جارٍ..." : `🔢 فهرسة ${pdfName}.pdf`}
+                  </button>
+                ))}
+                <button
+                  onClick={async () => {
+                    const r = await fetch("/api/pdf/indexes");
+                    const d = await r.json();
+                    setPdfIndexes(d.indexes || []);
+                  }}
+                  style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}
+                >
+                  🔄 تحديث
+                </button>
+              </div>
+              {pdfIndexes.length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                  {pdfIndexes.map(idx => (
+                    <span key={idx.name} style={{ background: "#1e3a5f", color: "#7dd3fc", padding: "3px 10px", borderRadius: 20, fontSize: 11 }}>
+                      📄 {idx.name} — {idx.chunkCount} قطعة
+                    </span>
+                  ))}
+                </div>
+              )}
+              {pdfIndexLog.length > 0 && (
+                <div style={{ background: "#0f172a", borderRadius: 8, padding: "8px 12px", maxHeight: 120, overflowY: "auto", fontSize: 11, color: "#94a3b8", direction: "ltr" }}>
+                  {pdfIndexLog.map((l,i) => <div key={i}>{l}</div>)}
+                </div>
+              )}
             </div>
           </>
         ) : activeTab === "models" ? (
@@ -1107,12 +1453,12 @@ export function VaultSettingsDialog() {
                   </div>
                 )}
 
-                {/* حقل اختيار الموديل — يظهر فقط لـ OpenCode أو v0 */}
-                {(model.name === "OpenCode" || model.name === "v0" || model.name === "Devin") && (
+                {/* حقل اختيار الموديل — يظهر فقط لـ OpenCode أو v0 أو HuggingFace */}
+                {(model.name === "OpenCode" || model.name === "v0" || model.name === "Devin" || model.name === "HuggingFace") && (
                   <div>
                     <label style={{ ...labelStyle, marginBottom: "6px" }}>الموديل</label>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "6px" }}>
-                      {(model.name === "OpenCode" ? OPENCODE_MODELS : model.name === "Devin" ? DEVIN_MODELS : V0_MODELS).map((m: any) => (
+                      {(model.name === "OpenCode" ? OPENCODE_MODELS : model.name === "Devin" ? DEVIN_MODELS : model.name === "HuggingFace" ? HF_MODELS : V0_MODELS).map((m: any) => (
                         <button
                           key={m.value}
                           onClick={() => updateModel(idx, "modelId", m.value)}
@@ -1450,12 +1796,12 @@ export function VaultSettingsDialog() {
                   </div>
                 )}
 
-                {/* OpenCode model picker */}
-                {(worker.name === "OpenCode" || worker.name === "Devin") && (
+                {/* OpenCode / HuggingFace model picker */}
+                {(worker.name === "OpenCode" || worker.name === "Devin" || worker.name === "HuggingFace") && (
                   <div>
                     <label style={{ ...labelStyle, marginBottom: "6px" }}>الموديل</label>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "6px" }}>
-                      {(worker.name === "Devin" ? DEVIN_MODELS : OPENCODE_MODELS).map((m) => (
+                      {(worker.name === "Devin" ? DEVIN_MODELS : worker.name === "HuggingFace" ? HF_MODELS : OPENCODE_MODELS).map((m) => (
                         <button
                           key={m.value}
                           onClick={() => updateHallWorker(idx, "modelId", m.value)}
@@ -1803,6 +2149,11 @@ export function VaultSettingsDialog() {
           gap: "10px",
         }}
       >
+        {saveError && (
+          <span style={{ color: "#f44336", fontSize: "14px", direction: "rtl", alignSelf: "center" }}>
+            {saveError}
+          </span>
+        )}
         {saved && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
             <span style={{ color: "#4caf50", fontSize: "14px", direction: "rtl" }}>✓ تم الحفظ</span>

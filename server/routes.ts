@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { getClickUpSummary, getTeams, getSpaces, getFolders, getLists, getFolderlessLists, getTasks, getTask, getWorkspaceMembers, updateTask, createTask, searchTasksByName, getFullWorkspaceStructure } from "./clickup";
-import { getGitHubSummary, getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser, getCommitChecks, getWorkflowRuns, getWorkflowRunLogs } from "./github";
+import { getGitHubSummary, getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser, getCommitChecks, getWorkflowRuns, getWorkflowRunLogs, getLatestStageFile } from "./github";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -24,7 +24,13 @@ import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs
 import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY } from "./vaultStore";
 import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
+import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles } from "./projectStore";
 import { validateStage, type ValidationResult, type ValidationFailure } from "./sfmQualityValidator";
+import { chunkText, findRelevantChunks } from "./embeddings";
+import { atalEnqueue, atalGetQueue, atalClearDone, extractFiles } from "./atalWorker";
+import { indexPdfFile, searchPdfIndex, listPdfIndexes, loadPdfIndex } from "./pdfIndexer";
+import path from "path";
+import fs from "fs";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -50,7 +56,17 @@ function getProviderConfig(modelName: string): { baseURL?: string; defaultModel:
     return { baseURL: "https://openrouter.ai/api/v1", defaultModel: "meta-llama/llama-3.3-70b-instruct:free", provider: "OpenRouter" };
   }
   if (name.includes("opencode")) {
-    return { baseURL: "https://open.bigmodel.cn/api/paas/v4/", defaultModel: "glm-4.7-flash", provider: "ZhipuAI" };
+    return { baseURL: "https://opencode.ai/zen/go/v1", defaultModel: "glm-5", provider: "OpenCode" };
+  }
+  if (name.includes("huggingface") || name.includes("هيوجنفيس")) {
+    // cerebras: مجاني وسريع — llama models
+    if (name.includes("together"))  return { baseURL: "https://router.huggingface.co/together/v1",  defaultModel: "meta-llama/Llama-3.1-8B-Instruct", provider: "HuggingFace" };
+    if (name.includes("novita"))    return { baseURL: "https://router.huggingface.co/novita/v1",    defaultModel: "meta-llama/Llama-3.1-8B-Instruct", provider: "HuggingFace" };
+    if (name.includes("nebius"))    return { baseURL: "https://router.huggingface.co/nebius/v1",    defaultModel: "meta-llama/Llama-3.1-8B-Instruct", provider: "HuggingFace" };
+    if (name.includes("sambanova")) return { baseURL: "https://router.huggingface.co/sambanova/v1", defaultModel: "Meta-Llama-3.1-8B-Instruct", provider: "HuggingFace" };
+    if (name.includes("fireworks")) return { baseURL: "https://router.huggingface.co/fireworks-ai/v1", defaultModel: "accounts/fireworks/models/llama-v3p1-8b-instruct", provider: "HuggingFace" };
+    // default → cerebras (أسرع + مجاني)
+    return { baseURL: "https://router.huggingface.co/cerebras/v1", defaultModel: "llama3.1-8b", provider: "HuggingFace" };
   }
   if (name.includes("devin")) {
     return { baseURL: "https://api.cognition.ai/v1", defaultModel: "devin", provider: "Devin" };
@@ -234,6 +250,17 @@ const toolDefinitions = [
         run_id: { type: "integer", description: "The workflow run ID (get from get_workflow_runs)" },
       },
       required: ["owner", "repo", "run_id"],
+    },
+  },
+  {
+    name: "detect_medical_entities",
+    description: "يستخرج الكيانات الطبية (أمراض، تشخيصات، حالات مرضية) من النص باستخدام نموذج OpenMed-NER-PathologyDetect-TinyMed-135M. مفيد لتحليل النصوص الطبية والسريرية.",
+    parameters: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "النص الطبي المراد تحليله لاستخراج الكيانات المرضية" },
+      },
+      required: ["text"],
     },
   },
 ];
@@ -441,6 +468,29 @@ async function executeToolCall(name: string, args: any, robotId: string = "robot
         const { owner, repo } = await fixOwnerRepo(args, robotId);
         return JSON.stringify(await getWorkflowRunLogs(owner, repo, args.run_id), null, 2);
       }
+      case "detect_medical_entities": {
+        const vault = await getVaultSettings(roomId || "default");
+        const hfToken = (vault as any)?.huggingface?.token || "";
+        if (!hfToken) return JSON.stringify({ error: "HuggingFace token غير مُعدّ — أضفه في الخزنة تبويب HuggingFace" });
+        const hfRes = await fetch(
+          "https://api-inference.huggingface.co/models/OpenMed/NER-PathologyDetect-TinyMed-135M",
+          {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${hfToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ inputs: args.text }),
+          }
+        );
+        if (!hfRes.ok) {
+          const errText = await hfRes.text();
+          return JSON.stringify({ error: `HuggingFace API error ${hfRes.status}: ${errText.slice(0, 200)}` });
+        }
+        const entities = await hfRes.json();
+        // تجميع الكيانات وتنسيقها
+        const formatted = Array.isArray(entities)
+          ? entities.map((e: any) => ({ entity: e.entity_group || e.entity, word: e.word, score: Math.round((e.score || 0) * 100) + "%" }))
+          : entities;
+        return JSON.stringify({ entities: formatted, count: Array.isArray(formatted) ? formatted.length : 0 }, null, 2);
+      }
       default:
         return `Unknown tool: ${name}`;
     }
@@ -532,11 +582,20 @@ All artifacts go under: seesaw/{runId}/
 ========================
 GITHUB PUSH RULES
 ========================
-- Always use create_or_update_file tool for pushes.
+⚠️ MANDATORY — EVERY TIME you generate a workflow file, you MUST output it in BOTH ways:
+
+STEP A — always output the [FILE:] block FIRST (so عتال captures it automatically):
+[FILE:seesaw/{runId}/filename.json]
+{full JSON content here}
+[/FILE]
+
+STEP B — then try create_or_update_file tool to also push to GitHub directly.
 - Parameters: owner, repo, path, content (full JSON string), commit_message
 - Commit message: "SFM {runId}: add {filename}"
-- If push fails: log error, return the generated JSON content so user can save manually.
-- DO NOT pass extra parameters (position, width, height) to the tool. Those go INSIDE the JSON content string.
+- DO NOT pass extra parameters (position, width, height) to the tool.
+
+NEVER output JSON as a plain code block — it will NOT be captured by عتال.
+The [FILE:...][/FILE] block is the ONLY format عتال understands.
 
 ========================
 STAGE DISCIPLINE (STRICT) — Sillar SEESAW Methodology
@@ -1043,13 +1102,80 @@ export async function registerRoutes(
     }
   });
 
+  // ── Projects API ─────────────────────────────────────────────────────────────
+  app.get("/api/projects", async (req, res) => {
+    const roomId = getRoomId(req);
+    const list = await getProjects(roomId);
+    res.json(list);
+  });
+
+  app.post("/api/projects", async (req, res) => {
+    const roomId = getRoomId(req);
+    const { projectKey, name } = req.body as { projectKey: string; name?: string };
+    if (!projectKey) return res.status(400).json({ error: "projectKey required" });
+    const row = await createProject(roomId, projectKey, name || "");
+    res.json(row);
+  });
+
+  app.get("/api/projects/:key/files", async (req, res) => {
+    const roomId = getRoomId(req);
+    const files = await getStageFiles(roomId, req.params.key);
+    res.json(files);
+  });
+
+  app.get("/api/projects/:key/next-version/:stage", async (req, res) => {
+    const roomId = getRoomId(req);
+    const ver = await getNextVersion(roomId, req.params.key, req.params.stage);
+    res.json({ version: ver });
+  });
+
+  // ── العتال: إدارة queue الملفات ──────────────────────────────────────────────
+  app.get("/api/atal/queue", (req, res) => {
+    const roomId = getRoomId(req);
+    res.json(atalGetQueue(roomId));
+  });
+
+  app.post("/api/atal/queue", (req, res) => {
+    const roomId = getRoomId(req);
+    const { path, content } = req.body as { path: string; content: string };
+    if (!path || content === undefined) return res.status(400).json({ error: "path and content required" });
+    const file = atalEnqueue(roomId, path, content);
+    res.json(file);
+  });
+
+  app.delete("/api/atal/queue", (req, res) => {
+    const roomId = getRoomId(req);
+    atalClearDone(roomId);
+    res.json({ ok: true });
+  });
+
+  // ── HuggingFace Embeddings endpoint ─────────────────────────────────────────
+  app.post("/api/embed", async (req, res) => {
+    try {
+      const { texts } = req.body as { texts: string[] };
+      if (!Array.isArray(texts) || texts.length === 0) {
+        return res.status(400).json({ error: "texts must be a non-empty array" });
+      }
+      const roomId = getRoomId(req);
+      const vault = await getVaultSettings(roomId);
+      const hfToken = (vault as any).huggingface?.token || "";
+      if (!hfToken) return res.status(400).json({ error: "HuggingFace token not configured" });
+
+      const { embedTexts } = await import("./embeddings");
+      const embeddings = await embedTexts(texts, hfToken);
+      res.json({ embeddings, model: "sentence-transformers/all-MiniLM-L6-v2", dims: 384 });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/chat", async (req, res) => {
     try {
-      const { message, robotId, history } = req.body;
+      const { message, robotId, history, imageBase64 } = req.body;
       const roomId = getRoomId(req);
 
-      if (!message || typeof message !== "string") {
-        return res.status(400).json({ error: "Message is required" });
+      if ((!message || typeof message !== "string") && !imageBase64) {
+        return res.status(400).json({ error: "Message or image is required" });
       }
 
       const chatHistory: Array<{ role: string; content: string }> = Array.isArray(history) ? history : [];
@@ -1078,6 +1204,110 @@ export async function registerRoutes(
       } catch (_e) {}
 
       let systemPrompt = modelConfig?.systemPrompt || (await getSystemPrompt(roomId)) || "";
+
+      // ── حقن إعدادات GitHub الحقيقية من قاعدة البيانات ───────────────────────
+      const vaultForGithub = await getVaultSettings(roomId);
+      const gh = vaultForGithub.github;
+      if (gh.owner && gh.repo) {
+        systemPrompt +=
+          `\n\n[بيانات GitHub المخزنة في النظام — استخدمها دائماً ولا تخترع غيرها]\n` +
+          `• المالك (Owner): ${gh.owner}\n` +
+          `• اسم الريبو: ${gh.repo}\n` +
+          `• الرابط الكامل: https://github.com/${gh.owner}/${gh.repo}`;
+      }
+
+      // ── حقن سياق المشروع النشط ───────────────────────────────────────────────
+      const { projectKey: activeProjectKey } = req.body as { projectKey?: string };
+      const nowTs = new Date().toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
+      if (activeProjectKey) {
+        const pk = activeProjectKey.toUpperCase();
+        const [pdVer, s0Ver] = await Promise.all([
+          getNextVersion(roomId, pk, "PD"),
+          getNextVersion(roomId, pk, "S0"),
+        ]);
+        systemPrompt +=
+          `\n\n[مفتاح المشروع النشط: ${pk}]\n` +
+          `[التوقيت الحالي للنظام: ${nowTs}]\n` +
+          `سمّ كل ملف تُنشئه بهذه الصيغة الإلزامية:\n` +
+          `  <مفتاح>_<مرحلة>_<إصدار>_<TIMESTAMP>.json\n` +
+          `مثال: ${pk}_PD_${pdVer}_${nowTs}.json\n\n` +
+          `الإصدارات المتاحة التالية:\n` +
+          `• PD التالي: ${pdVer}\n` +
+          `• S0 التالي: ${s0Ver}`;
+      } else {
+        // حتى بدون مشروع، حقن الوقت الحالي
+        systemPrompt += `\n\n[التوقيت الحالي للنظام: ${nowTs}]\nاستخدم هذا التوقيت عند تسمية الملفات.`;
+      }
+
+      // ── حقن ملف المرحلة السابقة تلقائياً عند أوامر الانتقال ─────────────────
+      const stageTransitions: Array<{ keywords: string[]; readStage: string; targetStage: string }> = [
+        { keywords: ["ابدأ s0","كمل s0","start s0","انتقل إلى s0","انتقل s0"], readStage: "PD", targetStage: "S0" },
+        { keywords: ["ابدأ s1","كمل s1","start s1","انتقل إلى s1","انتقل s1"], readStage: "S0", targetStage: "S1" },
+        { keywords: ["ابدأ s2","كمل s2","start s2","انتقل إلى s2","انتقل s2"], readStage: "S1", targetStage: "S2" },
+      ];
+      // كلمات عامة تقرأ آخر مرحلة موجودة
+      const generalTransition = ["جاهز", "تم التعديل", "كمل"];
+      const msgLower = message.trim().toLowerCase();
+
+      let transitionMatch = stageTransitions.find(t => t.keywords.some(k => msgLower.includes(k)));
+      if (!transitionMatch && generalTransition.some(k => msgLower.includes(k))) {
+        // اقرأ آخر مرحلة موجودة في المشروع
+        for (const stage of ["S1", "S0", "PD"]) {
+          const f = activeProjectKey && gh.owner && gh.repo
+            ? await getLatestStageFile(gh.owner, gh.repo, activeProjectKey, stage, roomId).catch(() => null)
+            : null;
+          if (f) { transitionMatch = { keywords: [], readStage: stage, targetStage: "" }; break; }
+        }
+      }
+
+      if (transitionMatch && activeProjectKey && gh.owner && gh.repo) {
+        try {
+          const prevFile = await getLatestStageFile(gh.owner, gh.repo, activeProjectKey, transitionMatch.readStage, roomId);
+          if (prevFile) {
+            // التعليمة تأتي بعد system prompt الروبوت لأخذ الأولوية
+            systemPrompt =
+              systemPrompt +
+              `\n\n===== تعليمة الانتقال — أولوية مطلقة تتجاوز كل قاعدة سابقة =====\n` +
+              `المرحلة الحالية: ${transitionMatch.readStage} → الهدف: ${transitionMatch.targetStage || "التالية"}\n` +
+              `مُقدَّم لك أدناه محتوى ملف ${transitionMatch.readStage} كاملاً. اقرأه واشتق منه القيم الحقيقية.\n` +
+              `ممنوع إخراج قيم فارغة ("" أو [] أو {}) إذا كان المحتوى يوفر البيانات.\n` +
+              `أخرج JSON واحداً مكتملاً يحتوي على البيانات المشتقة — ليس template فارغاً.\n\n` +
+              `[محتوى ${transitionMatch.readStage} — ${prevFile.name}]\n` +
+              `${prevFile.content}\n` +
+              `===== نهاية المحتوى =====\n`;
+          }
+        } catch (_e) {}
+      }
+
+      // ── RAG: تعزيز الـ system prompt بالسياق الأنسب دلالياً ─────────────────
+      try {
+        const hfToken = (vaultForGithub as any).huggingface?.token || "";
+        let ragChunks: string[] = [];
+
+        // 1) RAG من الـ system prompt
+        if (hfToken && systemPrompt && systemPrompt.length > 600) {
+          const chunks = chunkText(systemPrompt, 120, 20);
+          const relevant = await findRelevantChunks(message, chunks, hfToken, 3);
+          ragChunks.push(...relevant);
+        }
+
+        // 2) RAG من ملفات PDF المُفهرسة
+        if (hfToken) {
+          const pdfIndexList = listPdfIndexes();
+          for (const idxName of pdfIndexList) {
+            const pdfChunks = await searchPdfIndex(message, idxName, hfToken, 3);
+            ragChunks.push(...pdfChunks.map(c => `[📄 ${idxName}] ${c}`));
+          }
+        }
+
+        if (ragChunks.length > 0) {
+          systemPrompt =
+            `[سياق ذو صلة بالسؤال]\n${ragChunks.join("\n---\n")}\n\n[التعليمات الكاملة]\n` +
+            systemPrompt;
+        }
+      } catch (ragErr) {
+        console.warn("[RAG] Skipped:", (ragErr as Error).message);
+      }
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -1119,7 +1349,21 @@ export async function registerRoutes(
           })),
         ];
         if (!messages.length || messages[messages.length - 1].role !== "user") {
-          messages.push({ role: "user", content: message });
+          if (imageBase64) {
+            // استخرج base64 الصافي من data URL
+            const base64Match = (imageBase64 as string).match(/^data:(image\/\w+);base64,(.+)$/);
+            const mediaType = (base64Match?.[1] || "image/jpeg") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+            const base64Data = base64Match?.[2] || (imageBase64 as string);
+            const userContent: Anthropic.ContentBlockParam[] = [
+              { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
+            ];
+            if (message?.trim()) {
+              userContent.push({ type: "text", text: message });
+            }
+            messages.push({ role: "user", content: userContent });
+          } else {
+            messages.push({ role: "user", content: message });
+          }
         }
 
         let maxIterations = 5;
@@ -1131,7 +1375,8 @@ export async function registerRoutes(
               model: "claude-sonnet-4-20250514",
               max_tokens: 8192,
               ...(systemPrompt ? { system: systemPrompt } : {}),
-              tools: anthropicTools,
+              // أوقف tools عند انتقال المراحل — السيرفر حقن المحتوى مباشرة
+              ...(transitionMatch ? {} : { tools: anthropicTools }),
               messages,
             });
           } catch (claudeError: any) {
@@ -1144,10 +1389,19 @@ export async function registerRoutes(
 
           let hasToolUse = false;
           const toolResults: Anthropic.MessageParam[] = [];
+          let accumulatedText = "";
+          let filesFoundInResponse = 0;
 
           for (const block of response.content) {
             if (block.type === "text") {
               res.write(`data: ${JSON.stringify({ content: block.text })}\n\n`);
+              accumulatedText += block.text;
+              // ── العتال: اكتشف [FILE:path]\n...\n[/FILE] في رد Claude ──
+              for (const f of extractFiles(block.text)) {
+                atalEnqueue(roomId, f.path, f.content);
+                filesFoundInResponse++;
+                res.write(`data: ${JSON.stringify({ content: `\n📦 [عتال] استلم: ${f.path}\n` })}\n\n`);
+              }
             } else if (block.type === "tool_use") {
               hasToolUse = true;
               res.write(`data: ${JSON.stringify({ content: `\n⚙️ جاري تنفيذ ${block.name}...\n` })}\n\n`);
@@ -1160,6 +1414,37 @@ export async function registerRoutes(
                 role: "user",
                 content: [{ type: "tool_result", tool_use_id: block.id, content: toolResult }],
               } as any);
+            }
+          }
+
+          // ── اكتشاف تلقائي: JSON نقي أو JSON داخل code fences ──
+          if (transitionMatch && activeProjectKey && filesFoundInResponse === 0 && !hasToolUse) {
+            const trimmed = accumulatedText.trim();
+            const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "Z";
+            const stageLabel = (transitionMatch.targetStage || "stage").toLowerCase().replace(/\s+/g, "");
+            // اسم ملف صريح في الرد (مثل PRO003_s2_2026-04-08T...)
+            const explicitName = accumulatedText.match(/\b([A-Za-z0-9]+_s\d+_[\w\-\.]+\.json)\b/i);
+            const autoFilename = explicitName ? explicitName[1] : `${activeProjectKey}_${stageLabel}_${ts}.json`;
+
+            // 1) JSON نقي يبدأ بـ { أو [
+            let jsonCandidate: string | null = null;
+            if ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+                (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+              jsonCandidate = trimmed;
+            }
+            // 2) آخر code block يحوي JSON
+            if (!jsonCandidate) {
+              const blocks = [...accumulatedText.matchAll(/```(?:json)?\s*([\[{][\s\S]+?[\]}])\s*```/g)];
+              if (blocks.length > 0) {
+                jsonCandidate = blocks[blocks.length - 1][1].trim();
+              }
+            }
+            if (jsonCandidate) {
+              try {
+                JSON.parse(jsonCandidate);
+                atalEnqueue(roomId, autoFilename, jsonCandidate);
+                res.write(`data: ${JSON.stringify({ content: `\n📦 [عتال] رُصد JSON — حُفظ تلقائياً: ${autoFilename}\n` })}\n\n`);
+              } catch (_jsonErr) {}
             }
           }
 
@@ -1195,7 +1480,8 @@ export async function registerRoutes(
         const isGPT = provider === "OpenAI";
         // ZhipuAI GLM-4+ supports function calling
         const isZhipuAI = provider === "ZhipuAI";
-        const useTools = isGPT || isZhipuAI;
+        // أوقف tools عند انتقال المراحل — السيرفر حقن المحتوى مباشرة
+        const useTools = (isGPT || isZhipuAI) && !transitionMatch;
 
         console.log(`[${provider}] Using model: ${modelId}, tools: ${useTools}, apiKey: ${modelConfig?.apiKey ? "vault" : "env"}`);
 
@@ -1212,7 +1498,20 @@ export async function registerRoutes(
           })),
         ];
         if (!messages.some(m => m.role === "user") || chatHistory.length === 0) {
-          messages.push({ role: "user", content: message });
+          if (imageBase64) {
+            // GPT-4V / vision-capable models: pass image as content array
+            const base64Match = (imageBase64 as string).match(/^data:(image\/\w+);base64,(.+)$/);
+            const dataUrl = base64Match ? imageBase64 as string : `data:image/jpeg;base64,${imageBase64}`;
+            const visionContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+              { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
+            ];
+            if (message?.trim()) {
+              visionContent.push({ type: "text", text: message });
+            }
+            messages.push({ role: "user", content: visionContent });
+          } else {
+            messages.push({ role: "user", content: message });
+          }
         }
 
         let maxIterations = useTools ? 12 : 1;
@@ -1264,6 +1563,48 @@ export async function registerRoutes(
 
           if (choice.message.content) {
             res.write(`data: ${JSON.stringify({ content: choice.message.content })}\n\n`);
+            // ── العتال: اكتشف أي ملفات بصيغة [FILE:path]\n...\n[/FILE] في رد الروبوت ──
+            const detectedFiles = extractFiles(choice.message.content);
+            let oaiFilesFound = detectedFiles.length;
+            for (const f of detectedFiles) {
+              atalEnqueue(roomId, f.path, f.content);
+              res.write(`data: ${JSON.stringify({ content: `\n📦 [عتال] استلم: ${f.path}\n` })}\n\n`);
+              // سجّل في قاعدة البيانات لو كان ضمن مشروع
+              if (activeProjectKey) {
+                const stageMatch = f.path.match(/_(PD|S0|S1|S2)_/i);
+                if (stageMatch) {
+                  recordStageFile(roomId, activeProjectKey, stageMatch[1].toUpperCase(), f.path).catch(() => {});
+                }
+              }
+            }
+            // ── اكتشاف تلقائي: JSON نقي أو JSON داخل code fences ──
+            if (transitionMatch && activeProjectKey && oaiFilesFound === 0 && choice.finish_reason !== "tool_calls") {
+              const rawText = choice.message.content;
+              const trimmed = rawText.trim();
+              const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "Z";
+              const stageLabel = (transitionMatch.targetStage || "stage").toLowerCase().replace(/\s+/g, "");
+              const explicitName = rawText.match(/\b([A-Za-z0-9]+_s\d+_[\w\-\.]+\.json)\b/i);
+              const autoFilename = explicitName ? explicitName[1] : `${activeProjectKey}_${stageLabel}_${ts}.json`;
+
+              let jsonCandidate: string | null = null;
+              if ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+                  (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+                jsonCandidate = trimmed;
+              }
+              if (!jsonCandidate) {
+                const blocks = [...rawText.matchAll(/```(?:json)?\s*([\[{][\s\S]+?[\]}])\s*```/g)];
+                if (blocks.length > 0) {
+                  jsonCandidate = blocks[blocks.length - 1][1].trim();
+                }
+              }
+              if (jsonCandidate) {
+                try {
+                  JSON.parse(jsonCandidate);
+                  atalEnqueue(roomId, autoFilename, jsonCandidate);
+                  res.write(`data: ${JSON.stringify({ content: `\n📦 [عتال] رُصد JSON — حُفظ تلقائياً: ${autoFilename}\n` })}\n\n`);
+                } catch (_jsonErr) {}
+              }
+            }
           }
 
           if (choice.finish_reason === "tool_calls" && choice.message.tool_calls) {
@@ -1642,14 +1983,22 @@ res.json(repos);
         name: settings.company?.name || "",
         logo: settings.company?.logo || "",
       },
+      loginBg: settings.loginBg || "",
       github: {
         token: settings.github.token ? "••••••••" : "",
         owner: settings.github.owner,
         repo: settings.github.repo,
       },
       doors: {
-        mainCode: settings.doors?.mainCode || "1977",
+        mainCode:    settings.doors?.mainCode    || "1977",
         managerCode: settings.doors?.managerCode || "0000",
+        stage0Code:  settings.doors?.stage0Code  || "0000",
+        stage1Code:  settings.doors?.stage1Code  || "0000",
+        hallCode:    settings.doors?.hallCode    || "0000",
+        hall2Code:   settings.doors?.hall2Code   || "0000",
+        brACode:     settings.doors?.brACode     || "0000",
+        brBCode:     settings.doors?.brBCode     || "0000",
+        brCCode:     settings.doors?.brCCode     || "0000",
       },
       clickup: {
         token: settings.clickup.token ? "••••••••" : "",
@@ -1674,7 +2023,35 @@ res.json(repos);
         ...(m.systemPrompt !== undefined ? { systemPrompt: m.systemPrompt } : {}),
       })),
       systemPrompt: settings.systemPrompt || "",
+      sfm: {
+        apiKey: settings.sfm?.apiKey ? "••••••••" : "",
+        hasKey: !!(settings.sfm?.apiKey),
+      },
     });
+  });
+
+  // SFM API key للفرونت-إند (للفتح التلقائي فقط، مش للعرض)
+  app.get("/api/sfm-key", async (req, res) => {
+    const roomId = getRoomId(req);
+    const settings = await getVaultSettings(roomId);
+    res.json({ apiKey: settings.sfm?.apiKey || "" });
+  });
+
+  // اختبار اتصال Sillar SFM عبر السيرفر (يتجنب CORS)
+  app.post("/api/sfm-test", async (req, res) => {
+    const { apiKey } = req.body as { apiKey: string };
+    if (!apiKey || apiKey === "••••••••") {
+      return res.status(400).json({ valid: false, error: "لا يوجد مفتاح" });
+    }
+    try {
+      const resp = await fetch("https://seesaw.sillar.us/api/auth/api-key", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      const data = await resp.json() as any;
+      res.json({ valid: !!data.valid, key_name: data.key_name || "" });
+    } catch (e: any) {
+      res.status(502).json({ valid: false, error: "تعذّر الوصول لـ seesaw.sillar.us" });
+    }
   });
 
   app.get("/api/models", async (req, res) => {
@@ -1702,6 +2079,13 @@ res.json(repos);
     })));
   });
 
+  // endpoint عام — لا يحتاج auth — يُعيد صورة الواجهة الرئيسية
+  app.get("/api/public-branding", async (req, res) => {
+    const roomId = getRoomId(req);
+    const settings = await getVaultSettings(roomId);
+    res.json({ loginBg: settings.loginBg || "" });
+  });
+
   app.get("/api/door-codes", async (req, res) => {
     const roomId = getRoomId(req);
     const settings = await getVaultSettings(roomId);
@@ -1713,14 +2097,24 @@ res.json(repos);
 
   app.post("/api/auth/verify-stage-code", async (req, res) => {
     try {
-      const { code } = req.body;
+      const { doorId, code } = req.body;
       if (!code || typeof code !== "string") {
         return res.status(400).json({ success: false, error: "Code required" });
       }
       const roomId = getRoomId(req);
       const settings = await getVaultSettings(roomId);
-      const stageCode = (settings.doors as any).stageCode || "0000";
-      res.json({ success: stageCode === code });
+      const d = settings.doors;
+      const codeMap: Record<string, string> = {
+        stage0: d.stage0Code || "0000",
+        stage1: d.stage1Code || "0000",
+        hall:   d.hallCode   || "0000",
+        hall2:  d.hall2Code  || "0000",
+        brA:    d.brACode    || "0000",
+        brB:    d.brBCode    || "0000",
+        brC:    d.brCCode    || "0000",
+      };
+      const expected = codeMap[doorId] ?? "0000";
+      res.json({ success: expected === code });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -1751,8 +2145,8 @@ res.json(repos);
 
   app.post("/api/vault-settings", async (req, res) => {
     const roomId = getRoomId(req);
-    const { company, doors, github, clickup, models, hallWorkers, systemPrompt } = req.body;
-    if (!github && !clickup && !models && !hallWorkers && !company && !doors && systemPrompt === undefined) {
+    const { company, loginBg, doors, github, clickup, sfm, models, hallWorkers, systemPrompt } = req.body;
+    if (!github && !clickup && !sfm && !models && !hallWorkers && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
       return res.status(400).json({ error: "Invalid payload" });
     }
     const current = await getVaultSettings(roomId);
@@ -1763,10 +2157,20 @@ res.json(repos);
         logo: company.logo || current.company?.logo || "",
       };
     }
+    if (loginBg !== undefined) {
+      updatePayload.loginBg = loginBg;
+    }
     if (doors) {
       updatePayload.doors = {
-        mainCode: doors.mainCode || current.doors?.mainCode || "1977",
+        mainCode:    doors.mainCode    || current.doors?.mainCode    || "1977",
         managerCode: doors.managerCode || current.doors?.managerCode || "0000",
+        stage0Code:  doors.stage0Code  || current.doors?.stage0Code  || "0000",
+        stage1Code:  doors.stage1Code  || current.doors?.stage1Code  || "0000",
+        hallCode:    doors.hallCode    || current.doors?.hallCode    || "0000",
+        hall2Code:   doors.hall2Code   || current.doors?.hall2Code   || "0000",
+        brACode:     doors.brACode     || current.doors?.brACode     || "0000",
+        brBCode:     doors.brBCode     || current.doors?.brBCode     || "0000",
+        brCCode:     doors.brCCode     || current.doors?.brCCode     || "0000",
       };
     }
     if (github) {
@@ -1781,6 +2185,11 @@ res.json(repos);
         token: clickup.token === "••••••••" ? current.clickup.token : (clickup.token || ""),
         listId: clickup.listId || "",
         assignee: clickup.assignee || "",
+      };
+    }
+    if (sfm) {
+      updatePayload.sfm = {
+        apiKey: sfm.apiKey === "••••••••" ? current.sfm.apiKey : (sfm.apiKey || ""),
       };
     }
     if (models && Array.isArray(models)) {
@@ -1990,6 +2399,96 @@ res.json(repos);
         .map((i: any) => ({ videoId: i.videoId, label: i.label || "" }));
       await storage.setRoomPlaylist(roomId, clean);
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Webex Meeting ─────────────────────────────────────────────────────────
+  app.post("/api/webex/create-meeting", async (req, res) => {
+    try {
+      const token = process.env.WEBEX_ACCESS_TOKEN;
+      if (!token) return res.status(500).json({ error: "WEBEX_ACCESS_TOKEN not set" });
+
+      const { title } = req.body;
+      const start = new Date(Date.now() + 60 * 1000).toISOString();
+      const end   = new Date(Date.now() + 61 * 60 * 1000).toISOString();
+
+      const response = await fetch("https://webexapis.com/v1/meetings", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: title || "Sillar Meeting",
+          start,
+          end,
+          enabledAutoRecordMeeting: false,
+          allowAnyUserToBeCoHost: true,
+        }),
+      });
+
+      const data = await response.json() as any;
+      if (!response.ok) return res.status(response.status).json({ error: data.message || "Webex error", detail: data });
+
+      res.json({ meetingLink: data.webLink, meetingNumber: data.meetingNumber, password: data.password });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── PDF RAG: فهرسة ملف PDF ─────────────────────────────────────────────────
+  app.post("/api/pdf/index", async (req, res) => {
+    try {
+      const { roomId, pdfName } = req.body;
+      const vault = await getVaultSettings(roomId || "default");
+      const hfToken = (vault as any)?.huggingface?.token || "";
+      if (!hfToken) return res.status(400).json({ error: "HuggingFace token غير مُعدّ — أضفه في الخزنة" });
+
+      // مسار PDF: client/public/resourc/{pdfName}.pdf
+      const safeName = (pdfName || "histo").replace(/[^a-zA-Z0-9_\-]/g, "");
+      const pdfPath = path.join(process.cwd(), "client", "public", "resourc", `${safeName}.pdf`);
+      if (!fs.existsSync(pdfPath)) return res.status(404).json({ error: `الملف غير موجود: ${safeName}.pdf` });
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      await indexPdfFile(pdfPath, safeName, hfToken, 150, 30, (msg) => {
+        res.write(`data: ${JSON.stringify({ progress: msg })}\n\n`);
+      });
+
+      res.write(`data: ${JSON.stringify({ done: true, name: safeName })}\n\n`);
+      res.end();
+    } catch (e: any) {
+      res.write?.(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+      res.end?.();
+    }
+  });
+
+  // ── PDF RAG: قائمة الفهارس ────────────────────────────────────────────────
+  app.get("/api/pdf/indexes", async (_req, res) => {
+    try {
+      const indexes = listPdfIndexes().map(name => {
+        const idx = loadPdfIndex(name);
+        return { name, chunkCount: idx?.chunkCount || 0, createdAt: idx?.createdAt || "" };
+      });
+      res.json({ indexes });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── PDF RAG: بحث مباشر ───────────────────────────────────────────────────
+  app.post("/api/pdf/search", async (req, res) => {
+    try {
+      const { query, indexName, roomId, topK } = req.body;
+      const vault = await getVaultSettings(roomId || "default");
+      const hfToken = (vault as any)?.huggingface?.token || "";
+      if (!hfToken) return res.status(400).json({ error: "HuggingFace token مطلوب" });
+      const results = await searchPdfIndex(query, indexName || "histo", hfToken, topK || 4);
+      res.json({ results });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
