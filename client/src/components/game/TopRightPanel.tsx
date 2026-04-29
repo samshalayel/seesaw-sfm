@@ -210,8 +210,8 @@ export function TopRightPanel() {
   const fetchTriggerData = (isInit = false) => {
     apiFetch("/api/auto-trigger/config").then(r => r.json()).then(d => {
       setConfig(d);
-      // نحدّث الـ dropdown فقط في التحميل الأول أو لما المراقب مش شغّال
-      if (isInit || !d.enabled) {
+      // نحدّث قيم الفورم فقط عند التحميل الأول — الـ polling لا يمس ما كتبه المستخدم
+      if (isInit) {
         if (d.watchUserId)     setSelUser(d.watchUserId);
         if (d.intervalMinutes) setTrigInterval(d.intervalMinutes);
         if (d.robotId)         setSelRobot(d.robotId);
