@@ -176,11 +176,11 @@ BEGIN EXECUTION NOW:`;
     const promptFile = path.join(tmpDir, `claude_prompt_${log.id}.txt`);
     fs.writeFileSync(promptFile, prompt, "utf8");
 
-    // Pipe prompt via stdin: claude -p --dangerously-skip-permissions < prompt.txt
+    // Pipe prompt via stdin using Haiku (cheapest model) to save subscription quota
     const isWin = process.platform === "win32";
     const shellCmd = isWin
-      ? `type "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions`
-      : `cat "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions`;
+      ? `type "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001`
+      : `cat "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001`;
 
     // Remove ANTHROPIC_API_KEY so CLI uses OAuth subscription (not API credits)
     const { ANTHROPIC_API_KEY: _removed, ...envForCLI } = process.env as Record<string, string>;
