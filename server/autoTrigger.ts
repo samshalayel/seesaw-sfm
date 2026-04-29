@@ -182,9 +182,12 @@ BEGIN EXECUTION NOW:`;
       ? `type "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions`
       : `cat "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions`;
 
+    // Remove ANTHROPIC_API_KEY so CLI uses OAuth subscription (not API credits)
+    const { ANTHROPIC_API_KEY: _removed, ...envForCLI } = process.env as Record<string, string>;
+
     const proc = spawn(shellCmd, [], {
       shell: true,
-      env: { ...process.env },
+      env: envForCLI,
       cwd: tmpDir,
     });
 
