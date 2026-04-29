@@ -506,9 +506,14 @@ export function TopRightPanel() {
                         </span>
                       </div>
                       <div style={{ color: "#555", fontSize: "10px", marginTop: 2 }}>{fmtTime(log.startedAt)}</div>
+                      {exp && log.error && (
+                        <div style={{ color: "#ef5350", fontSize: "10px", marginTop: 4, whiteSpace: "pre-wrap" }}>
+                          ⚠ {log.error}
+                        </div>
+                      )}
                       {exp && log.result && (
                         <div style={{ color: "#94a3b8", fontSize: "10px", marginTop: 4, whiteSpace: "pre-wrap" }}>
-                          {log.result.slice(0, 300)}
+                          {log.result.slice(0, 400)}
                         </div>
                       )}
                     </div>

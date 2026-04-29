@@ -143,10 +143,30 @@ GITHUB_REPO=${githubRepo}
 
 مهم جداً: نفّذ الأوامر فعلاً عبر bash، لا تكتفِ بالشرح.`;
 
-  console.log(`[AutoTrigger CLI ${log.id}] Spawning claude CLI for task: ${task.name}`);
+  // Find claude CLI path (Windows: npm global bin)
+  const claudePath = (() => {
+    const { execSync } = require("child_process");
+    try {
+      const p = execSync("where claude.cmd", { shell: true }).toString().trim().split("\n")[0].trim();
+      if (p && p.length > 0) return p;
+    } catch (_) {}
+    // fallback: common npm global bin locations
+    const candidates = [
+      process.env.APPDATA + "\\npm\\claude.cmd",
+      process.env.APPDATA + "\\npm\\claude",
+      "/usr/local/bin/claude",
+      "/usr/bin/claude",
+    ];
+    const fs = require("fs");
+    for (const c of candidates) { try { fs.accessSync(c); return c; } catch (_) {} }
+    return "claude"; // last resort
+  })();
+
+  console.log(`[AutoTrigger CLI ${log.id}] Using claude at: ${claudePath}`);
+  console.log(`[AutoTrigger CLI ${log.id}] Spawning for task: ${task.name}`);
 
   return new Promise<void>((resolve) => {
-    const proc = spawn("claude", ["-p", prompt, "--dangerously-skip-permissions"], {
+    const proc = spawn(claudePath, ["-p", prompt, "--dangerously-skip-permissions"], {
       shell: true,
       env: { ...process.env },
       cwd: process.cwd(),
