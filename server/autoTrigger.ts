@@ -116,30 +116,40 @@ async function processTaskWithCLI(task: any, log: TriggerLog): Promise<void> {
   const cuBase = `curl -s -H "Authorization: ${clickupToken}" -H "Content-Type: application/json"`;
   const ghBase = `curl -s -H "Authorization: token ${githubToken}" -H "Content-Type: application/json"`;
 
-  const prompt = `Execute the following ClickUp task autonomously using bash commands. Do NOT ask questions — just run the commands.
+  const prompt = `You are an automation agent. You must execute an external API task using ONLY bash curl commands.
 
-TASK: ${task.name}
-DESCRIPTION: ${task.description || "(no description)"}
-TASK_ID: ${task.id}
+CRITICAL RULES:
+- This is NOT about any local project or files on this machine.
+- Do NOT run npm, node, or any local dev commands.
+- Do NOT look at local files or directories.
+- Use ONLY curl to call external APIs (GitHub API and ClickUp API).
+- Do NOT ask questions. Execute immediately.
 
-GITHUB: ${githubOwner}/${githubRepo}  (token already set below)
+━━━ TASK ━━━
+Name: ${task.name}
+Description: ${task.description || "(see task name)"}
+ClickUp Task ID: ${task.id}
 
-STEP 1 — Understand the task from its name and description above.
+━━━ GITHUB TARGET ━━━
+Repo: https://github.com/${githubOwner}/${githubRepo}
+API base: https://api.github.com/repos/${githubOwner}/${githubRepo}
 
-STEP 2 — If the task requires GitHub file changes, run:
-  ${ghBase} "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/"
-Then create/update the needed file:
-  ${ghBase} -X PUT "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/FILENAME" \\
-    -d '{"message":"task: DESCRIPTION","content":"BASE64_ENCODED_CONTENT"}'
-  (use bash: echo -n "file content" | base64  to get base64)
+━━━ EXECUTE THESE STEPS NOW ━━━
 
-STEP 3 — Mark the ClickUp task as done (REQUIRED — do this last):
-  ${cuBase} -X PUT "https://api.clickup.com/api/v2/task/${task.id}" \\
-    -d '{"status":"${config.doneStatus}"}'
+STEP 1: List repo files to understand structure:
+${ghBase} "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/"
 
-STEP 4 — Print a brief Arabic summary of what you did.
+STEP 2: Based on the task, create/update a file. Example for creating a markdown file:
+CONTENT=$(echo -n "# File List\\n| File | Created | Stage |\\n|------|---------|-------|\\n" | base64 -w 0)
+${ghBase} -X PUT "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/files-list.md" \\
+  -d "{\\"message\\":\\"add files list md\\",\\"content\\":\\"$CONTENT\\"}"
 
-Start executing now. No greetings, no questions.`;
+STEP 3: Mark ClickUp task as done:
+${cuBase} -X PUT "https://api.clickup.com/api/v2/task/${task.id}" -d '{"status":"${config.doneStatus}"}'
+
+STEP 4: Print Arabic summary of what was done.
+
+BEGIN EXECUTION NOW:`;
 
   // Find claude CLI: prefer local node_modules binary, fallback to global
   const localExe = new URL("../../node_modules/@anthropic-ai/claude-code/bin/claude.exe", import.meta.url).pathname.replace(/^\//, "");
@@ -160,10 +170,12 @@ Start executing now. No greetings, no questions.`;
   console.log(`[AutoTrigger CLI ${log.id}] Spawning for task: ${task.name}`);
 
   return new Promise<void>((resolve) => {
+    // Use temp dir so Claude doesn't see the local project and get confused
+    const tmpDir = process.env.TEMP || process.env.TMP || "/tmp";
     const proc = spawn(claudePath, ["-p", prompt, "--dangerously-skip-permissions"], {
       shell: true,
       env: { ...process.env },
-      cwd: process.cwd(),
+      cwd: tmpDir,
     });
 
     let fullOutput = "";
