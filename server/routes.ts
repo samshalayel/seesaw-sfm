@@ -2579,6 +2579,23 @@ export async function registerRoutes(
     }
   });
 
+  // debug: فحص مباشر للمهام المتاحة في ClickUp
+  app.get("/api/auto-trigger/debug-tasks", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const allTasks = await getAllTasksRaw(roomId);
+      const summary = allTasks.map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status?.status || t.status,
+        assignees: t.assignees?.map((a: any) => ({ id: a.id, username: a.username })),
+      }));
+      res.json({ total: allTasks.length, tasks: summary });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── رابط المشاركة (Guest Link) ───────────────────────────────────────────────
   app.post("/api/share-link/generate", async (req, res) => {
     try {

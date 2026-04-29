@@ -207,26 +207,28 @@ export function TopRightPanel() {
   const [selRobot, setSelRobot] = useState("robot-1");
   const [expLog, setExpLog]   = useState<string | null>(null);
   const [trigLoading, setTrigLoading] = useState(false);
-
-  const fetchTriggerData = () => {
+  const fetchTriggerData = (isInit = false) => {
     apiFetch("/api/auto-trigger/config").then(r => r.json()).then(d => {
       setConfig(d);
-      if (d.watchUserId)     setSelUser(d.watchUserId);
-      if (d.intervalMinutes) setTrigInterval(d.intervalMinutes);
-      if (d.robotId)         setSelRobot(d.robotId);
+      // نحدّث الـ dropdown فقط في التحميل الأول أو لما المراقب مش شغّال
+      if (isInit || !d.enabled) {
+        if (d.watchUserId)     setSelUser(d.watchUserId);
+        if (d.intervalMinutes) setTrigInterval(d.intervalMinutes);
+        if (d.robotId)         setSelRobot(d.robotId);
+      }
     }).catch(() => {});
     apiFetch("/api/auto-trigger/logs").then(r => r.json()).then(setLogs).catch(() => {});
   };
 
   useEffect(() => {
-    fetchTriggerData();
+    fetchTriggerData(true); // isInit=true → يحدّث الـ dropdown
     apiFetch("/api/clickup/members").then(r => r.json()).then(d => setMembers(Array.isArray(d) ? d : d.members ?? [])).catch(() => {});
   }, []);
 
   useEffect(() => {
     if (panel !== "auto") return;
-    fetchTriggerData();
-    const t = setInterval(fetchTriggerData, 5000);
+    fetchTriggerData(true); // أول مرة يفتح الـ panel → حدّث
+    const t = setInterval(() => fetchTriggerData(false), 5000); // polling → لا تعدّل الـ dropdown
     return () => clearInterval(t);
   }, [panel]);
 
@@ -238,12 +240,12 @@ export function TopRightPanel() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: selUser, intervalMinutes: trigInterval, robotId: selRobot }),
       });
-      fetchTriggerData();
+      fetchTriggerData(false); // لا تمسح الاختيار بعد الإطلاق
     } catch (_e) {} finally { setTrigLoading(false); }
   };
   const handleStop = async () => {
     setTrigLoading(true);
-    try { await apiFetch("/api/auto-trigger/stop", { method: "POST" }); fetchTriggerData(); }
+    try { await apiFetch("/api/auto-trigger/stop", { method: "POST" }); fetchTriggerData(true); }
     catch (_e) {} finally { setTrigLoading(false); }
   };
   const handleScanNow = async () => {
