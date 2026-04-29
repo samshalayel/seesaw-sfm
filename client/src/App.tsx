@@ -12,7 +12,7 @@ import { GameUI } from "./components/game/GameUI";
 import { GuestUI } from "./components/game/GuestUI";
 import { ChatBubble } from "./components/game/ChatBubble";
 import { BackgroundJobs } from "./components/game/BackgroundJobs";
-import { AutoTriggerPanel } from "./components/game/AutoTriggerPanel";
+import { TopRightPanel } from "./components/game/TopRightPanel";
 import { LogoutDoor } from "./components/game/LogoutDoor";
 import { DoorEntry } from "./components/game/DoorEntry";
 import { ManagerRoom } from "./components/game/ManagerRoom";
@@ -830,55 +830,6 @@ function LoadingOverlay() {
   );
 }
 
-// ── زر الخزنة — ظاهر دائماً في الزاوية العلوية اليمنى ──────────────────────
-function VaultButton() {
-  const openVault  = useGame((s) => s.openVault);
-  const closeVault = useGame((s) => s.closeVault);
-  const vaultOpen  = useGame((s) => s.vaultOpen);
-  const isGuest    = useGame((s) => s.isGuest);
-  const phase      = useGame((s) => s.phase);
-
-  // مفتاح V عالمي يفتح/يغلق الخزنة
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === "KeyV" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        const tag = (e.target as HTMLElement)?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA") return;
-        vaultOpen ? closeVault() : openVault();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [vaultOpen, openVault, closeVault]);
-
-  if (phase !== "playing" || isGuest) return null;
-
-  return (
-    <button
-      onClick={() => vaultOpen ? closeVault() : openVault()}
-      title="الخزنة (V)"
-      style={{
-        position: "fixed", top: 14, right: 14, zIndex: 500,
-        background: "rgba(10,14,22,0.85)",
-        border: "1px solid rgba(196,164,74,0.5)",
-        borderRadius: "8px",
-        color: "#c4a44a",
-        padding: "7px 12px",
-        cursor: "pointer",
-        fontSize: "18px",
-        lineHeight: 1,
-        backdropFilter: "blur(6px)",
-        transition: "all 0.2s",
-        boxShadow: "0 0 12px rgba(196,164,74,0.15)",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(196,164,74,0.2)"; e.currentTarget.style.borderColor = "#c4a44a"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(10,14,22,0.85)"; e.currentTarget.style.borderColor = "rgba(196,164,74,0.5)"; }}
-    >
-      ⚙️
-    </button>
-  );
-}
-
 function App() {
   const phase              = useGame((s) => s.phase);
   const unlock             = useGame((s) => s.unlock);
@@ -1122,9 +1073,8 @@ function App() {
         <ChatBubble />
         <VaultSettingsDialog />
         <BackgroundJobs />
-        <AutoTriggerPanel />
         <CameraButtons />
-        <VaultButton />
+        <TopRightPanel />
         <GameUI />
         <GuestUI />
       </div>
@@ -1272,9 +1222,8 @@ function App() {
       <ChatBubble />
       <VaultSettingsDialog />
       <BackgroundJobs />
-      <AutoTriggerPanel />
       <CameraButtons />
-      <VaultButton />
+      <TopRightPanel />
       <GameUI />
       <GuestUI />
     </div>
