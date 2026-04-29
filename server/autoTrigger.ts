@@ -112,53 +112,48 @@ async function processTaskWithCLI(task: any, log: TriggerLog): Promise<void> {
   const githubOwner  = await getGitHubOwner(triggerRoomId);
   const githubRepo   = await getGitHubRepo(triggerRoomId);
 
-  const prompt = `أنت مطور ذكاء اصطناعي مستقل في شركة Sillar Digital Production.
-لديك مهمة من ClickUp يجب تنفيذها الآن.
+  // بناء أوامر bash جاهزة بالـ tokens الفعلية
+  const cuBase = `curl -s -H "Authorization: ${clickupToken}" -H "Content-Type: application/json"`;
+  const ghBase = `curl -s -H "Authorization: token ${githubToken}" -H "Content-Type: application/json"`;
 
-═══════════════ تفاصيل المهمة ═══════════════
-الاسم: ${task.name}
-الوصف: ${task.description || "لا يوجد وصف"}
-المعرف: ${task.id}
-المساحة: ${task.space}
-القائمة: ${task.list}
-═══════════════════════════════════════════
+  const prompt = `Execute the following ClickUp task autonomously using bash commands. Do NOT ask questions — just run the commands.
 
-بيانات API:
-CLICKUP_TOKEN=${clickupToken}
-GITHUB_TOKEN=${githubToken}
-GITHUB_OWNER=${githubOwner}
-GITHUB_REPO=${githubRepo}
+TASK: ${task.name}
+DESCRIPTION: ${task.description || "(no description)"}
+TASK_ID: ${task.id}
 
-كيفية استخدام ClickUp API (bash/curl):
-  - جلب تفاصيل مهمة:  curl -H "Authorization: CLICKUP_TOKEN" "https://api.clickup.com/api/v2/task/TASK_ID"
-  - تحديث حالة:        curl -X PUT "https://api.clickup.com/api/v2/task/TASK_ID" -H "Authorization: CLICKUP_TOKEN" -H "Content-Type: application/json" -d '{"status":"complete"}'
-  - جلب ملف GitHub:    curl -H "Authorization: token GITHUB_TOKEN" "https://api.github.com/repos/OWNER/REPO/contents/PATH"
-  - إنشاء/تعديل ملف:   curl -X PUT "https://api.github.com/repos/OWNER/REPO/contents/PATH" -H "Authorization: token GITHUB_TOKEN" -H "Content-Type: application/json" -d '{"message":"commit msg","content":"BASE64_CONTENT"}'
+GITHUB: ${githubOwner}/${githubRepo}  (token already set below)
 
-التعليمات:
-1. افهم المهمة جيداً من الاسم والوصف
-2. نفّذها فعلاً باستخدام bash وcurl
-3. إذا تطلبت ملفات في GitHub، أنشئها أو عدّلها (الـ content يجب أن يكون base64)
-4. بعد الانتهاء من كل الشغل، حدّث حالة المهمة إلى "complete" في ClickUp
-5. قدّم ملخصاً بالعربية عن كل ما نفذته
+STEP 1 — Understand the task from its name and description above.
 
-مهم جداً: نفّذ الأوامر فعلاً عبر bash، لا تكتفِ بالشرح.`;
+STEP 2 — If the task requires GitHub file changes, run:
+  ${ghBase} "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/"
+Then create/update the needed file:
+  ${ghBase} -X PUT "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/FILENAME" \\
+    -d '{"message":"task: DESCRIPTION","content":"BASE64_ENCODED_CONTENT"}'
+  (use bash: echo -n "file content" | base64  to get base64)
 
-  // Find claude CLI path (Windows: npm global bin)
+STEP 3 — Mark the ClickUp task as done (REQUIRED — do this last):
+  ${cuBase} -X PUT "https://api.clickup.com/api/v2/task/${task.id}" \\
+    -d '{"status":"${config.doneStatus}"}'
+
+STEP 4 — Print a brief Arabic summary of what you did.
+
+Start executing now. No greetings, no questions.`;
+
+  // Find claude CLI: prefer local node_modules binary, fallback to global
+  const localExe = new URL("../../node_modules/@anthropic-ai/claude-code/bin/claude.exe", import.meta.url).pathname.replace(/^\//, "");
   const claudePath = (() => {
-    try {
-      const p = execSync("where claude.cmd", { shell: true }).toString().trim().split("\n")[0].trim();
-      if (p && p.length > 0) return p;
-    } catch (_) {}
-    // fallback: common npm global bin locations
-    const candidates = [
+    if (fs.existsSync(localExe)) return localExe;
+    // try global npm bin
+    const globals = [
       (process.env.APPDATA ?? "") + "\\npm\\claude.cmd",
       (process.env.APPDATA ?? "") + "\\npm\\claude",
       "/usr/local/bin/claude",
       "/usr/bin/claude",
     ];
-    for (const c of candidates) { try { fs.accessSync(c); return c; } catch (_) {} }
-    return "claude"; // last resort
+    for (const c of globals) { try { fs.accessSync(c); return c; } catch (_) {} }
+    return "claude";
   })();
 
   console.log(`[AutoTrigger CLI ${log.id}] Using claude at: ${claudePath}`);
