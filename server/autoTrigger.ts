@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { spawn, execSync } from "child_process";
 import fs from "fs";
+import path from "path";
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
@@ -170,9 +171,18 @@ BEGIN EXECUTION NOW:`;
   console.log(`[AutoTrigger CLI ${log.id}] Spawning for task: ${task.name}`);
 
   return new Promise<void>((resolve) => {
-    // Use temp dir so Claude doesn't see the local project and get confused
+    // Write prompt to temp file — avoids Windows 8191-char CLI argument limit
     const tmpDir = process.env.TEMP || process.env.TMP || "/tmp";
-    const proc = spawn(claudePath, ["-p", prompt, "--dangerously-skip-permissions"], {
+    const promptFile = path.join(tmpDir, `claude_prompt_${log.id}.txt`);
+    fs.writeFileSync(promptFile, prompt, "utf8");
+
+    // Pipe prompt via stdin: claude -p --dangerously-skip-permissions < prompt.txt
+    const isWin = process.platform === "win32";
+    const shellCmd = isWin
+      ? `type "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions`
+      : `cat "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions`;
+
+    const proc = spawn(shellCmd, [], {
       shell: true,
       env: { ...process.env },
       cwd: tmpDir,
@@ -195,6 +205,7 @@ BEGIN EXECUTION NOW:`;
       log.completedAt = Date.now();
       if (code !== 0) log.error = `claude CLI exited with code ${code}`;
       console.log(`[AutoTrigger CLI ${log.id}] Done (exit ${code})`);
+      try { fs.unlinkSync(promptFile); } catch (_) {} // cleanup temp file
       resolve();
     });
 
