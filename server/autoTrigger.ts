@@ -117,13 +117,17 @@ TASK DETAILS:
 
 INSTRUCTIONS:
 1. Read the task description carefully and understand what needs to be done.
-2. If the task involves code/files, use GitHub tools to create or update the required files.
+2. If the task involves creating/editing files in GitHub: use get_github_repos to list repos, then get_repo_contents to explore, then create_or_update_file to write the file. You MUST actually call create_or_update_file — do not stop at planning.
 3. If the task involves ClickUp operations, use ClickUp tools.
-4. After completing ALL the work, update this task's status to "${config.doneStatus}" using update_clickup_task.
-5. Provide a summary of everything you did in Arabic.
-6. If the task description is unclear or empty, still update the status and note that the task had no clear instructions.
+4. ONLY after the actual work is fully done (file created, task created, etc.), update this task's status to "${config.doneStatus}" using update_clickup_task.
+5. Provide a summary in Arabic of exactly what you did (include file paths created, URLs, etc.).
+6. If the task description is unclear, ask clarifying questions in the ClickUp task comment using update_clickup_task with a description, then still mark it done.
 
-IMPORTANT: You MUST update the task status to "${config.doneStatus}" when done. The task ID is: ${task.id}`;
+CRITICAL RULES:
+- Do NOT mark the task as done before completing the actual work.
+- If creating a GitHub file, you MUST call create_or_update_file before calling update_clickup_task.
+- Never say "I will do X" without actually calling the tool to do X.
+- The task ID is: ${task.id}
 
   let githubUser = "";
   let githubRepos: any[] = [];
@@ -134,16 +138,22 @@ IMPORTANT: You MUST update the task status to "${config.doneStatus}" when done. 
     ? `GitHub repos available: ${githubRepos.map((r: any) => `${r.owner?.login || githubUser}/${r.name}`).join(", ")}`
     : (githubUser ? `GitHub user: ${githubUser} (use get_github_repos to list repos)` : "GitHub: not connected");
 
-  const systemPrompt = `You are sillar-model, an autonomous AI agent. You execute ClickUp tasks automatically. Use all available tools to complete tasks. Always respond in Arabic.
+  const systemPrompt = `You are sillar-model, an autonomous AI agent. You execute ClickUp tasks automatically. Always respond in Arabic.
 ${repoLine}
 
-Available tools: get_clickup_tasks, get_workspace_structure, get_workspace_members, search_clickup_tasks, get_task_details, update_clickup_task, create_clickup_task, get_github_repos, get_repo_contents, create_or_update_file`;
+WORKFLOW FOR GITHUB FILE TASKS:
+1. Call get_repo_contents(owner, repo, "") to list root files
+2. Gather any additional info needed (e.g., get_repo_contents for sub-folders)
+3. Call create_or_update_file with the complete file content — this is MANDATORY
+4. Only after step 3 succeeds, call update_clickup_task to mark done
+
+You must actually execute tool calls — do not describe what you will do, just do it.`;
 
   try {
     if (config.robotId === "robot-2") {
       let messages: Anthropic.MessageParam[] = [{ role: "user", content: taskPrompt }];
       let fullResult = "";
-      let maxIterations = 10;
+      let maxIterations = 20;
 
       while (maxIterations-- > 0) {
         const response = await anthropic.messages.create({
@@ -183,7 +193,7 @@ Available tools: get_clickup_tasks, get_workspace_structure, get_workspace_membe
         { role: "user", content: taskPrompt },
       ];
       let fullResult = "";
-      let maxIterations = 10;
+      let maxIterations = 20;
 
       while (maxIterations-- > 0) {
         const response = await openai.chat.completions.create({
