@@ -113,18 +113,13 @@ async function processTaskWithCLI(task: any, log: TriggerLog): Promise<void> {
   const githubOwner  = await getGitHubOwner(triggerRoomId);
   const githubRepo   = await getGitHubRepo(triggerRoomId);
 
-  // بناء أوامر bash جاهزة بالـ tokens الفعلية
-  const cuBase = `curl -s -H "Authorization: ${clickupToken}" -H "Content-Type: application/json"`;
-  const ghBase = `curl -s -H "Authorization: token ${githubToken}" -H "Content-Type: application/json"`;
+  // Tokens passed via env vars — NOT embedded in prompt (security)
+  const prompt = `You are an automation agent. Execute an external API task using ONLY bash curl commands.
 
-  const prompt = `You are an automation agent. You must execute an external API task using ONLY bash curl commands.
-
-CRITICAL RULES:
-- This is NOT about any local project or files on this machine.
-- Do NOT run npm, node, or any local dev commands.
-- Do NOT look at local files or directories.
-- Use ONLY curl to call external APIs (GitHub API and ClickUp API).
-- Do NOT ask questions. Execute immediately.
+RULES:
+- Use ONLY curl to call external APIs. Do NOT run npm/node or touch local files.
+- Tokens are in environment variables: $GITHUB_TOKEN and $CLICKUP_TOKEN
+- Do NOT print or expose the token values. Do NOT ask questions.
 
 ━━━ TASK ━━━
 Name: ${task.name}
@@ -132,25 +127,28 @@ Description: ${task.description || "(see task name)"}
 ClickUp Task ID: ${task.id}
 
 ━━━ GITHUB TARGET ━━━
-Repo: https://github.com/${githubOwner}/${githubRepo}
-API base: https://api.github.com/repos/${githubOwner}/${githubRepo}
+Owner: ${githubOwner}
+Repo: ${githubRepo}
 
-━━━ EXECUTE THESE STEPS NOW ━━━
+━━━ EXECUTE NOW ━━━
 
-STEP 1: List repo files to understand structure:
-${ghBase} "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/"
+STEP 1 — List repo files:
+curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/"
 
-STEP 2: Based on the task, create/update a file. Example for creating a markdown file:
-CONTENT=$(echo -n "# File List\\n| File | Created | Stage |\\n|------|---------|-------|\\n" | base64 -w 0)
-${ghBase} -X PUT "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/files-list.md" \\
-  -d "{\\"message\\":\\"add files list md\\",\\"content\\":\\"$CONTENT\\"}"
+STEP 2 — Create/update file (use base64 for content):
+CONTENT=$(printf '%s' "your file content here" | base64 -w 0)
+curl -s -X PUT "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/FILENAME.md" \\
+  -H "Authorization: token $GITHUB_TOKEN" -H "Content-Type: application/json" \\
+  -d "{\\"message\\":\\"task: ${task.name}\\",\\"content\\":\\"$CONTENT\\"}"
 
-STEP 3: Mark ClickUp task as done:
-${cuBase} -X PUT "https://api.clickup.com/api/v2/task/${task.id}" -d '{"status":"${config.doneStatus}"}'
+STEP 3 — Mark ClickUp task done:
+curl -s -X PUT "https://api.clickup.com/api/v2/task/${task.id}" \\
+  -H "Authorization: $CLICKUP_TOKEN" -H "Content-Type: application/json" \\
+  -d '{"status":"${config.doneStatus}"}'
 
-STEP 4: Print Arabic summary of what was done.
+STEP 4 — Print brief Arabic summary.
 
-BEGIN EXECUTION NOW:`;
+BEGIN:`;
 
   // Find claude CLI: prefer local node_modules binary, fallback to global
   const localExe = new URL("../../node_modules/@anthropic-ai/claude-code/bin/claude.exe", import.meta.url).pathname.replace(/^\//, "");
@@ -182,8 +180,13 @@ BEGIN EXECUTION NOW:`;
       ? `type "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001`
       : `cat "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001`;
 
-    // Remove ANTHROPIC_API_KEY so CLI uses OAuth subscription (not API credits)
-    const { ANTHROPIC_API_KEY: _removed, ...envForCLI } = process.env as Record<string, string>;
+    // Remove ANTHROPIC_API_KEY (use OAuth subscription) + inject task tokens securely
+    const { ANTHROPIC_API_KEY: _removed, ...baseEnv } = process.env as Record<string, string>;
+    const envForCLI = {
+      ...baseEnv,
+      GITHUB_TOKEN: githubToken,
+      CLICKUP_TOKEN: clickupToken,
+    };
 
     const proc = spawn(shellCmd, [], {
       shell: true,
