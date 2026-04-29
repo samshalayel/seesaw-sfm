@@ -238,20 +238,20 @@ export function ProductionHall() {
     <group>
 
       {/* ═══ FLOOR ═══════════════════════════════════════════════════════════ */}
-      <mesh position={[HALL_CX, -0.05, HALL_CZ]} receiveShadow>
-        <boxGeometry args={[HALL_W, 0.1, HALL_D]} />
+      <mesh position={[HALL_CX, 0.1, HALL_CZ]} receiveShadow>
+        <boxGeometry args={[HALL_W, 0.18, HALL_D]} />
         <meshStandardMaterial color={FLOOR_COLOR} roughness={0.9} metalness={0.1} />
       </mesh>
 
       {/* Floor grid — subtle lines */}
       {([-15, -8, -1, 6, 13] as number[]).map((dx, i) => (
-        <mesh key={`fgx-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[HALL_CX + dx, 0.002, HALL_CZ]}>
+        <mesh key={`fgx-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[HALL_CX + dx, 0.2, HALL_CZ]}>
           <planeGeometry args={[0.05, HALL_D]} />
           <meshStandardMaterial color="#1c2535" />
         </mesh>
       ))}
       {([-10, -13, -16] as number[]).map((z, i) => (
-        <mesh key={`fgz-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[HALL_CX, 0.002, z]}>
+        <mesh key={`fgz-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[HALL_CX, 0.2, z]}>
           <planeGeometry args={[HALL_W, 0.05]} />
           <meshStandardMaterial color="#1c2535" />
         </mesh>

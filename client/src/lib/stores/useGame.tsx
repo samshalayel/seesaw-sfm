@@ -2,15 +2,44 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { setRoomId, apiFetch, clearAuthToken } from "../utils";
 
-export type GamePhase = "locked" | "avatar_select" | "ready" | "playing" | "ended";
+export type GamePhase = "locked" | "avatar_select" | "ready" | "playing" | "ended" | "admin";
 
 export interface UserInfo {
   id: string;
   username: string;
   roomId: string;
+  role?: string;
 }
 
 export type RoomAssignment = "main" | "stage0" | "stage1" | "manager" | "brA" | "brB" | "brC";
+
+export interface HumanMemberInfo {
+  id:             string;
+  name:           string;
+  role:           string;
+  joinCode:       string;
+  roomAssignment: string;
+}
+
+// ── مواضع مكاتب الموظفين البشريين — الجانب الأيمن من الصالة ──────────────────
+interface HumanSlot {
+  human:     [number, number, number];
+  humanRot:  [number, number, number];
+  desk:      [number, number, number];
+  deskRot:   [number, number, number];
+}
+const HUMAN_SLOTS: HumanSlot[] = [
+  // يواجهون الغرفة (نحو -X) من الحائط الأيمن
+  { human: [6.5, 0,  0.5], humanRot: [0, -Math.PI / 2, 0], desk: [5.2, 0,  0.5], deskRot: [0,  Math.PI / 2, 0] },
+  { human: [6.5, 0,  3.0], humanRot: [0, -Math.PI / 2, 0], desk: [5.2, 0,  3.0], deskRot: [0,  Math.PI / 2, 0] },
+  { human: [6.5, 0,  5.5], humanRot: [0, -Math.PI / 2, 0], desk: [5.2, 0,  5.5], deskRot: [0,  Math.PI / 2, 0] },
+  { human: [6.5, 0, -5.5], humanRot: [0, -Math.PI / 2, 0], desk: [5.2, 0, -5.5], deskRot: [0,  Math.PI / 2, 0] },
+  { human: [6.5, 0,  6.8], humanRot: [0, -Math.PI / 2, 0], desk: [5.2, 0,  6.8], deskRot: [0,  Math.PI / 2, 0] },
+  { human: [6.5, 0, -6.5], humanRot: [0, -Math.PI / 2, 0], desk: [5.2, 0, -6.5], deskRot: [0,  Math.PI / 2, 0] },
+];
+export function getHumanSlot(index: number): HumanSlot {
+  return HUMAN_SLOTS[index % HUMAN_SLOTS.length];
+}
 
 export interface ModelInfo {
   id: string;
@@ -48,34 +77,95 @@ export function getModelColor(index: number): string {
   return ROBOT_COLORS[index % ROBOT_COLORS.length];
 }
 
-// ── Hall Worker positions (inside ProductionHall, 2 rows) ─────────────────────
-// Hall: X ∈ [-24, 16], Z ∈ [-19, -7], CX = -4
-// الجدار الأيسر X=-24، الجدار الأيمن X=+16
-// الأبواب عند Z=-7 (يسار X=-20، يمين X=+12) — الروبوتات تبدأ من Z=-10
-const HALL_WORKER_POSITIONS: [number, number, number][] = [
-  // الجدار الأيسر — ظهر للجدار، وجه +X
-  [-22, 0, -10], [-22, 0, -13], [-22, 0, -15.5], [-22, 0, -17.5],
-  // الجدار الأيمن — ظهر للجدار، وجه -X (نبعد عن باب غرفة المدير عند Z=-7)
-  [13, 0, -12.5], [13, 0, -15], [13, 0, -17.5],
+// ── Meeting layout — حساب أبعاد الطاولة ومواقع المقاعد حسب عدد الروبوتات ────
+// الطاولة ثابتة عند [0, 0, 1.5] في إحداثيات الغرفة
+const MT_CENTER: [number, number, number] = [0, 0, 1.5];
+const MT_SEAT_Z_OFFSET = 1.4;   // مسافة الكرسي من مركز الطاولة (Z)
+const MT_SPACING       = 1.1;   // المسافة بين الكراسي (X)
+const MT_W_PADDING     = 0.5;   // هامش جانبي للطاولة
+
+export interface MeetingLayout {
+  tableW:    number;                                     // عرض الطاولة
+  legX:      number;                                     // موضع الأرجل (±)
+  seats:     [number, number, number][];                 // مواقع الروبوتات (coords الغرفة)
+  rotations: [number, number, number][];                 // دوران كل روبوت
+  relChairs: { pos: [number,number,number]; rot: [number,number,number] }[]; // للرسم في Room.tsx
+}
+
+export function getMeetingLayout(robotCount: number): MeetingLayout {
+  const total  = Math.max(4, Math.min(12, robotCount));
+  const frontN = Math.ceil(total  / 2);
+  const backN  = Math.floor(total / 2);
+  const perSide = Math.max(frontN, backN);  // أطول صف يحدد عرض الطاولة
+
+  const tableW = perSide * MT_SPACING + MT_W_PADDING * 2;
+  const halfW  = (perSide - 1) * MT_SPACING / 2;
+  const legX   = tableW / 2 - 0.35;
+
+  const seats:     [number, number, number][] = [];
+  const rotations: [number, number, number][] = [];
+  const relChairs: { pos: [number,number,number]; rot: [number,number,number] }[] = [];
+
+  // الصف الأمامي — يواجه +Z (نحو مركز الطاولة)
+  for (let i = 0; i < frontN; i++) {
+    const x = -halfW + i * MT_SPACING;
+    seats.push([MT_CENTER[0] + x, 0, MT_CENTER[2] - MT_SEAT_Z_OFFSET]);
+    rotations.push([0, 0, 0]);
+    relChairs.push({ pos: [x, 0, -MT_SEAT_Z_OFFSET], rot: [0, 0, 0] });
+  }
+  // الصف الخلفي — يواجه -Z (نحو مركز الطاولة)
+  for (let i = 0; i < backN; i++) {
+    const x = -halfW + i * MT_SPACING;
+    seats.push([MT_CENTER[0] + x, 0, MT_CENTER[2] + MT_SEAT_Z_OFFSET]);
+    rotations.push([0, Math.PI, 0]);
+    relChairs.push({ pos: [x, 0,  MT_SEAT_Z_OFFSET], rot: [0, Math.PI, 0] });
+  }
+
+  return { tableW, legX, seats, rotations, relChairs };
+}
+
+// ── Hall Worker slots (inside ProductionHall, 2 rows) ─────────────────────────
+// Hall: X ∈ [-24, 16], Z ∈ [-19, -7]
+// الصف الأول (Z=-10) قريب من الغرف — وجه الروبوت نحو الجدار الخلفي (-Z)
+// الصف الثاني (Z=-15) قريب من الجدار الخلفي — وجه الروبوت نحو المدخل (+Z)
+interface HallSlot {
+  robot:         [number, number, number];
+  desk:          [number, number, number];
+  robotRotation: [number, number, number];
+  deskRotation:  [number, number, number];
+}
+
+const HALL_WORKER_SLOTS: HallSlot[] = [
+  // 1 — يسار، صف أول
+  { robot: [-20, 0, -10], desk: [-20, 0, -11.5], robotRotation: [0, Math.PI, 0], deskRotation: [0, 0, 0] },
+  // 2 — وسط، صف أول
+  { robot: [ -6, 0, -10], desk: [ -6, 0, -11.5], robotRotation: [0, Math.PI, 0], deskRotation: [0, 0, 0] },
+  // 3 — يمين، صف أول
+  { robot: [  6, 0, -10], desk: [  6, 0, -11.5], robotRotation: [0, Math.PI, 0], deskRotation: [0, 0, 0] },
+  // 4 — يمين، صف ثاني
+  { robot: [ 10, 0, -15], desk: [ 10, 0, -13.5], robotRotation: [0, 0, 0], deskRotation: [0, Math.PI, 0] },
+  // 5 — وسط، صف ثاني
+  { robot: [ -2, 0, -15], desk: [ -2, 0, -13.5], robotRotation: [0, 0, 0], deskRotation: [0, Math.PI, 0] },
+  // 6 — وسط-يسار، صف ثاني
+  { robot: [-10, 0, -15], desk: [-10, 0, -13.5], robotRotation: [0, 0, 0], deskRotation: [0, Math.PI, 0] },
+  // 7 — يسار، صف ثاني
+  { robot: [-18, 0, -15], desk: [-18, 0, -13.5], robotRotation: [0, 0, 0], deskRotation: [0, Math.PI, 0] },
 ];
 
 export function getHallWorkerPosition(index: number): [number, number, number] {
-  return HALL_WORKER_POSITIONS[index % HALL_WORKER_POSITIONS.length];
+  return HALL_WORKER_SLOTS[index % HALL_WORKER_SLOTS.length].robot;
 }
 
 export function getHallWorkerDeskPosition(index: number): [number, number, number] {
-  const [x, y, z] = HALL_WORKER_POSITIONS[index % HALL_WORKER_POSITIONS.length];
-  return x < 0 ? [x + 1.5, y, z] : [x - 1.5, y, z];
+  return HALL_WORKER_SLOTS[index % HALL_WORKER_SLOTS.length].desk;
 }
 
 export function getHallWorkerRotation(index: number): [number, number, number] {
-  const [x] = HALL_WORKER_POSITIONS[index % HALL_WORKER_POSITIONS.length];
-  return x < 0 ? [0, Math.PI / 2, 0] : [0, -Math.PI / 2, 0];
+  return HALL_WORKER_SLOTS[index % HALL_WORKER_SLOTS.length].robotRotation;
 }
 
 export function getHallWorkerDeskRotation(index: number): [number, number, number] {
-  const [x] = HALL_WORKER_POSITIONS[index % HALL_WORKER_POSITIONS.length];
-  return x < 0 ? [0, -Math.PI / 2, 0] : [0, Math.PI / 2, 0];
+  return HALL_WORKER_SLOTS[index % HALL_WORKER_SLOTS.length].deskRotation;
 }
 
 export function getMaxHallWorkers(): number {
@@ -103,18 +193,19 @@ const ROOM_SLOTS: Record<string, RoomSlot[]> = {
     { desk: [-5.5, 0,  2],  robot: [-6.8, 0,  2],  deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
     { desk: [-5.5, 0,  5],  robot: [-6.8, 0,  5],  deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
   ],
-  // Stage 0 — center at world [-12, 0, -3], width=8, depth=8 → X[-16,-8], Z[-7,1]
-  // نفس إحداثيات stage1 المحلية (local [1,0,2]) مُطبَّقة على مركز stage0
+  // Stage 0 (S1) — center at world [-12, 0, -3], width=8, depth=8 → X[-16,-8], Z[-7,1]
+  // slot0 = left wall (+z) middle, slot1/2 = back wall side
   stage0: [
-    { desk: [-9.5, 0, -1],   robot: [-11,  0, -1],   deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
-    { desk: [-9.5, 0, -3.5], robot: [-11,  0, -3.5], deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
-    { desk: [-9.5, 0, -5],   robot: [-11,  0, -5],   deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
+    { desk: [-12,  0,  -1.0], robot: [-12,  0, 0.4], deskRotation: [0, 0,         0], robotRotation: [0, Math.PI, 0] },
+    { desk: [-14,  0,  -5.5], robot: [-15,  0, -5.5], deskRotation: [0, HALF_PI,  0], robotRotation: [0, -HALF_PI, 0] },
+    { desk: [-10,  0,  -5.5], robot: [-9.2, 0, -5.5], deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI,  0] },
   ],
-  // Stage 1 — center at world [-20, 0, -3], width=8, depth=8 → X[-24,-16], Z[-7,1]
+  // Stage 1 (S2) — center at world [-20, 0, -3], width=8, depth=8 → X[-24,-16], Z[-7,1]
+  // slot0 = left wall (+z) middle, slot1/2 = back wall side
   stage1: [
-    { desk: [-17.5, 0, -1],   robot: [-19,   0, -1],   deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
-    { desk: [-17.5, 0, -3.5], robot: [-19,   0, -3.5], deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
-    { desk: [-17.5, 0, -5],   robot: [-19,   0, -5],   deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
+    { desk: [-20,  0,  -1.0], robot: [-20,  0, 0.4], deskRotation: [0, 0,         0], robotRotation: [0, Math.PI, 0] },
+    { desk: [-22,  0,  -5.5], robot: [-23,  0, -5.5], deskRotation: [0, HALF_PI,  0], robotRotation: [0, -HALF_PI, 0] },
+    { desk: [-18,  0,  -5.5], robot: [-17.2,0, -5.5], deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI,  0] },
   ],
   // Manager room — center at world [12, 0, -3], width=8, depth=8 → X[8,16], Z[-7,1]
   // left wall (X=9) facing +X (same mirror as main room)
@@ -175,14 +266,18 @@ interface GameState {
   carryingBox: boolean;
   models: ModelInfo[];
   hallWorkers: ModelInfo[];
+  humans: HumanMemberInfo[];
   user: UserInfo | null;
   selectedAvatar: string; // id of the chosen avatar glb (e.g. "avatar", "1", "2")
   pendingAutoEnter: boolean; // set by confirmAvatar so Player triggers walk-in even after Suspense
   companyName: string;
   companyLogo: string; // base64 or URL
+  entranceBg:  string; // base64 or "" → fallback to /images/sillar-entrance.png
   isGuest: boolean; // دخل عبر رابط مشاركة — لا يمكنه دخول الغرف
   playerPos: { x: number; z: number }; // موضع اللاعب — يُحدَّث من Player.tsx كل frame
   setPlayerPos: (x: number, z: number) => void;
+  teleportTarget: { x: number; z: number; lookAtX?: number; lookAtZ?: number } | null;
+  setTeleportTarget: (t: { x: number; z: number; lookAtX?: number; lookAtZ?: number } | null) => void;
 
   unlock: (user: UserInfo, skipAvatarSelect?: boolean) => void;
   confirmAvatar: (avatarId: string) => void;
@@ -234,13 +329,27 @@ interface GameState {
   setCarryingBox: (val: boolean) => void;
   isExteriorView: boolean;
   setExteriorView: (val: boolean) => void;
-  cameraMode: "focus" | "medium" | "top" | "fps";
-  setCameraMode: (mode: "focus" | "medium" | "top" | "fps") => void;
+  meetingMode: boolean;
+  setMeetingMode: (val: boolean) => void;
+  meetingMinutesOpen: boolean;
+  openMeetingMinutes: () => void;
+  closeMeetingMinutes: () => void;
+  agoraMeetingOpen: boolean;
+  openAgoraMeeting: () => void;
+  closeAgoraMeeting: () => void;
+  cameraMode: "focus" | "medium" | "top" | "fps" | "city" | "overview";
+  setCameraMode: (mode: "focus" | "medium" | "top" | "fps" | "city" | "overview") => void;
+  cameraResetToken: number;
+  resetCamera: () => void;
   getRoomId: () => string;
   fetchModels: () => Promise<void>;
   fetchHallWorkers: () => Promise<void>;
+  fetchHumans: () => Promise<void>;
   setCompanyInfo: (name: string, logo: string) => void;
+  setEntranceBg:  (bg: string) => void;
   fetchCompanyInfo: () => void;
+  appMode: "classic" | "pro" | null;
+  setAppMode: (mode: "classic" | "pro") => void;
 }
 
 export const useGame = create<GameState>()(
@@ -269,18 +378,37 @@ export const useGame = create<GameState>()(
     carryingBox: false,
     models: [],
     hallWorkers: [],
+    humans: [],
     user: null,
     selectedAvatar: localStorage.getItem("selectedAvatar") || "lite",
     pendingAutoEnter: false,
     companyName: "",
     companyLogo: "",
+    entranceBg:  "",
     isGuest: false,
+    appMode: null,
+    setAppMode: (mode) => set({ appMode: mode }),
     playerPos: { x: 0, z: 8.5 },
     setPlayerPos: (x, z) => set({ playerPos: { x, z } }),
+    teleportTarget: null,
+    setTeleportTarget: (t) => set({ teleportTarget: t }),
     isExteriorView: false,
-    cameraMode: "focus",
+    meetingMode: false,
+    setMeetingMode: (val) => set({ meetingMode: val }),
+    meetingMinutesOpen: false,
+    openMeetingMinutes:  () => set({ meetingMinutesOpen: true }),
+    closeMeetingMinutes: () => set({ meetingMinutesOpen: false }),
+    agoraMeetingOpen: false,
+    openAgoraMeeting:  () => set({ agoraMeetingOpen: true }),
+    closeAgoraMeeting: () => set({ agoraMeetingOpen: false }),
+    cameraMode: "city",
+    cameraResetToken: 0,
 
     unlock: (user: UserInfo, skipAvatarSelect = false) => {
+      if (user.role === "admin") {
+        set({ phase: "admin", user });
+        return;
+      }
       setRoomId(user.roomId);
       const savedAvatar = localStorage.getItem("selectedAvatar") || "lite";
       set((state) => {
@@ -452,8 +580,11 @@ export const useGame = create<GameState>()(
       set({ isExteriorView: val });
     },
 
-    setCameraMode: (mode: "focus" | "medium" | "top") => {
+    setCameraMode: (mode: "focus" | "medium" | "top" | "fps" | "city" | "overview") => {
       set({ cameraMode: mode });
+    },
+    resetCamera: () => {
+      set((s) => ({ cameraMode: "focus", cameraResetToken: s.cameraResetToken + 1 }));
     },
 
     getRoomId: (): string => {
@@ -485,8 +616,22 @@ export const useGame = create<GameState>()(
       }
     },
 
+    fetchHumans: async () => {
+      try {
+        const res = await apiFetch("/api/humans");
+        const data = await res.json();
+        set({ humans: Array.isArray(data) ? data : [] });
+      } catch (e) {
+        console.error("Failed to fetch humans:", e);
+      }
+    },
+
     setCompanyInfo: (name: string, logo: string) => {
       set({ companyName: name, companyLogo: logo });
+    },
+
+    setEntranceBg: (bg: string) => {
+      set({ entranceBg: bg });
     },
 
     fetchCompanyInfo: async () => {
@@ -498,6 +643,9 @@ export const useGame = create<GameState>()(
             companyName: data.company.name || "",
             companyLogo: data.company.logo || "",
           });
+        }
+        if (data.loginBg !== undefined) {
+          set({ entranceBg: data.loginBg || "" });
         }
       } catch {
         // ignore

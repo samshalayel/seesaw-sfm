@@ -74,9 +74,10 @@ export function VaultSettingsDialog() {
   const closeVault = useGame((s) => s.closeVault);
   const fetchModels = useGame((s) => s.fetchModels);
   const fetchHallWorkers = useGame((s) => s.fetchHallWorkers);
+  const fetchHumans = useGame((s) => s.fetchHumans);
   const setCompanyInfo = useGame((s) => s.setCompanyInfo);
   const setEntranceBg  = useGame((s) => s.setEntranceBg);
-  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "sfm" | "models" | "ai-worker" | "instructions" | "stats">("company");
+  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans">("company");
   const [pdfIndexLog, setPdfIndexLog] = useState<string[]>([]);
   const [pdfIndexing, setPdfIndexing] = useState(false);
   const [pdfIndexes, setPdfIndexes] = useState<{name:string,chunkCount:number,createdAt:string}[]>([]);
@@ -98,6 +99,8 @@ export function VaultSettingsDialog() {
   const [sfmApiKey, setSfmApiKey] = useState("");
   const [sfmHasKey, setSfmHasKey] = useState(false);
   const [hfToken, setHfToken] = useState("");
+  const [apidogToken, setApidogToken] = useState("");
+  const [figmaToken, setFigmaToken] = useState("");
   const [githubToken, setGithubToken] = useState("");
   const [githubOwner, setGithubOwner] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
@@ -108,6 +111,31 @@ export function VaultSettingsDialog() {
 
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [hallWorkers, setHallWorkers] = useState<ModelEntry[]>([]);
+
+  // الموظفون البشريون
+  interface HumanMember { id: string; name: string; role: string; joinCode: string; roomAssignment: string; }
+  const [humans, setHumans] = useState<HumanMember[]>([]);
+  const [humanCopied, setHumanCopied] = useState<string | null>(null);
+
+  const genCode = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  };
+  const addHuman = () => {
+    setHumans(h => [...h, { id: Date.now().toString(36), name: "", role: "", joinCode: genCode(), roomAssignment: "main" }]);
+  };
+  const removeHuman = (id: string) => setHumans(h => h.filter(m => m.id !== id));
+  const updateHuman = (id: string, field: keyof HumanMember, value: string) =>
+    setHumans(h => h.map(m => m.id === id ? { ...m, [field]: value } : m));
+  const regenCode = (id: string) =>
+    setHumans(h => h.map(m => m.id === id ? { ...m, joinCode: genCode() } : m));
+  const copyJoinLink = (code: string) => {
+    const url = `${window.location.origin}?humanCode=${code}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setHumanCopied(code);
+      setTimeout(() => setHumanCopied(null), 2000);
+    });
+  };
   const [defaultModel, setDefaultModelState] = useState<string>("Groq");
   const [systemPrompt, setSystemPrompt] = useState<string>("");
 
@@ -273,6 +301,8 @@ export function VaultSettingsDialog() {
           }
           if (data.huggingface) {
             setHfToken(data.huggingface.token || "");
+            if (data.apidog) setApidogToken(data.apidog.token || "");
+            if (data.figma)  setFigmaToken(data.figma.token || "");
           }
           if (data.models && Array.isArray(data.models)) {
             setModels(data.models);
@@ -282,6 +312,9 @@ export function VaultSettingsDialog() {
           }
           if (data.systemPrompt !== undefined) {
             setSystemPrompt(data.systemPrompt || "");
+          }
+          if (data.humans && Array.isArray(data.humans)) {
+            setHumans(data.humans);
           }
         })
         .catch(() => {});
@@ -336,8 +369,11 @@ export function VaultSettingsDialog() {
           clickup: { token: clickupToken, listId: clickupListId, assignee: clickupAssignee },
           sfm: { apiKey: sfmApiKey },
           huggingface: { token: hfToken },
+          apidog: { token: apidogToken },
+          figma:  { token: figmaToken },
           models: models.filter(m => m.name.trim() || m.apiKey.trim()),
           hallWorkers: hallWorkers.filter(m => m.name.trim() || m.apiKey.trim()),
+          humans,
           systemPrompt: systemPrompt,
         }),
       });
@@ -353,8 +389,8 @@ export function VaultSettingsDialog() {
           body: JSON.stringify({ modelName: defaultModel }),
         });
       }
-      // تحديث الروبوتات في الصالة فوراً بدون تسجيل خروج
-      await Promise.all([fetchModels(), fetchHallWorkers()]);
+      // تحديث الروبوتات والموظفين في الصالة فوراً بدون تسجيل خروج
+      await Promise.all([fetchModels(), fetchHallWorkers(), fetchHumans()]);
       // تحديث شعار الشركة على الجدار فوراً
       setCompanyInfo(companyName, companyLogo);
       setEntranceBg(loginBg);
@@ -473,7 +509,7 @@ export function VaultSettingsDialog() {
     display: "block",
   };
 
-  const tabs = ["company", "github", "clickup", "sfm", "models", "ai-worker", "instructions", "stats"] as const;
+  const tabs = ["company", "github", "clickup", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
   const tabLabels: Record<string, string> = {
     company: "الشركة",
     github: "GitHub",
@@ -482,6 +518,7 @@ export function VaultSettingsDialog() {
     models: "Models",
     "ai-worker": "🤖 AI Workers",
     instructions: "📋 تعليمات",
+    humans: "👥 الفريق",
     stats: "📊 إحصائيات",
   };
 
@@ -1040,6 +1077,66 @@ export function VaultSettingsDialog() {
                   onClick={() => window.open("https://huggingface.co/settings/tokens", "_blank")}
                 >
                   huggingface.co/settings/tokens ↗
+                </span>
+              </div>
+            </div>
+
+            {/* ── APIdog ──────────────────────────────────────────────── */}
+            <div style={{ marginTop: 24, borderTop: "1px solid rgba(99,102,241,0.2)", paddingTop: 16 }}>
+              <div style={{ color: "#f59e0b", fontWeight: "bold", marginBottom: 8, fontSize: 13 }}>
+                🐶 APIdog — إدارة الـ API Documentation
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+                أدخل APIdog API Access Token لتمكين الروبوتات من إنشاء وتحديث وتشغيل اختبارات الـ API مباشرة.
+                <br />
+                الروبوت يستطيع: جلب المشاريع · إنشاء Endpoints · تحديث الوثائق · تشغيل Test Scenarios.
+              </div>
+              <label style={labelStyle}>APIdog API Access Token</label>
+              <input
+                type="password"
+                value={apidogToken}
+                onChange={(e) => setApidogToken(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="APS-xxxxxxxxxxxxxxxxxxxx"
+                style={inputStyle}
+              />
+              <div style={{ marginTop: 6, color: "#64748b", fontSize: 11 }}>
+                احصل على التوكن من{" "}
+                <span
+                  style={{ color: "#f59e0b", cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => window.open("https://app.apidog.com/user/setting/account", "_blank")}
+                >
+                  APIdog → Account Settings → API Access Token ↗
+                </span>
+              </div>
+            </div>
+
+            {/* ── Figma ───────────────────────────────────────────────── */}
+            <div style={{ marginTop: 24, borderTop: "1px solid rgba(99,102,241,0.2)", paddingTop: 16 }}>
+              <div style={{ color: "#a78bfa", fontWeight: "bold", marginBottom: 8, fontSize: 13 }}>
+                🎨 Figma — قراءة التصاميم
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+                أدخل Figma Personal Access Token لتمكين الروبوتات من قراءة ملفات التصميم.
+                <br />
+                يستطيع الروبوت: جلب الملفات · قراءة الـ Components والـ Styles · عرض التعليقات · تصدير الصور.
+              </div>
+              <label style={labelStyle}>Figma Personal Access Token</label>
+              <input
+                type="password"
+                value={figmaToken}
+                onChange={(e) => setFigmaToken(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="figd_xxxxxxxxxxxxxxxxxxxx"
+                style={inputStyle}
+              />
+              <div style={{ marginTop: 6, color: "#64748b", fontSize: 11 }}>
+                احصل على التوكن من{" "}
+                <span
+                  style={{ color: "#a78bfa", cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => window.open("https://www.figma.com/settings", "_blank")}
+                >
+                  Figma → Settings → Personal access tokens ↗
                 </span>
               </div>
             </div>
@@ -2012,6 +2109,99 @@ export function VaultSettingsDialog() {
                   </button>
                 ))}
               </div>
+            </div>
+          </>
+        ) : activeTab === "humans" ? (
+          <>
+            {/* ── لوحة الفريق البشري ── */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <span style={{ color: "#fff", fontWeight: "bold", fontSize: 14, direction: "rtl" }}>
+                👥 أعضاء الفريق البشري
+              </span>
+              <button onClick={addHuman} style={{
+                background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.5)",
+                borderRadius: 8, color: "#a5b4fc", padding: "5px 14px", cursor: "pointer", fontSize: 13,
+              }}>+ إضافة موظف</button>
+            </div>
+
+            {humans.length === 0 && (
+              <div style={{ color: "#475569", textAlign: "center", padding: "30px 0", fontSize: 13, direction: "rtl" }}>
+                لا يوجد موظفون بعد — اضغط "+ إضافة موظف"
+              </div>
+            )}
+
+            {humans.map((m) => (
+              <div key={m.id} style={{
+                background: "rgba(255,255,255,0.03)", border: "1px solid rgba(99,102,241,0.2)",
+                borderRadius: 10, padding: "12px 14px", marginBottom: 10,
+              }}>
+                {/* الصف الأول: الاسم + الوظيفة */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 8, direction: "rtl" }}>
+                  <input
+                    placeholder="الاسم"
+                    value={m.name}
+                    onChange={e => updateHuman(m.id, "name", e.target.value)}
+                    style={{ ...inputStyle, flex: 1, direction: "rtl", textAlign: "right" }}
+                  />
+                  <input
+                    placeholder="المسمى الوظيفي"
+                    value={m.role}
+                    onChange={e => updateHuman(m.id, "role", e.target.value)}
+                    style={{ ...inputStyle, flex: 1, direction: "rtl", textAlign: "right" }}
+                  />
+                </div>
+
+                {/* الصف الثاني: الغرفة + الكود + أزرار */}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", direction: "rtl", flexWrap: "wrap" }}>
+                  <select
+                    value={m.roomAssignment}
+                    onChange={e => updateHuman(m.id, "roomAssignment", e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minWidth: 130, direction: "rtl" }}
+                  >
+                    {ROOM_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+
+                  {/* كود الدخول */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    background: "rgba(0,0,0,0.3)", border: "1px solid rgba(99,102,241,0.35)",
+                    borderRadius: 8, padding: "6px 10px", flexShrink: 0,
+                  }}>
+                    <span style={{ color: "#a5b4fc", fontFamily: "monospace", fontSize: 15, letterSpacing: 3, fontWeight: "bold" }}>
+                      {m.joinCode}
+                    </span>
+                    <button onClick={() => regenCode(m.id)} title="توليد كود جديد"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 13 }}>🔄</button>
+                  </div>
+
+                  {/* نسخ رابط الانضمام */}
+                  <button
+                    onClick={() => copyJoinLink(m.joinCode)}
+                    title="نسخ رابط الدخول"
+                    style={{
+                      background: humanCopied === m.joinCode ? "rgba(34,197,94,0.2)" : "rgba(99,102,241,0.15)",
+                      border: `1px solid ${humanCopied === m.joinCode ? "rgba(34,197,94,0.5)" : "rgba(99,102,241,0.4)"}`,
+                      borderRadius: 7, color: humanCopied === m.joinCode ? "#4ade80" : "#a5b4fc",
+                      padding: "5px 10px", cursor: "pointer", fontSize: 12, flexShrink: 0,
+                    }}
+                  >
+                    {humanCopied === m.joinCode ? "✓ تم النسخ" : "🔗 رابط الدخول"}
+                  </button>
+
+                  {/* حذف */}
+                  <button onClick={() => removeHuman(m.id)}
+                    style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, flexShrink: 0 }}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ color: "#475569", fontSize: 11, direction: "rtl", marginTop: 8, lineHeight: 1.7 }}>
+              💡 كل موظف يحصل على كود دخول فريد · انسخ الرابط وأرسله له ·
+              عند دخوله سيُحوَّل تلقائياً للغرفة المحددة
             </div>
           </>
         ) : activeTab === "stats" ? (

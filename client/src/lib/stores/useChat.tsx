@@ -4,7 +4,10 @@ import { apiFetch } from "../utils";
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  imageUrl?: string; // base64 data URL للعرض
+  imageUrl?: string;
+  cost?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 interface ChatState {
@@ -13,13 +16,14 @@ interface ChatState {
   messages: ChatMessage[];
   isLoading: boolean;
   inputText: string;
-  pendingImage: string | null; // base64 data URL
+  pendingImage: string | null;
   chatHistory: Record<string, ChatMessage[]>;
   robotScreens: Record<string, string>;
   isBroadcast: boolean;
   broadcastResults: Record<string, string>;
   activeProjectKey: string | null;
   wavingRobotId: string | null;
+  sessionUsage: { input: number; output: number; cost: number; model: string };
 
   openChat: (robotId: string, startS0?: boolean) => void;
   triggerRobotWave: (robotId: string) => void;
@@ -47,6 +51,7 @@ export const useChat = create<ChatState>((set, get) => ({
   broadcastResults: {},
   activeProjectKey: null,
   wavingRobotId: null,
+  sessionUsage: { input: 0, output: 0, cost: 0, model: "" },
 
   openChat: (robotId: string, startS0: boolean = false) => {
     const { chatHistory, activeRobotId, messages } = get();
@@ -70,7 +75,7 @@ export const useChat = create<ChatState>((set, get) => ({
       finalMessages = restored.length > 0 ? restored : [];
     }
     
-    set({ isOpen: true, activeRobotId: robotId, messages: finalMessages, inputText: "", chatHistory: updated, isLoading: false });
+    set({ isOpen: true, activeRobotId: robotId, messages: finalMessages, inputText: "", chatHistory: updated, isLoading: false, sessionUsage: { input: 0, output: 0, cost: 0, model: "" } });
   },
 
   closeChat: () => {
@@ -255,15 +260,31 @@ export const useChat = create<ChatState>((set, get) => ({
                   let newContent = "";
                   if (lastMsg && lastMsg.role === "assistant") {
                     newContent = lastMsg.content + parsed.content;
-                    msgs[msgs.length - 1] = {
-                      ...lastMsg,
-                      content: newContent,
-                    };
+                    msgs[msgs.length - 1] = { ...lastMsg, content: newContent };
                   }
                   if (activeRobotId) {
                     return { messages: msgs, robotScreens: { ...state.robotScreens, [activeRobotId]: newContent } };
                   }
                   return { messages: msgs };
+                });
+              }
+              if (parsed.usage) {
+                const { input, output, model, cost } = parsed.usage;
+                set((state) => {
+                  const msgs = [...state.messages];
+                  const lastMsg = msgs[msgs.length - 1];
+                  if (lastMsg && lastMsg.role === "assistant") {
+                    msgs[msgs.length - 1] = { ...lastMsg, cost, inputTokens: input, outputTokens: output };
+                  }
+                  return {
+                    messages: msgs,
+                    sessionUsage: {
+                      input: state.sessionUsage.input + input,
+                      output: state.sessionUsage.output + output,
+                      cost: state.sessionUsage.cost + cost,
+                      model,
+                    },
+                  };
                 });
               }
             } catch {

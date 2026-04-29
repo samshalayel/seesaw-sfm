@@ -15,9 +15,10 @@ export function CompanyWallBranding() {
   if (isExteriorView) return null;
 
   return (
-    <group position={[0, 5.2, -7.95]}>
+    <group position={[-3.3, 5.2, -6.65]}>
       <Html
         transform
+        occlude
         position={[0, 0, 0.01]}
         scale={0.22}
         style={{ pointerEvents: "none", userSelect: "none" }}

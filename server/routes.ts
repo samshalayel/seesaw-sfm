@@ -1,3 +1,10 @@
+import { createRequire } from "module";
+// In CJS bundles (esbuild prod) import.meta is {} so .url === undefined
+// but Node.js CJS injects __filename as a global — use it as fallback
+const _require = createRequire(
+  (globalThis as any).__filename ?? import.meta.url
+);
+
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -24,11 +31,13 @@ import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs
 import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY } from "./vaultStore";
 import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
-import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles } from "./projectStore";
+import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
 import { validateStage, type ValidationResult, type ValidationFailure } from "./sfmQualityValidator";
 import { chunkText, findRelevantChunks } from "./embeddings";
-import { atalEnqueue, atalGetQueue, atalClearDone, extractFiles } from "./atalWorker";
+import { atalEnqueue, atalGetQueue, atalClearDone, atalRetryErrors, extractFiles } from "./atalWorker";
 import { indexPdfFile, searchPdfIndex, listPdfIndexes, loadPdfIndex } from "./pdfIndexer";
+import { listProjects, listEndpoints, getEndpoint, createEndpoint, updateEndpoint, listFolders, runTestScenario, listTestScenarios } from "./apidog";
+import { getFigmaFile, getFigmaNodes, getFigmaComponents, getFigmaStyles, getFigmaComments, exportFigmaNodes, getFigmaTeamProjects, getFigmaProjectFiles } from "./figma";
 import path from "path";
 import fs from "fs";
 
@@ -201,15 +210,16 @@ const toolDefinitions = [
   },
   {
     name: "create_or_update_file",
-    description: "Create a new file or update an existing file in a GitHub repository",
+    description: "Create a new file or update an existing file in a GitHub repository. If this file belongs to a pipeline stage (PD, S0–S6), pass the 'slot' parameter so the filename is registered in the pipeline registry automatically.",
     parameters: {
       type: "object",
       properties: {
-        owner: { type: "string", description: "Repository owner username" },
-        repo: { type: "string", description: "Repository name" },
-        path: { type: "string", description: "File path in the repo (e.g. test.md, src/index.js)" },
-        content: { type: "string", description: "The content to write to the file" },
+        owner:          { type: "string", description: "Repository owner username" },
+        repo:           { type: "string", description: "Repository name" },
+        path:           { type: "string", description: "File path in the repo (e.g. test.md, src/index.js)" },
+        content:        { type: "string", description: "The content to write to the file" },
         commit_message: { type: "string", description: "The commit message" },
+        slot:           { type: "string", description: "Pipeline stage slot: PD | S0 | S1 | S2 | S3 | S4 | S5 | S6. Pass this whenever the file is a pipeline stage output." },
       },
       required: ["owner", "repo", "path", "content", "commit_message"],
     },
@@ -252,6 +262,209 @@ const toolDefinitions = [
       required: ["owner", "repo", "run_id"],
     },
   },
+  // ── APIdog tools ──────────────────────────────────────────────────────────
+  {
+    name: "apidog_list_projects",
+    description: "يجلب قائمة كل المشاريع المتاحة في APIdog",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "apidog_list_endpoints",
+    description: "يجلب قائمة كل الـ API endpoints (المسارات) داخل مشروع APIdog معين",
+    parameters: {
+      type: "object",
+      properties: {
+        project_id: { type: "string", description: "معرّف المشروع في APIdog" },
+      },
+      required: ["project_id"],
+    },
+  },
+  {
+    name: "apidog_get_endpoint",
+    description: "يجلب التفاصيل الكاملة لـ endpoint معين (method, path, body schema, responses)",
+    parameters: {
+      type: "object",
+      properties: {
+        project_id:  { type: "string", description: "معرّف المشروع" },
+        endpoint_id: { type: "string", description: "معرّف الـ endpoint" },
+      },
+      required: ["project_id", "endpoint_id"],
+    },
+  },
+  {
+    name: "apidog_create_endpoint",
+    description: "ينشئ endpoint جديد في مشروع APIdog. يجب تحديد method و path و name على الأقل.",
+    parameters: {
+      type: "object",
+      properties: {
+        project_id:  { type: "string", description: "معرّف المشروع" },
+        name:        { type: "string", description: "اسم الـ endpoint" },
+        method:      { type: "string", description: "HTTP method: GET POST PUT DELETE PATCH" },
+        path:        { type: "string", description: "مسار الـ API مثل /api/users/{id}" },
+        description: { type: "string", description: "وصف الـ endpoint (اختياري)" },
+        folder_id:   { type: "number",  description: "معرّف المجلد (اختياري)" },
+      },
+      required: ["project_id", "name", "method", "path"],
+    },
+  },
+  {
+    name: "apidog_update_endpoint",
+    description: "يحدّث endpoint موجود في APIdog (الاسم أو المسار أو الوصف أو الحالة)",
+    parameters: {
+      type: "object",
+      properties: {
+        project_id:  { type: "string", description: "معرّف المشروع" },
+        endpoint_id: { type: "string", description: "معرّف الـ endpoint" },
+        name:        { type: "string", description: "اسم جديد (اختياري)" },
+        method:      { type: "string", description: "HTTP method جديد (اختياري)" },
+        path:        { type: "string", description: "مسار جديد (اختياري)" },
+        description: { type: "string", description: "وصف جديد (اختياري)" },
+        status:      { type: "string", description: "الحالة: developing testing released deprecated (اختياري)" },
+      },
+      required: ["project_id", "endpoint_id"],
+    },
+  },
+  {
+    name: "apidog_list_folders",
+    description: "يجلب مجلدات التصنيف داخل مشروع APIdog",
+    parameters: {
+      type: "object",
+      properties: {
+        project_id: { type: "string", description: "معرّف المشروع" },
+      },
+      required: ["project_id"],
+    },
+  },
+  {
+    name: "apidog_list_test_scenarios",
+    description: "يجلب قائمة سيناريوهات الاختبار في مشروع APIdog",
+    parameters: {
+      type: "object",
+      properties: {
+        project_id: { type: "string", description: "معرّف المشروع" },
+      },
+      required: ["project_id"],
+    },
+  },
+  {
+    name: "apidog_run_test_scenario",
+    description: "يشغّل سيناريو اختبار في APIdog ويعيد النتائج",
+    parameters: {
+      type: "object",
+      properties: {
+        project_id:  { type: "string", description: "معرّف المشروع" },
+        scenario_id: { type: "string", description: "معرّف سيناريو الاختبار" },
+      },
+      required: ["project_id", "scenario_id"],
+    },
+  },
+  // ── Image generation ──────────────────────────────────────────────────────
+  {
+    name: "generate_image",
+    description: "يولّد صورة باستخدام DALL-E 3 بناءً على وصف نصي. يعيد URL الصورة المولّدة.",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt:  { type: "string", description: "الوصف التفصيلي للصورة المطلوبة بالإنجليزية" },
+        size:    { type: "string", description: "الحجم: 1024x1024 أو 1792x1024 أو 1024x1792 (الافتراضي 1024x1024)" },
+        quality: { type: "string", description: "الجودة: standard أو hd (الافتراضي standard)" },
+      },
+      required: ["prompt"],
+    },
+  },
+  // ── Figma tools ───────────────────────────────────────────────────────────
+  {
+    name: "figma_get_file",
+    description: "يجلب محتوى ملف Figma: اسمه، صفحاته، وأبرز عناصره. استخدم file_key من رابط الملف.",
+    parameters: {
+      type: "object",
+      properties: {
+        file_key: { type: "string", description: "مفتاح الملف من رابط Figma (الجزء بعد /file/)" },
+      },
+      required: ["file_key"],
+    },
+  },
+  {
+    name: "figma_get_nodes",
+    description: "يجلب تفاصيل nodes محددة من ملف Figma (أبعاد، ألوان، fills، strokes)",
+    parameters: {
+      type: "object",
+      properties: {
+        file_key: { type: "string", description: "مفتاح الملف" },
+        node_ids: { type: "array", items: { type: "string" }, description: "قائمة معرّفات الـ nodes" },
+      },
+      required: ["file_key", "node_ids"],
+    },
+  },
+  {
+    name: "figma_get_components",
+    description: "يجلب كل الـ components المنشورة في ملف Figma مع أوصافها وأسماء الصفحات",
+    parameters: {
+      type: "object",
+      properties: {
+        file_key: { type: "string", description: "مفتاح الملف" },
+      },
+      required: ["file_key"],
+    },
+  },
+  {
+    name: "figma_get_styles",
+    description: "يجلب كل الـ styles في ملف Figma (ألوان، خطوط، تأثيرات، grids)",
+    parameters: {
+      type: "object",
+      properties: {
+        file_key: { type: "string", description: "مفتاح الملف" },
+      },
+      required: ["file_key"],
+    },
+  },
+  {
+    name: "figma_get_comments",
+    description: "يجلب التعليقات على ملف Figma مع أسماء المؤلفين وحالة الحل",
+    parameters: {
+      type: "object",
+      properties: {
+        file_key: { type: "string", description: "مفتاح الملف" },
+      },
+      required: ["file_key"],
+    },
+  },
+  {
+    name: "figma_export_nodes",
+    description: "يصدّر nodes كصور (PNG/SVG/PDF/JPG) ويعيد روابط التحميل",
+    parameters: {
+      type: "object",
+      properties: {
+        file_key: { type: "string", description: "مفتاح الملف" },
+        node_ids: { type: "array", items: { type: "string" }, description: "معرّفات الـ nodes للتصدير" },
+        format:   { type: "string", description: "PNG أو SVG أو PDF أو JPG (الافتراضي PNG)" },
+        scale:    { type: "number",  description: "مقياس التصدير 1-4 (الافتراضي 1)" },
+      },
+      required: ["file_key", "node_ids"],
+    },
+  },
+  {
+    name: "figma_get_team_projects",
+    description: "يجلب مشاريع Figma لفريق معين",
+    parameters: {
+      type: "object",
+      properties: {
+        team_id: { type: "string", description: "معرّف الـ team في Figma" },
+      },
+      required: ["team_id"],
+    },
+  },
+  {
+    name: "figma_get_project_files",
+    description: "يجلب ملفات Figma داخل مشروع معين",
+    parameters: {
+      type: "object",
+      properties: {
+        project_id: { type: "string", description: "معرّف المشروع في Figma" },
+      },
+      required: ["project_id"],
+    },
+  },
   {
     name: "detect_medical_entities",
     description: "يستخرج الكيانات الطبية (أمراض، تشخيصات، حالات مرضية) من النص باستخدام نموذج OpenMed-NER-PathologyDetect-TinyMed-135M. مفيد لتحليل النصوص الطبية والسريرية.",
@@ -262,6 +475,12 @@ const toolDefinitions = [
       },
       required: ["text"],
     },
+  },
+  // ── Pipeline slot registry ────────────────────────────────────────────────
+  {
+    name: "get_pipeline_slots",
+    description: "اقرأ سجل الـ 8 خانات (PD, S0-S6) للمشروع النشط. يُظهر اسم آخر ملف JSON تم رفعه على GitHub لكل مرحلة. استخدمه قبل بناء أي مرحلة جديدة لمعرفة ما تم إنجازه.",
+    parameters: { type: "object", properties: {}, required: [] },
   },
 ];
 
@@ -294,7 +513,7 @@ async function fixOwnerRepo(args: any, robotId: string): Promise<{ owner: string
   return { owner, repo };
 }
 
-async function executeToolCall(name: string, args: any, robotId: string = "robot-1", roomId?: string): Promise<string> {
+async function executeToolCall(name: string, args: any, robotId: string = "robot-1", roomId?: string, activeProjectKey?: string | null): Promise<string> {
   try {
     switch (name) {
       case "get_clickup_tasks":
@@ -329,10 +548,10 @@ async function executeToolCall(name: string, args: any, robotId: string = "robot
         return JSON.stringify(result, null, 2);
       }
       case "get_github_repos":
-        return JSON.stringify(await getRepos(), null, 2);
+        return JSON.stringify(await getRepos(roomId), null, 2);
       case "get_repo_contents": {
         const { owner, repo } = await fixOwnerRepo(args, robotId);
-        return JSON.stringify(await getRepoContents(owner, repo, args.path || ""), null, 2);
+        return JSON.stringify(await getRepoContents(owner, repo, args.path || "", roomId), null, 2);
       }
       case "create_or_update_file": {
         const { owner, repo } = await fixOwnerRepo(args, robotId);
@@ -453,7 +672,22 @@ async function executeToolCall(name: string, args: any, robotId: string = "robot
           }
         }
 
-        const result = await createOrUpdateFile(owner, repo, args.path, fileContent, args.commit_message);
+        const result = await createOrUpdateFile(owner, repo, args.path, fileContent, args.commit_message, roomId);
+
+        // ── save filename to pipeline_slots ──────────────────────────────────
+        // Priority: explicit slot from AI → fallback: auto-detect from filename
+        if (roomId && activeProjectKey) {
+          const explicitSlot = args.slot ? args.slot.toUpperCase() : null;
+          const slot = (explicitSlot && (PIPELINE_SLOTS as readonly string[]).includes(explicitSlot))
+            ? explicitSlot as typeof PIPELINE_SLOTS[number]
+            : detectSlotFromPath(args.path);
+          if (slot) {
+            const shortName = args.path.split("/").pop() || args.path;
+            await setPipelineSlot(roomId, activeProjectKey, slot, shortName, args.path).catch(() => {});
+            console.log(`[PipelineSlots] Saved slot ${slot} = ${shortName} for ${activeProjectKey} (${explicitSlot ? "explicit" : "auto-detected"})`);
+          }
+        }
+
         return JSON.stringify(result, null, 2);
       }
       case "get_commit_checks": {
@@ -467,6 +701,165 @@ async function executeToolCall(name: string, args: any, robotId: string = "robot
       case "get_workflow_run_logs": {
         const { owner, repo } = await fixOwnerRepo(args, robotId);
         return JSON.stringify(await getWorkflowRunLogs(owner, repo, args.run_id), null, 2);
+      }
+      // ── APIdog cases ────────────────────────────────────────────────────────
+      case "apidog_list_projects": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).apidog?.token || "";
+        if (!token) return JSON.stringify({ error: "APIdog token غير مُعدّ في إعدادات الخزنة" });
+        const projects = await listProjects(token);
+        return JSON.stringify({ projects, count: projects.length }, null, 2);
+      }
+      case "apidog_list_endpoints": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).apidog?.token || "";
+        if (!token) return JSON.stringify({ error: "APIdog token غير مُعدّ" });
+        const endpoints = await listEndpoints(token, args.project_id);
+        return JSON.stringify({ endpoints, count: endpoints.length }, null, 2);
+      }
+      case "apidog_get_endpoint": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).apidog?.token || "";
+        if (!token) return JSON.stringify({ error: "APIdog token غير مُعدّ" });
+        const ep = await getEndpoint(token, args.project_id, args.endpoint_id);
+        return JSON.stringify(ep, null, 2);
+      }
+      case "apidog_create_endpoint": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).apidog?.token || "";
+        if (!token) return JSON.stringify({ error: "APIdog token غير مُعدّ" });
+        const result = await createEndpoint(token, args.project_id, {
+          name:        args.name,
+          method:      args.method,
+          path:        args.path,
+          description: args.description,
+          folderId:    args.folder_id,
+        });
+        return JSON.stringify({ success: true, endpoint: result }, null, 2);
+      }
+      case "apidog_update_endpoint": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).apidog?.token || "";
+        if (!token) return JSON.stringify({ error: "APIdog token غير مُعدّ" });
+        const result = await updateEndpoint(token, args.project_id, args.endpoint_id, {
+          name:        args.name,
+          method:      args.method,
+          path:        args.path,
+          description: args.description,
+          status:      args.status,
+        });
+        return JSON.stringify({ success: true, endpoint: result }, null, 2);
+      }
+      case "apidog_list_folders": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).apidog?.token || "";
+        if (!token) return JSON.stringify({ error: "APIdog token غير مُعدّ" });
+        const folders = await listFolders(token, args.project_id);
+        return JSON.stringify({ folders }, null, 2);
+      }
+      case "apidog_list_test_scenarios": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).apidog?.token || "";
+        if (!token) return JSON.stringify({ error: "APIdog token غير مُعدّ" });
+        const scenarios = await listTestScenarios(token, args.project_id);
+        return JSON.stringify({ scenarios, count: scenarios.length }, null, 2);
+      }
+      case "apidog_run_test_scenario": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).apidog?.token || "";
+        if (!token) return JSON.stringify({ error: "APIdog token غير مُعدّ" });
+        const result = await runTestScenario(token, args.project_id, args.scenario_id);
+        return JSON.stringify({ success: true, result }, null, 2);
+      }
+      // ── Image generation ────────────────────────────────────────────────────
+      case "generate_image": {
+        const vault = await getVaultSettings(roomId || "default");
+        const gptModel = [...(vault.models || []), ...(vault.hallWorkers || [])]
+          .find(m => m.name?.toLowerCase().includes("gpt") || m.name?.toLowerCase().includes("openai"));
+        const apiKey = gptModel?.apiKey || process.env.OPENAI_API_KEY || "";
+        if (!apiKey) return JSON.stringify({ error: "OpenAI API key غير مُعدّ" });
+        const openaiClient = new OpenAI({ apiKey });
+        const imgRes = await (openaiClient.images.generate as any)({
+          model:   "dall-e-3",
+          prompt:  args.prompt,
+          size:    args.size    || "1024x1024",
+          quality: args.quality || "standard",
+          n: 1,
+        });
+        const url = imgRes.data?.[0]?.url || "";
+        const revisedPrompt = imgRes.data?.[0]?.revised_prompt || args.prompt;
+
+        // ── أرسل للعتال: حمّل الصورة وارفعها على GitHub ──────────────────
+        if (url && vault.github?.owner && vault.github?.repo) {
+          try {
+            const imgFetch = await fetch(url);
+            const imgBuffer = await imgFetch.arrayBuffer();
+            const imgBase64 = Buffer.from(imgBuffer).toString("base64");
+            const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "Z";
+            const ext = (args.size || "").includes("x") ? "png" : "png";
+            const imgPath = `images/dalle_${ts}.${ext}`;
+            atalEnqueue(roomId || "default", imgPath, imgBase64, true);
+            console.log(`[generate_image] 📸 queued for عتال: ${imgPath}`);
+          } catch (dlErr: any) {
+            console.warn(`[generate_image] ⚠️ failed to download image for عتال:`, dlErr.message);
+          }
+        }
+
+        return JSON.stringify({ url, revised_prompt: revisedPrompt }, null, 2);
+      }
+      // ── Figma cases ─────────────────────────────────────────────────────────
+      case "figma_get_file": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).figma?.token || "";
+        if (!token) return JSON.stringify({ error: "Figma token غير مُعدّ في إعدادات الخزنة" });
+        return JSON.stringify(await getFigmaFile(token, args.file_key), null, 2);
+      }
+      case "figma_get_nodes": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).figma?.token || "";
+        if (!token) return JSON.stringify({ error: "Figma token غير مُعدّ" });
+        return JSON.stringify(await getFigmaNodes(token, args.file_key, args.node_ids), null, 2);
+      }
+      case "figma_get_components": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).figma?.token || "";
+        if (!token) return JSON.stringify({ error: "Figma token غير مُعدّ" });
+        const components = await getFigmaComponents(token, args.file_key);
+        return JSON.stringify({ components, count: components.length }, null, 2);
+      }
+      case "figma_get_styles": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).figma?.token || "";
+        if (!token) return JSON.stringify({ error: "Figma token غير مُعدّ" });
+        const styles = await getFigmaStyles(token, args.file_key);
+        return JSON.stringify({ styles, count: styles.length }, null, 2);
+      }
+      case "figma_get_comments": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).figma?.token || "";
+        if (!token) return JSON.stringify({ error: "Figma token غير مُعدّ" });
+        const comments = await getFigmaComments(token, args.file_key);
+        return JSON.stringify({ comments, count: comments.length }, null, 2);
+      }
+      case "figma_export_nodes": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).figma?.token || "";
+        if (!token) return JSON.stringify({ error: "Figma token غير مُعدّ" });
+        return JSON.stringify(await exportFigmaNodes(token, args.file_key, args.node_ids, args.format || "PNG", args.scale || 1), null, 2);
+      }
+      case "figma_get_team_projects": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).figma?.token || "";
+        if (!token) return JSON.stringify({ error: "Figma token غير مُعدّ" });
+        const projects = await getFigmaTeamProjects(token, args.team_id);
+        return JSON.stringify({ projects, count: projects.length }, null, 2);
+      }
+      case "figma_get_project_files": {
+        const vault = await getVaultSettings(roomId || "default");
+        const token = (vault as any).figma?.token || "";
+        if (!token) return JSON.stringify({ error: "Figma token غير مُعدّ" });
+        const files = await getFigmaProjectFiles(token, args.project_id);
+        return JSON.stringify({ files, count: files.length }, null, 2);
       }
       case "detect_medical_entities": {
         const vault = await getVaultSettings(roomId || "default");
@@ -491,6 +884,22 @@ async function executeToolCall(name: string, args: any, robotId: string = "robot
           : entities;
         return JSON.stringify({ entities: formatted, count: Array.isArray(formatted) ? formatted.length : 0 }, null, 2);
       }
+      // ── Pipeline slot registry ──────────────────────────────────────────────
+      case "get_pipeline_slots": {
+        if (!activeProjectKey || !roomId) {
+          return JSON.stringify({ error: "لا يوجد مشروع نشط. اختر مشروعاً من زر ◈ المشروع في الشات." });
+        }
+        const slots = await getPipelineSlots(roomId, activeProjectKey);
+        const formatted: Record<string, string> = {};
+        for (const s of PIPELINE_SLOTS) {
+          formatted[s] = slots[s] ? slots[s]!.filename : "(لم يُرفع بعد)";
+        }
+        return JSON.stringify({
+          project: activeProjectKey,
+          slots: formatted,
+          summary: PIPELINE_SLOTS.map(s => `${s}: ${formatted[s]}`).join("\n"),
+        }, null, 2);
+      }
       default:
         return `Unknown tool: ${name}`;
     }
@@ -498,6 +907,9 @@ async function executeToolCall(name: string, args: any, robotId: string = "robot
     const errMsg = err.message || "Unknown error";
     if (errMsg.includes("<!DOCTYPE") || errMsg.includes("<html")) {
       return `Error: GitHub API returned an HTML error page. The token may have expired. Please retry.`;
+    }
+    if (errMsg.includes("GitHub not connected") || errMsg.includes("Add your token") || errMsg.includes("credentials_invalid") || errMsg.includes("Bad credentials")) {
+      return `TOOL_ERROR: github_not_configured\n\nلم يتم ربط GitHub بعد. أخبر المستخدم بالضبط:\n"لإضافة مستودع GitHub، اضغط على زر ⚙️ (إعدادات) في الغرفة، ثم اذهب لتبويب GitHub وأضف:\n• GitHub Token (Personal Access Token)\n• اسم صاحب الحساب (owner)\n• اسم المستودع (repo)\nبعد الحفظ يمكنك استخدام GitHub مباشرة."`;
     }
     return `Error: ${errMsg.substring(0, 500)}`;
   }
@@ -980,6 +1392,23 @@ function hasPendingMandatoryAction(session: SessionState): string | null {
   return null;
 }
 
+// ── دالة مطابقة اسم الموديل مع إدخال التايرز ──────────────────────────────────
+function modelMatchesTierEntry(modelName: string, tierEntry: string): boolean {
+  const n = modelName.toLowerCase();
+  const t = tierEntry.toLowerCase();
+  if (t.includes("gpt-4o-mini"))   return n.includes("gpt-4o-mini") || n.includes("gpt4o-mini");
+  if (t.includes("gpt-4o"))        return (n.includes("gpt-4o") || n.includes("gpt4o") || n.includes("gpt")) && !n.includes("mini");
+  if (t.includes("claude sonnet") || t.includes("claude-sonnet"))
+                                   return n.includes("claude") && (n.includes("sonnet") || (!n.includes("haiku") && !n.includes("opus")));
+  if (t.includes("claude haiku")  || t.includes("claude-haiku"))
+                                   return n.includes("claude") && n.includes("haiku");
+  if (t.includes("gemini"))        return n.includes("gemini");
+  if (t.includes("groq"))          return n.includes("groq") || n.includes("llama") || n.includes("جروك");
+  if (t.includes("glm"))           return n.includes("glm");
+  if (t.includes("mistral"))       return n.includes("mistral");
+  return n.includes(t);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1055,19 +1484,21 @@ export async function registerRoutes(
       }
 
       const jwtSecret = process.env.JWT_SECRET!;
+      const userRole = (user as any).role || "user";
       const token = jwt.sign(
-        { userId: user.id, username: user.username, roomId: user.roomId },
+        { userId: user.id, username: user.username, roomId: user.roomId, role: userRole },
         jwtSecret,
         { expiresIn: "30d" }
       );
 
-      console.log(`[Auth] User logged in: ${user.username}, room: ${user.roomId}`);
+      console.log(`[Auth] User logged in: ${user.username}, room: ${user.roomId}, role: ${userRole}`);
 
       res.json({
         success: true,
         token,
-        user: { username: user.username, roomId: user.roomId },
+        user: { username: user.username, roomId: user.roomId, role: userRole },
         roomId: user.roomId,
+        role: userRole,
       });
     } catch (e: any) {
       console.error("[Auth] Login error:", e);
@@ -1091,14 +1522,92 @@ export async function registerRoutes(
         userId: number;
         username: string;
         roomId: string;
+        role?: string;
       };
 
       res.json({
         valid: true,
-        user: { username: payload.username, roomId: payload.roomId },
+        user: { username: payload.username, roomId: payload.roomId, role: payload.role || "user" },
       });
     } catch {
       res.json({ valid: false });
+    }
+  });
+
+  // ── Admin middleware ──────────────────────────────────────────────────────────
+  const requireAdmin = (req: any, res: any, next: any) => {
+    const authHeader = req.headers["authorization"];
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const payload = jwt.verify(token, jwtSecret) as any;
+      if (payload.role !== "admin") return res.status(403).json({ error: "Admin only" });
+      req.adminPayload = payload;
+      next();
+    } catch {
+      res.status(401).json({ error: "Invalid token" });
+    }
+  };
+
+  // ── Admin API ─────────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      res.json(allUsers.map((u: any) => ({
+        id: u.id,
+        username: u.username,
+        roomId: u.roomId,
+        role: u.role || "user",
+        tier: u.tier || "free",
+        subscriptionEnd: u.subscriptionEnd || null,
+        createdAt: u.createdAt || null,
+      })));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { tier, role, subscriptionEnd } = req.body;
+      const fields: { tier?: string; role?: string; subscriptionEnd?: Date | null } = {};
+      if (tier !== undefined) fields.tier = tier;
+      if (role !== undefined) fields.role = role;
+      if (subscriptionEnd !== undefined) fields.subscriptionEnd = subscriptionEnd ? new Date(subscriptionEnd) : null;
+      await storage.updateUser(id, fields);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      await storage.deleteUser(id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/tier-models", requireAdmin, async (_req, res) => {
+    try {
+      const data = await storage.getTierModels();
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/admin/tier-models", requireAdmin, async (req, res) => {
+    try {
+      await storage.setTierModels(req.body);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -1129,6 +1638,33 @@ export async function registerRoutes(
     res.json({ version: ver });
   });
 
+  // ── Pipeline Slots: 8 fixed slots (PD, S0‑S6) per project ────────────────────
+  app.get("/api/projects/:key/slots", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const slots = await getPipelineSlots(roomId, req.params.key);
+      res.json({ projectKey: req.params.key.toUpperCase(), slots });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/projects/:key/slots/:slot", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const slot = req.params.slot.toUpperCase();
+      if (!(PIPELINE_SLOTS as readonly string[]).includes(slot)) {
+        return res.status(400).json({ error: `Invalid slot. Must be one of: ${PIPELINE_SLOTS.join(", ")}` });
+      }
+      const { filename, githubPath } = req.body as { filename: string; githubPath?: string };
+      if (!filename) return res.status(400).json({ error: "filename required" });
+      await setPipelineSlot(roomId, req.params.key, slot as any, filename, githubPath || "");
+      res.json({ ok: true, slot, filename });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── العتال: إدارة queue الملفات ──────────────────────────────────────────────
   app.get("/api/atal/queue", (req, res) => {
     const roomId = getRoomId(req);
@@ -1146,6 +1682,12 @@ export async function registerRoutes(
   app.delete("/api/atal/queue", (req, res) => {
     const roomId = getRoomId(req);
     atalClearDone(roomId);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/atal/retry", (req, res) => {
+    const roomId = getRoomId(req);
+    atalRetryErrors(roomId);
     res.json({ ok: true });
   });
 
@@ -1190,6 +1732,24 @@ export async function registerRoutes(
       const modelName = (modelConfig?.name || "GPT").toLowerCase();
       const isClaudeModel = modelName.includes("claude") || modelName.includes("كلود");
 
+      // ── التحقق من صلاحية التايرز عند الـ chat ────────────────────────────────
+      const chatUser = await storage.getUserByRoomId(roomId);
+      if (chatUser && chatUser.role !== "admin") {
+        const userTier = chatUser.tier || "free";
+        const tierModelsMap = await storage.getTierModels();
+        const allowedModels = tierModelsMap[userTier] || [];
+        if (allowedModels.length > 0) {
+          const isAllowed = allowedModels.some((tm) => modelMatchesTierEntry(modelConfig?.name || "", tm));
+          if (!isAllowed) {
+            return res.status(403).json({
+              error: `هذا الموديل غير متاح لتايرز "${userTier}". يرجى التواصل مع الإدارة للترقية.`,
+              tier: userTier,
+              allowedModels,
+            });
+          }
+        }
+      }
+
       const isS0Trigger = message.trim().toUpperCase().startsWith("S0") && message.length < 50;
       const isS0Response = chatHistory.length > 0 && chatHistory.some((m: any) => 
         m.role === "assistant" && (m.content?.includes("S0") || m.content?.includes("مرحلة S0") || m.content?.includes("ما الذي تحاول بناءه"))
@@ -1200,7 +1760,7 @@ export async function registerRoutes(
 
       let githubUser = "";
       try {
-        githubUser = await getAuthenticatedUser();
+        githubUser = await getAuthenticatedUser(roomId);
       } catch (_e) {}
 
       let systemPrompt = modelConfig?.systemPrompt || (await getSystemPrompt(roomId)) || "";
@@ -1216,24 +1776,34 @@ export async function registerRoutes(
           `• الرابط الكامل: https://github.com/${gh.owner}/${gh.repo}`;
       }
 
-      // ── حقن سياق المشروع النشط ───────────────────────────────────────────────
+      // ── حقن سياق المشروع النشط + سجل الخانات ────────────────────────────────
       const { projectKey: activeProjectKey } = req.body as { projectKey?: string };
       const nowTs = new Date().toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
       if (activeProjectKey) {
         const pk = activeProjectKey.toUpperCase();
-        const [pdVer, s0Ver] = await Promise.all([
+        const [pdVer, s0Ver, slotsData] = await Promise.all([
           getNextVersion(roomId, pk, "PD"),
           getNextVersion(roomId, pk, "S0"),
+          getPipelineSlots(roomId, pk),
         ]);
+
+        // بناء جدول الخانات
+        const slotLines = PIPELINE_SLOTS.map(s => {
+          const info = slotsData[s];
+          return info
+            ? `  ${s}: ✅ ${info.filename}`
+            : `  ${s}: (لم يُرفع بعد)`;
+        }).join("\n");
+
         systemPrompt +=
           `\n\n[مفتاح المشروع النشط: ${pk}]\n` +
           `[التوقيت الحالي للنظام: ${nowTs}]\n` +
           `سمّ كل ملف تُنشئه بهذه الصيغة الإلزامية:\n` +
-          `  <مفتاح>_<مرحلة>_<إصدار>_<TIMESTAMP>.json\n` +
-          `مثال: ${pk}_PD_${pdVer}_${nowTs}.json\n\n` +
-          `الإصدارات المتاحة التالية:\n` +
-          `• PD التالي: ${pdVer}\n` +
-          `• S0 التالي: ${s0Ver}`;
+          `  <مفتاح>_<مرحلة>_<TIMESTAMP>.json\n` +
+          `مثال: ${pk}_pd_${nowTs}.json\n\n` +
+          `[سجل ملفات المشروع — الخانات الثمانية]\n` +
+          `${slotLines}\n\n` +
+          `قاعدة: لما تحتاج تقرأ ملف مرحلة سابقة، استخدم get_repo_contents مع اسم الملف الموجود في الخانة أعلاه مباشرةً.`;
       } else {
         // حتى بدون مشروع، حقن الوقت الحالي
         systemPrompt += `\n\n[التوقيت الحالي للنظام: ${nowTs}]\nاستخدم هذا التوقيت عند تسمية الملفات.`;
@@ -1333,6 +1903,24 @@ export async function registerRoutes(
         return res.end();
       }
 
+      const MODEL_PRICING: Record<string, { in: number; out: number }> = {
+        "claude-opus":  { in: 15.00, out: 75.00 },
+        "claude":       { in: 3.00,  out: 15.00 },
+        "gpt-4o-mini":  { in: 0.15,  out: 0.60  },
+        "gpt-4o":       { in: 2.50,  out: 10.00 },
+        "gpt-4":        { in: 30.00, out: 60.00 },
+        "groq":         { in: 0,     out: 0      },
+        "gemini":       { in: 0.075, out: 0.30   },
+        "glm":          { in: 0.05,  out: 0.05   },
+        "mistral":      { in: 2.00,  out: 6.00   },
+        "default":      { in: 1.00,  out: 3.00   },
+      };
+      const getModelCost = (model: string, inp: number, out: number): number => {
+        const key = Object.keys(MODEL_PRICING).find(k => model.toLowerCase().includes(k)) || "default";
+        const p = MODEL_PRICING[key];
+        return (inp / 1_000_000) * p.in + (out / 1_000_000) * p.out;
+      };
+
       if (isClaudeModel) {
         const claudeClient = modelConfig?.apiKey
           ? new Anthropic({ apiKey: modelConfig.apiKey })
@@ -1341,6 +1929,8 @@ export async function registerRoutes(
         console.log(`[Claude] Using API key: ${modelConfig?.apiKey ? "vault" : "env"}`);
 
         res.write(`data: ${JSON.stringify({ content: "" })}\n\n`);
+        let totalInputTokens = 0;
+        let totalOutputTokens = 0;
 
         let messages: Anthropic.MessageParam[] = [
           ...chatHistory.map(m => ({
@@ -1385,6 +1975,8 @@ export async function registerRoutes(
             break;
           }
 
+          totalInputTokens += response.usage?.input_tokens || 0;
+          totalOutputTokens += response.usage?.output_tokens || 0;
           console.log(`[Claude] stop_reason: ${response.stop_reason}, blocks: ${response.content.length}`);
 
           let hasToolUse = false;
@@ -1405,7 +1997,7 @@ export async function registerRoutes(
             } else if (block.type === "tool_use") {
               hasToolUse = true;
               res.write(`data: ${JSON.stringify({ content: `\n⚙️ جاري تنفيذ ${block.name}...\n` })}\n\n`);
-              let toolResult = await executeToolCall(block.name, block.input, robotId || "robot-2", roomId);
+              let toolResult = await executeToolCall(block.name, block.input, robotId || "robot-2", roomId, activeProjectKey);
               if (toolResult.length > 8000) {
                 console.log(`[Claude] Tool result truncated from ${toolResult.length} to 8000 chars`);
                 toolResult = toolResult.substring(0, 8000) + "\n...[truncated]";
@@ -1473,6 +2065,8 @@ export async function registerRoutes(
           ];
         }
 
+        const claudeModelId = modelConfig?.subModel || "claude-sonnet-4-6";
+        res.write(`data: ${JSON.stringify({ usage: { input: totalInputTokens, output: totalOutputTokens, model: claudeModelId, cost: getModelCost(claudeModelId, totalInputTokens, totalOutputTokens) } })}\n\n`);
         res.write(`data: [DONE]\n\n`);
         res.end();
       } else {
@@ -1484,6 +2078,8 @@ export async function registerRoutes(
         const useTools = (isGPT || isZhipuAI) && !transitionMatch;
 
         console.log(`[${provider}] Using model: ${modelId}, tools: ${useTools}, apiKey: ${modelConfig?.apiKey ? "vault" : "env"}`);
+        let gptTotalInput = 0;
+        let gptTotalOutput = 0;
 
         // OpenRouter/ZhipuAI: trim history to last 8 messages to save input tokens
         const trimmedHistory = (provider === "OpenRouter" || provider === "ZhipuAI")
@@ -1549,6 +2145,8 @@ export async function registerRoutes(
             break;
           }
 
+          gptTotalInput += response.usage?.prompt_tokens || 0;
+          gptTotalOutput += response.usage?.completion_tokens || 0;
           const choice = response.choices[0];
           console.log(`[${provider}] finish_reason: ${choice.finish_reason}, has_content: ${!!choice.message.content}, tool_calls: ${choice.message.tool_calls?.length || 0}`);
 
@@ -1616,7 +2214,7 @@ export async function registerRoutes(
               const args = JSON.parse(tc.function.arguments);
               console.log(`[${provider}] Tool call: ${tc.function.name}, args keys: ${Object.keys(args).join(',')}`);
               res.write(`data: ${JSON.stringify({ content: `\n⚙️ جاري تنفيذ ${tc.function.name}...\n` })}\n\n`);
-              let toolResult = await executeToolCall(tc.function.name, args, robotId || "robot-1", roomId);
+              let toolResult = await executeToolCall(tc.function.name, args, robotId || "robot-1", roomId, activeProjectKey);
               // ZhipuAI free tier has small context — truncate aggressively
               const maxToolResult = isZhipuAI ? 2500 : 8000;
               if (toolResult.length > maxToolResult) {
@@ -1696,6 +2294,7 @@ export async function registerRoutes(
           }
         }
 
+        res.write(`data: ${JSON.stringify({ usage: { input: gptTotalInput, output: gptTotalOutput, model: modelId, cost: getModelCost(modelId, gptTotalInput, gptTotalOutput) } })}\n\n`);
         res.write(`data: [DONE]\n\n`);
         res.end();
       }
@@ -1717,10 +2316,26 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/github/repos", async (_req, res) => {
+  app.get("/api/github/repos", async (req, res) => {
     try {
-      const repos = await getRepos();
-res.json(repos);
+      const roomId = getRoomId(req);
+      const repos = await getRepos(roomId);
+      res.json(repos);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // قائمة ملفات مجلد في الريبو (للواجهة — اختيار ملفات السلوتات)
+  app.get("/api/github/contents", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const path = (req.query.path as string) || "";
+      const vault = await getVaultSettings(roomId);
+      const { owner, repo } = vault.github;
+      if (!owner || !repo) return res.status(400).json({ error: "GitHub غير مضبوط في إعدادات الخزنة" });
+      const contents = await getRepoContents(owner, repo, path, roomId);
+      res.json(contents);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1840,6 +2455,20 @@ res.json(repos);
       }
     } catch (err: any) {
       console.error("[Broadcast] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/jobs", async (req, res) => {
+    try {
+      const { message, robotId } = req.body;
+      const roomId = getRoomId(req);
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ error: "message is required" });
+      }
+      const job = submitJob(message, robotId || "robot-1", roomId);
+      res.json({ jobId: job.id, status: job.status });
+    } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
@@ -2027,7 +2656,36 @@ res.json(repos);
         apiKey: settings.sfm?.apiKey ? "••••••••" : "",
         hasKey: !!(settings.sfm?.apiKey),
       },
+      humans: settings.humans || [],
     });
+  });
+
+  // ── Human Members — get list for current room ────────────────────────────────
+  app.get("/api/humans", async (req, res) => {
+    const roomId = getRoomId(req);
+    const settings = await getVaultSettings(roomId);
+    res.json(settings.humans || []);
+  });
+
+  // ── Human Members — verify join code ─────────────────────────────────────────
+  app.get("/api/humans/verify", async (req, res) => {
+    try {
+      const { code } = req.query as { code?: string };
+      if (!code) return res.status(400).json({ valid: false, error: "No code" });
+      // البحث في كل الغرف
+      const rooms = await storage.getAllRooms();
+      for (const room of rooms) {
+        let humans: any[] = [];
+        try { humans = JSON.parse((room as any).humansJson || "[]"); } catch { /* */ }
+        const member = humans.find((h: any) => h.joinCode === code.trim().toUpperCase());
+        if (member) {
+          return res.json({ valid: true, roomId: room.roomId, member });
+        }
+      }
+      res.status(404).json({ valid: false, error: "Code not found" });
+    } catch (err: any) {
+      res.status(500).json({ valid: false, error: err.message });
+    }
   });
 
   // SFM API key للفرونت-إند (للفتح التلقائي فقط، مش للعرض)
@@ -2145,8 +2803,8 @@ res.json(repos);
 
   app.post("/api/vault-settings", async (req, res) => {
     const roomId = getRoomId(req);
-    const { company, loginBg, doors, github, clickup, sfm, models, hallWorkers, systemPrompt } = req.body;
-    if (!github && !clickup && !sfm && !models && !hallWorkers && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
+    const { company, loginBg, doors, github, clickup, sfm, models, hallWorkers, humans, systemPrompt } = req.body;
+    if (!github && !clickup && !sfm && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
       return res.status(400).json({ error: "Invalid payload" });
     }
     const current = await getVaultSettings(roomId);
@@ -2193,6 +2851,34 @@ res.json(repos);
       };
     }
     if (models && Array.isArray(models)) {
+      // ── التحقق من التايرز قبل حفظ الموديلات (من JWT مباشرةً) ──────────────
+      let vaultUser = null;
+      try {
+        const authHeader = (req.headers["authorization"] as string || "").replace("Bearer ", "");
+        if (authHeader) {
+          const payload = jwt.verify(authHeader, jwtSecret) as any;
+          if (payload.userId) vaultUser = await storage.getUser(payload.userId);
+        }
+      } catch {}
+      if (vaultUser && vaultUser.role !== "admin") {
+        const userTier = vaultUser.tier || "free";
+        const tierModelsMap = await storage.getTierModels();
+        const allowedModels = tierModelsMap[userTier] || [];
+        if (allowedModels.length > 0) {
+          const blockedModels = (models as any[]).filter(
+            (m: any) => !allowedModels.some((tm) => modelMatchesTierEntry(m.name || "", tm))
+          );
+          if (blockedModels.length > 0) {
+            const names = blockedModels.map((m: any) => m.name).join(", ");
+            return res.status(403).json({
+              error: `الموديلات التالية غير متاحة لتايرز "${userTier}": ${names}`,
+              tier: userTier,
+              allowedModels,
+            });
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
       const MAX_MODELS = 7;
       const limitedModels = models.slice(0, MAX_MODELS);
       updatePayload.models = limitedModels.map((m: any) => {
@@ -2224,6 +2910,15 @@ res.json(repos);
     }
     if (systemPrompt !== undefined) {
       updatePayload.systemPrompt = typeof systemPrompt === "string" ? systemPrompt : "";
+    }
+    if (humans && Array.isArray(humans)) {
+      updatePayload.humans = humans.map((h: any) => ({
+        id:             h.id             || "",
+        name:           h.name           || "",
+        role:           h.role           || "",
+        joinCode:       h.joinCode       || "",
+        roomAssignment: h.roomAssignment || "main",
+      }));
     }
     await setVaultSettings(updatePayload, roomId);
     res.json({ success: true });
@@ -2492,6 +3187,38 @@ res.json(repos);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // ── Agora: توليد Token للاجتماع ──────────────────────────────────────────
+  const { RtcTokenBuilder, RtcRole } = _require("agora-token");
+
+  app.post("/api/agora/token", async (req, res) => {
+    try {
+      const { channelName, uid = 0 } = req.body;
+      if (!channelName) return res.status(400).json({ error: "channelName مطلوب" });
+
+      const appId          = process.env.AGORA_APP_ID;
+      const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+
+      if (!appId || !appCertificate) {
+        return res.status(500).json({ error: "AGORA_APP_ID / AGORA_APP_CERTIFICATE غير موجودين في .env" });
+      }
+
+      const expireTime           = Math.floor(Date.now() / 1000) + 3600;
+      const token = RtcTokenBuilder.buildTokenWithUid(
+        appId, appCertificate, channelName, uid,
+        RtcRole.PUBLISHER, expireTime, expireTime,
+      );
+
+      res.json({ token, appId, channelName });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Agora: App ID فقط (للـ client) ───────────────────────────────────────
+  app.get("/api/agora/app-id", (_req, res) => {
+    res.json({ appId: process.env.AGORA_APP_ID || "" });
   });
 
   return httpServer;

@@ -180,6 +180,28 @@ export function PerimeterWall() {
   return (
     <group>
 
+      {/* ══ COURTYARD GROUND — 4 قطع حول المبنى تستثني بصمته لتجنب z-fighting ═ */}
+      {/* أمام المبنى: Z[B_FRONT, W_FRONT] = [8, 14] */}
+      <mesh position={[MID_X, -0.5, (B_FRONT + W_FRONT) / 2]} receiveShadow>
+        <boxGeometry args={[SPAN_X - WALL_T * 2, 1.0, W_FRONT - B_FRONT]} />
+        <meshStandardMaterial color="#c2bdb4" roughness={0.9} metalness={0.02} />
+      </mesh>
+      {/* خلف المبنى: Z[W_BACK, B_BACK] = [-35, -29] */}
+      <mesh position={[MID_X, -0.5, (W_BACK + B_BACK) / 2]} receiveShadow>
+        <boxGeometry args={[SPAN_X - WALL_T * 2, 1.0, B_BACK - W_BACK]} />
+        <meshStandardMaterial color="#c2bdb4" roughness={0.9} metalness={0.02} />
+      </mesh>
+      {/* يسار المبنى: X[W_LEFT, B_LEFT] = [-30, -24] */}
+      <mesh position={[(W_LEFT + B_LEFT) / 2, -0.5, (B_FRONT + B_BACK) / 2]} receiveShadow>
+        <boxGeometry args={[B_LEFT - W_LEFT, 1.0, B_FRONT - B_BACK]} />
+        <meshStandardMaterial color="#c2bdb4" roughness={0.9} metalness={0.02} />
+      </mesh>
+      {/* يمين المبنى: X[B_RIGHT, W_RIGHT] = [16, 22] */}
+      <mesh position={[(B_RIGHT + W_RIGHT) / 2, -0.5, (B_FRONT + B_BACK) / 2]} receiveShadow>
+        <boxGeometry args={[W_RIGHT - B_RIGHT, 1.0, B_FRONT - B_BACK]} />
+        <meshStandardMaterial color="#c2bdb4" roughness={0.9} metalness={0.02} />
+      </mesh>
+
       {/* ══ BASE STRIP — قاعدة السور (أسفل) ═════════════════════════════ */}
       {[
         { x: W_LEFT + (GATE_L - W_LEFT) / 2, w: GATE_L - W_LEFT },
@@ -286,36 +308,6 @@ export function PerimeterWall() {
       <pointLight position={[W_LEFT,     WALL_H + 1, MID_Z]}   color="#ffdd88" intensity={7}  distance={18} />
       <pointLight position={[W_RIGHT,    WALL_H + 1, MID_Z]}   color="#ffdd88" intensity={7}  distance={18} />
 
-      {/* ══ PAVED GROUND — بلاط حجري في الإطار بين السور والمبنى ══════════ */}
-      {[
-        { x: MID_X,                    z: (W_BACK + B_BACK) / 2,   w: SPAN_X,           d: B_BACK - W_BACK   },
-        { x: MID_X,                    z: (B_FRONT + W_FRONT) / 2, w: SPAN_X,           d: W_FRONT - B_FRONT },
-        { x: (W_LEFT  + B_LEFT)  / 2,  z: (B_BACK + B_FRONT) / 2, w: B_LEFT - W_LEFT,  d: B_FRONT - B_BACK  },
-        { x: (B_RIGHT + W_RIGHT) / 2,  z: (B_BACK + B_FRONT) / 2, w: W_RIGHT - B_RIGHT, d: B_FRONT - B_BACK  },
-      ].map((s, i) => (
-        <mesh key={`p${i}`} position={[s.x, -0.03, s.z]} receiveShadow>
-          <boxGeometry args={[s.w, 0.06, s.d]} />
-          <meshStandardMaterial
-            color="#4a4440"
-            roughness={0.92}
-            metalness={0.04}
-          />
-        </mesh>
-      ))}
-      {/* خطوط فواصل البلاط */}
-      {[
-        { x: MID_X,  z: (W_BACK + B_BACK) / 2,   w: SPAN_X,           d: B_BACK - W_BACK   },
-        { x: MID_X,  z: (B_FRONT + W_FRONT) / 2,  w: SPAN_X,           d: W_FRONT - B_FRONT },
-        { x: (W_LEFT  + B_LEFT)  / 2, z: (B_BACK + B_FRONT) / 2, w: B_LEFT - W_LEFT, d: B_FRONT - B_BACK },
-        { x: (B_RIGHT + W_RIGHT) / 2, z: (B_BACK + B_FRONT) / 2, w: W_RIGHT - B_RIGHT, d: B_FRONT - B_BACK },
-      ].flatMap((s, si) =>
-        [-3, 0, 3].map((off, oi) => (
-          <mesh key={`gl-${si}-${oi}`} position={[s.x + (si < 2 ? off * 4 : 0), 0.01, s.z + (si >= 2 ? off * 3 : 0)]} receiveShadow>
-            <boxGeometry args={[si < 2 ? 0.06 : s.w, 0.01, si < 2 ? s.d : 0.06]} />
-            <meshStandardMaterial color="#35302c" roughness={0.95} />
-          </mesh>
-        ))
-      )}
 
     </group>
   );

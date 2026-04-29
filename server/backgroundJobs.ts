@@ -10,6 +10,7 @@ export interface BackgroundJob {
   id: string;
   message: string;
   robotId: string;
+  roomId: string;
   status: "pending" | "running" | "completed" | "failed";
   result: string;
   toolsUsed: string[];
@@ -44,7 +45,7 @@ const anthropicTools: Anthropic.Tool[] = toolDefinitions.map(t => ({
   input_schema: { ...t.parameters, type: "object" as const },
 }));
 
-async function executeToolCall(name: string, args: any): Promise<string> {
+async function executeToolCall(name: string, args: any, roomId?: string): Promise<string> {
   try {
     switch (name) {
       case "get_clickup_tasks": return await getClickUpSummary();
@@ -62,14 +63,18 @@ async function executeToolCall(name: string, args: any): Promise<string> {
           name: args.name, description: args.description, status: args.status,
           priority: args.priority, assignees: args.assignees,
         }), null, 2);
-      case "get_github_repos": return JSON.stringify(await getRepos(), null, 2);
-      case "get_repo_contents": return JSON.stringify(await getRepoContents(args.owner, args.repo, args.path || ""), null, 2);
+      case "get_github_repos": return JSON.stringify(await getRepos(roomId), null, 2);
+      case "get_repo_contents": return JSON.stringify(await getRepoContents(args.owner, args.repo, args.path || "", roomId), null, 2);
       case "create_or_update_file":
-        return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message), null, 2);
+        return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message, roomId), null, 2);
       default: return `Unknown tool: ${name}`;
     }
   } catch (err: any) {
-    return `Error: ${err.message}`;
+    const errMsg = err.message || "Unknown error";
+    if (errMsg.includes("GitHub not connected") || errMsg.includes("Add your token") || errMsg.includes("Bad credentials")) {
+      return `TOOL_ERROR: github_not_configured\nلم يتم ربط GitHub. يرجى إضافة GitHub Token في إعدادات ⚙️ الخزنة (GitHub Token + owner + repo).`;
+    }
+    return `Error: ${errMsg}`;
   }
 }
 
@@ -94,11 +99,12 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
 
-export function submitJob(message: string, robotId: string): BackgroundJob {
+export function submitJob(message: string, robotId: string, roomId: string = "default"): BackgroundJob {
   const job: BackgroundJob = {
     id: generateId(),
     message,
     robotId,
+    roomId,
     status: "pending",
     result: "",
     toolsUsed: [],
@@ -138,7 +144,7 @@ async function processJob(jobId: string) {
 
   try {
     let githubUser = "";
-    try { githubUser = await getAuthenticatedUser(); } catch (_e) {}
+    try { githubUser = await getAuthenticatedUser(job.roomId); } catch (_e) {}
 
     const systemPrompt = githubUser
       ? `${BASE_SYSTEM_PROMPT}\nThe authenticated GitHub username is: ${githubUser}`
@@ -169,7 +175,7 @@ async function processJob(jobId: string) {
             hasToolUse = true;
             job.toolsUsed.push(block.name);
             console.log(`[BackgroundJob ${job.id}] Tool: ${block.name}`);
-            const toolResult = await executeToolCall(block.name, block.input);
+            const toolResult = await executeToolCall(block.name, block.input, job.roomId);
             toolResults.push({
               role: "user",
               content: [{ type: "tool_result", tool_use_id: block.id, content: toolResult }],
@@ -211,7 +217,7 @@ async function processJob(jobId: string) {
             const args = JSON.parse(tc.function.arguments);
             job.toolsUsed.push(tc.function.name);
             console.log(`[BackgroundJob ${job.id}] Tool: ${tc.function.name}`);
-            const toolResult = await executeToolCall(tc.function.name, args);
+            const toolResult = await executeToolCall(tc.function.name, args, job.roomId);
             messages.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
           }
         } else {

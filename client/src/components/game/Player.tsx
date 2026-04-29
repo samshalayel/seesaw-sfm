@@ -4,10 +4,13 @@ import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useKeyboardControls, OrbitControls, useGLTF, useAnimations, Edges, Text } from "@react-three/drei";
 import { useChat } from "@/lib/stores/useChat";
-import { useGame, getModelRobotPosition, getHallWorkerPosition } from "@/lib/stores/useGame";
+import { useGame, getModelRobotPosition, getHallWorkerPosition, getRoomSlot } from "@/lib/stores/useGame";
 
-const ENTER_SPAWN_Z  = 8.5;   // نقطة البداية خارج الباب
+const ENTER_SPAWN_Z  = 50;    // خلف الشركة في المدينة (local Z → world Z=225)
 const ENTER_TARGET_Z = 4.5;   // نقطة الوصول — أمام الطاولة
+
+const COMPANY_OX = -20; // X offset — يساراً على البلاط
+const COMPANY_OZ = 190.5; // Z offset
 
 const SPEED = 5;
 const ROOM_BOUNDS_X = 7;
@@ -44,6 +47,14 @@ const HALL_DOOR1_X = -20.0;   // Stage1-side door (world x)
 const HALL_DOOR2_X =  12.0;   // Manager-side door (world x)
 const HALL_DOOR_HW =   1.2;   // door half-width guard (door=3 minus player margin)
 
+// ── Perimeter Wall (PerimeterWall.tsx constants, local space) ────────────────
+const PERI_FRONT  =  14;   // front wall Z  (W_FRONT)
+const PERI_BACK   = -35;   // back wall Z   (W_BACK)
+const PERI_LEFT   = -30;   // left wall X   (W_LEFT)
+const PERI_RIGHT  =  22;   // right wall X  (W_RIGHT)
+const GATE_X_MIN  = -24;   // gate opening X min (B_LEFT)
+const GATE_X_MAX  =  16;   // gate opening X max (B_RIGHT)
+
 // ── Back Rooms (behind production hall, z < −19) ──────────────────────────────
 const BR_Z_MAX    = -19.0;   // entrance (= hall back wall)
 const BR_Z_MIN    = -29.0;   // far back wall
@@ -61,11 +72,11 @@ const BR_DOOR_HW  =   1.3;   // door half-width
 const VAULT_POSITION           = new THREE.Vector3(15.2, 0, -6);
 const VAULT_INTERACT_DISTANCE  = 3;
 const MANAGER_DOOR_POSITION    = new THREE.Vector3(7.92, 0, -3);
-const MANAGER_DOOR_INTERACT_DISTANCE = 3;
+const MANAGER_DOOR_INTERACT_DISTANCE = 1.5;
 const STAGE0_DOOR_POSITION     = new THREE.Vector3(-7.92, 0, -3);
-const STAGE0_DOOR_INTERACT_DIST = 2.5;
+const STAGE0_DOOR_INTERACT_DIST = 1.5;
 const STAGE1_DOOR_POSITION     = new THREE.Vector3(-15.82, 0, -3);
-const STAGE1_DOOR_INTERACT_DIST = 2.5;
+const STAGE1_DOOR_INTERACT_DIST = 1.5;
 const VIDEO_SCREEN_POSITION    = new THREE.Vector3(7.92, 0, 3.5);
 const VIDEO_SCREEN_INTERACT_DISTANCE = 1.8;
 const HOLOGRAM_POSITION        = new THREE.Vector3(0, 0, 1.5);
@@ -73,11 +84,14 @@ const HOLOGRAM_INTERACT_DISTANCE = 1.0;
 const HUMAN_DEV_POSITION       = new THREE.Vector3(-6.8, 0, -4);
 const HUMAN_DEV_INTERACT_DIST  = 2.5;
 const HALL_DOOR1_POSITION      = new THREE.Vector3(HALL_DOOR1_X, 0, HALL_Z_FRONT);
-const HALL_DOOR1_INTERACT_DIST = 3.0;
+const HALL_DOOR1_INTERACT_DIST = 1.5;
 const BR_DOOR_A_POSITION       = new THREE.Vector3(BR_DOOR_A_X, 0, BR_Z_MAX);
 const BR_DOOR_B_POSITION       = new THREE.Vector3(BR_DOOR_B_X, 0, BR_Z_MAX);
 const BR_DOOR_C_POSITION       = new THREE.Vector3(BR_DOOR_C_X, 0, BR_Z_MAX);
-const BR_DOOR_INTERACT_DIST    = 3.0;
+const BR_DOOR_INTERACT_DIST    = 1.5;
+
+// Reusable Vector3 to avoid per-call allocations in hot paths
+const _tmpVec = new THREE.Vector3();
 
 const AVATAR_SCALE    = 1.44;
 const AVATAR_Y_OFFSET = 0;
@@ -159,14 +173,17 @@ function GlbPlayerInner() {
   // Cached vectors — reused every frame to avoid GC pressure
   const dirVec           = useRef(new THREE.Vector3());
   const camTargetVec     = useRef(new THREE.Vector3());
+  const worldPos         = useRef(new THREE.Vector3()); // world position cache (group offset)
   // Glass box
   const boxRef           = useRef<THREE.Group>(null);
   const boxTimeRef       = useRef(0);
   const carryingBox      = useGame((s) => s.carryingBox);
   const setExteriorView  = useGame((s) => s.setExteriorView);
   const wasExteriorRef   = useRef(false);
+  const wasOutsideRef    = useRef(true);  // تتبع الانتقال خارج ↔ داخل المبنى
   const cameraMode       = useGame((s) => s.cameraMode);
-  const prevCameraMode   = useRef<"focus" | "medium" | "top" | "fps">(cameraMode);
+  const cameraResetToken = useGame((s) => s.cameraResetToken);
+  const prevCameraMode   = useRef<"focus" | "medium" | "top" | "fps" | "city" | "overview">("focus"); // يبدأ بـ focus دائماً لضمان تفعيل أي وضع ابتدائي
 
   // ── GLB model + animations ─────────────────────────────────────────────────
   const selectedAvatar = useGame((s) => s.selectedAvatar);
@@ -243,10 +260,10 @@ function GlbPlayerInner() {
   useEffect(() => {
     if (!pendingAutoEnter) return;
     useGame.getState().clearAutoEnter();
-    autoEnterT.current = 0;
+    // autoEnterT.current = 0; ← معطّل — اللاعب يمشي بنفسه من المدينة
     if (playerRef.current) {
       playerRef.current.position.set(0, 0, ENTER_SPAWN_Z);
-      playerRef.current.rotation.y = Math.PI;
+      playerRef.current.rotation.y = Math.PI; // وجهه ناحية الشركة (شمال)
     }
   }, [pendingAutoEnter]);
 
@@ -294,15 +311,36 @@ function GlbPlayerInner() {
   }, []);
   // ───────────────────────────────────────────────────────────────────────────
 
+  // ── Reset Camera — snap orbit target behind player immediately ────────────
+  useEffect(() => {
+    if (cameraResetToken === 0) return;
+    if (!playerRef.current || !orbitRef.current) return;
+    playerRef.current.getWorldPosition(worldPos.current);
+    const pp = worldPos.current;
+    prevCameraMode.current = "overview"; // force re-apply focus on next frame
+    orbitRef.current.target.set(pp.x, pp.y + 1.5, pp.z);
+    orbitRef.current.update();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraResetToken]);
+  // ───────────────────────────────────────────────────────────────────────────
+
   const getNearestRobot = useCallback(() => {
     if (!playerRef.current) return null;
     const playerPos = playerRef.current.position;
     const models    = useGame.getState().models;
     let nearest: string | null = null;
     let minDist = Infinity;
+    // نحسب slot index لكل غرفة تماماً كما يفعل App.tsx
+    const roomSlotCounters: Record<string, number> = {};
     for (const model of models) {
-      const pos  = getModelRobotPosition(model.index);
-      const dist = playerPos.distanceTo(new THREE.Vector3(...pos));
+      const room    = model.roomAssignment || "main";
+      const slotIdx = roomSlotCounters[room] ?? 0;
+      roomSlotCounters[room] = slotIdx + 1;
+      // موقع الروبوت الفعلي حسب الغرفة
+      const pos  = room === "main"
+        ? getModelRobotPosition(model.index)
+        : getRoomSlot(room, slotIdx).robot;
+      const dist = playerPos.distanceTo(_tmpVec.set(...pos));
       if (dist < INTERACT_DISTANCE && dist < minDist) {
         minDist  = dist;
         nearest  = model.id;
@@ -319,7 +357,7 @@ function GlbPlayerInner() {
     let minDist = Infinity;
     for (const worker of hallWorkers) {
       const pos  = getHallWorkerPosition(worker.index);
-      const dist = playerPos.distanceTo(new THREE.Vector3(...pos));
+      const dist = playerPos.distanceTo(_tmpVec.set(...pos));
       if (dist < INTERACT_DISTANCE && dist < minDist) {
         minDist = dist;
         nearest = worker.id;
@@ -330,13 +368,31 @@ function GlbPlayerInner() {
 
   useFrame((state, delta) => {
     if (!playerRef.current) return;
+    playerRef.current.getWorldPosition(worldPos.current); // world position for camera code
+    useGame.getState().setPlayerPos(playerRef.current.position.x, playerRef.current.position.z);
+
+    // ── إخفاء الأفاتار في FPS (كل frame بلا تأخير React) ────────────────────
+    if (avatarRef.current) {
+      const isFPS = useGame.getState().cameraMode === "fps";
+      avatarRef.current.visible = !isFPS;
+    }
 
     // ── كشف الكاميرا برة / جوا لإخفاء عناصر Html الداخلية ──────────────────
-    const nowExterior = state.camera.position.z > 8.5;
+    // بعد تدوير PI/2: الباب باتجاه world -X → خارج = camera.x < COMPANY_OX - 8.5
+    const nowExterior = state.camera.position.x < (COMPANY_OX - 8.5);
     if (nowExterior !== wasExteriorRef.current) {
       wasExteriorRef.current = nowExterior;
       setExteriorView(nowExterior);
     }
+
+    // ── انتقال خارج → داخل: بدّل كاميرا المدينة إلى focus تلقائياً ──────────
+    const nowOutside = playerRef.current.position.z > ROOM_BOUNDS_Z_MAX;
+    if (wasOutsideRef.current && !nowOutside) {
+      if (useGame.getState().cameraMode === "city") {
+        useGame.getState().setCameraMode("fps");
+      }
+    }
+    wasOutsideRef.current = nowOutside;
 
     // ── Auto-enter animation (بعد تسجيل الدخول) ─────────────────────────────
     if (autoEnterT.current !== null) {
@@ -350,14 +406,16 @@ function GlbPlayerInner() {
       playerRef.current.rotation.y = Math.PI;
 
       // الكاميرا تتحرك مباشرة من الخارج للداخل (تجاوز OrbitControls)
-      const camZ = THREE.MathUtils.lerp(13, 7, eased);
-      const camY = THREE.MathUtils.lerp(4,  5, eased);
-      state.camera.position.set(0, camY, camZ);
-      state.camera.lookAt(0, 1.2, newZ - 3);
+      // بعد تدوير PI/2: local_z → world -X ، الكاميرا خلف اللاعب في world -X
+      const playerWorldX = COMPANY_OX - newZ;
+      const camOffset = THREE.MathUtils.lerp(13, 7, eased);
+      const camY = THREE.MathUtils.lerp(4, 5, eased);
+      state.camera.position.set(playerWorldX - camOffset, camY, COMPANY_OZ);
+      state.camera.lookAt(playerWorldX + 3, 1.2, COMPANY_OZ);
 
       // زامن target الـ OrbitControls بصمت
       if (orbitRef.current) {
-        orbitRef.current.target.set(0, 1.2, newZ);
+        orbitRef.current.target.set(playerWorldX, 1.2, COMPANY_OZ);
       }
 
       playAnimation(walkAnim);
@@ -367,6 +425,56 @@ function GlbPlayerInner() {
         if (orbitRef.current) orbitRef.current.update(); // استأنف OrbitControls
       }
       return;
+    }
+
+    // ── Teleport navigation (من لوحة الروبوتات) ─────────────────────────────
+    {
+      const tt = useGame.getState().teleportTarget;
+      if (tt) {
+        playerRef.current.position.x = tt.x;
+        playerRef.current.position.z = tt.z;
+        useGame.getState().setTeleportTarget(null);
+        playerRef.current.getWorldPosition(worldPos.current);
+        const np = worldPos.current;
+
+        let camX: number, camY: number, camZ: number;
+        let tgtX: number, tgtY: number, tgtZ: number;
+
+        if (tt.lookAtX !== undefined && tt.lookAtZ !== undefined) {
+          // وجّه الكاميرا نحو المكتب بدقة —
+          // احسب الاتجاه من موضع الوقوف إلى الروبوت
+          const dx = tt.lookAtX - tt.x;
+          const dz = tt.lookAtZ - tt.z;
+          const len = Math.sqrt(dx * dx + dz * dz) || 1;
+          const nx = dx / len;   // وحدة اتجاه نحو الروبوت
+          const nz = dz / len;
+          // الكاميرا خلف اللاعب (عكس اتجاه الروبوت) + ارتفاع 4.5
+          camX = np.x - nx * 4;
+          camY = np.y + 4.5;
+          camZ = np.z - nz * 4;
+          // الـ orbit target = موضع الروبوت بارتفاع 1.5
+          tgtX = np.x + nx * len;
+          tgtY = np.y + 1.5;
+          tgtZ = np.z + nz * len;
+        } else {
+          // fallback — zone-based كما كان قبل
+          const lx = playerRef.current.position.x;
+          const lz = playerRef.current.position.z;
+          if (lx >= MANAGER_ROOM_X_MIN)       { camX = np.x;     camY = np.y + 5; camZ = np.z + 4; }
+          else if (lx <= STAGE1_ROOM_X_MAX)   { camX = np.x;     camY = np.y + 5; camZ = np.z - 4; }
+          else if (lx <= STAGE0_ROOM_X_MAX)   { camX = np.x;     camY = np.y + 5; camZ = np.z - 4; }
+          else if (lz < HALL_Z_FRONT)         { camX = np.x - 3; camY = np.y + 5; camZ = np.z;     }
+          else                                { camX = np.x - 4; camY = np.y + 5; camZ = np.z;     }
+          tgtX = np.x; tgtY = np.y + 1.5; tgtZ = np.z;
+        }
+
+        state.camera.position.set(camX, camY, camZ);
+        prevCameraMode.current = "city"; // يجبر focus-mode switch
+        if (orbitRef.current) {
+          orbitRef.current.target.set(tgtX, tgtY, tgtZ);
+          orbitRef.current.update();
+        }
+      }
     }
 
     const keys      = getKeys();
@@ -386,18 +494,18 @@ function GlbPlayerInner() {
         } else if (gameState.managerKeypadOpen) {
           gameState.closeManagerKeypad();
         } else {
-          const pp = playerRef.current.position;
+          const pp = playerRef.current.position; // local coords — matches VAULT_POSITION
           if (!gameState.isGuest && pp.distanceTo(VAULT_POSITION) < VAULT_INTERACT_DISTANCE) {
             gameState.openVault();
             gameState.setCarryingBox(false); // تسليم الصندوق للخزنة
-          } else {
+          } else if (!gameState.isGuest) {
             const pp2 = playerRef.current.position;
             if (pp2.distanceTo(HUMAN_DEV_POSITION) < HUMAN_DEV_INTERACT_DIST) {
               if (gameState.humanOverlayOpen) gameState.closeHumanOverlay();
               else gameState.openHumanOverlay();
             } else {
               const nearRobot = getNearestRobot() ?? getNearestHallWorker();
-              if (nearRobot) chatState.openChat(nearRobot);
+              if (nearRobot) { chatState.triggerRobotWave(nearRobot); chatState.openChat(nearRobot); }
               else if (gameState.carryingBox) gameState.setCarryingBox(false);
             }
           }
@@ -550,13 +658,13 @@ function GlbPlayerInner() {
     if (justLeft) { (gameState as any).lockManagerDoor?.(); useGame.getState().lockHall2Door(); }
 
     // snap الكاميرا عند الدخول/الخروج من غرفة المدير
-    if (justEntered && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(Math.max(playerPos.x - 3, 9.5), playerPos.y + 5, playerPos.z);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    if (justEntered && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 5, Math.min(worldPos.current.z + 3, COMPANY_OZ + 14));
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
-    } else if (justLeft && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 4, playerPos.z + 4);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    } else if (justLeft && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x - 4, worldPos.current.y + 4, worldPos.current.z);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
     }
 
@@ -568,13 +676,13 @@ function GlbPlayerInner() {
     if (justLeftStage1 && playerPos.z < HALL_Z_FRONT) useGame.getState().lockHallDoor();
     if (justLeftStage1 && playerPos.z >= HALL_Z_FRONT) useGame.getState().lockStage1Door();
 
-    if (justEnteredStage1 && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(Math.min(playerPos.x + 4, -17.5), playerPos.y + 5, playerPos.z);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    if (justEnteredStage1 && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(Math.min(worldPos.current.x + 4, COMPANY_OX - 17.5), worldPos.current.y + 5, worldPos.current.z);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
-    } else if (justLeftStage1 && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 4, playerPos.z);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    } else if (justLeftStage1 && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 4, worldPos.current.z);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
     }
 
@@ -585,13 +693,13 @@ function GlbPlayerInner() {
     wasInStage0.current       = playerInStage0;
     if (justLeftStage0 && playerPos.x > STAGE0_ROOM_X_MAX) useGame.getState().lockStage0Door();
 
-    if (justEnteredStage0 && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(Math.min(playerPos.x + 4, -9.5), playerPos.y + 5, playerPos.z);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    if (justEnteredStage0 && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(Math.min(worldPos.current.x + 4, COMPANY_OX - 9.5), worldPos.current.y + 5, worldPos.current.z);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
-    } else if (justLeftStage0 && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 4, playerPos.z + 4);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    } else if (justLeftStage0 && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 4, worldPos.current.z + 4);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
     }
 
@@ -612,9 +720,9 @@ function GlbPlayerInner() {
     if (justLeftBackRoomB) useGame.getState().lockBrBDoor()
     if (justLeftBackRoomC) useGame.getState().lockBrCDoor()
 
-    if (justEnteredBackRoom && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 7, playerPos.z + 5);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1, playerPos.z);
+    if (justEnteredBackRoom && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 7, worldPos.current.z + 5);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1, worldPos.current.z);
       orbitRef.current.update();
     }
 
@@ -628,35 +736,43 @@ function GlbPlayerInner() {
       if (playerInManager) useGame.getState().lockHall2Door();
     }
 
-    if (justEnteredHall && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 6, playerPos.z + 3);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1, playerPos.z);
+    if (justEnteredHall && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 6, worldPos.current.z + 3);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1, worldPos.current.z);
       orbitRef.current.update();
     }
 
     // ── Camera mode switch ────────────────────────────────────────────────────
     if (prevCameraMode.current !== cameraMode && orbitRef.current) {
       prevCameraMode.current = cameraMode;
-      const pp = playerRef.current.position;
-      if (cameraMode === "top") {
-        // منظور علوي ثابت يغطي الشركة كاملة
-        state.camera.position.set(-4, 60, -10.5);
-        orbitRef.current.target.set(-4, 0, -10.5);
+      const pp = worldPos.current; // world coords for camera
+      if (cameraMode === "city") {
+        // منظور بانورامي — بعد التدوير PI/2 الشركة تواجه -X
+        state.camera.position.set(COMPANY_OX - 50, 90, COMPANY_OZ);
+        orbitRef.current.target.set(COMPANY_OX - 10, 0, COMPANY_OZ);
+      } else if (cameraMode === "top") {
+        state.camera.position.set(COMPANY_OX, 60, COMPANY_OZ);
+        orbitRef.current.target.set(COMPANY_OX, 0, COMPANY_OZ);
+      } else if (cameraMode === "overview") {
+        // مسقط رأسي — مركز الشركة world(-30,0,194)، كل الغرف مرئية
+        state.camera.position.set(-30, 50, 210);
+        orbitRef.current.target.set(-30, 0, 194);
       } else {
         // focus / medium — room-aware close follow
+        // بعد التدوير PI/2: الكاميرا خلف اللاعب في اتجاه world -X (local +Z)
         const isFocus = cameraMode === "focus";
         const offY    = isFocus ? 5 : 8;
         let cx: number, cy: number, cz: number;
         if (playerInHall) {
-          cx = pp.x; cy = pp.y + offY; cz = pp.z + (isFocus ? 3 : 5);
+          cx = pp.x - (isFocus ? 3 : 5); cy = pp.y + offY; cz = pp.z;
         } else if (playerInManager) {
-          cx = Math.max(pp.x - (isFocus ? 3 : 5), 9.5); cy = pp.y + offY; cz = pp.z;
+          cx = pp.x; cy = pp.y + offY; cz = Math.min(pp.z + (isFocus ? 3 : 5), COMPANY_OZ + 14);
         } else if (playerInStage1) {
-          cx = Math.min(pp.x + (isFocus ? 4 : 6), -17.5); cy = pp.y + offY; cz = pp.z;
+          cx = pp.x; cy = pp.y + offY; cz = Math.max(pp.z - (isFocus ? 4 : 6), COMPANY_OZ - 22);
         } else if (playerInStage0) {
-          cx = Math.min(pp.x + (isFocus ? 4 : 6), -9.5); cy = pp.y + offY; cz = pp.z;
+          cx = pp.x; cy = pp.y + offY; cz = Math.max(pp.z - (isFocus ? 4 : 6), COMPANY_OZ - 14);
         } else {
-          cx = pp.x; cy = pp.y + offY; cz = pp.z + (isFocus ? 4 : 7);
+          cx = pp.x - (isFocus ? 4 : 7); cy = pp.y + offY; cz = pp.z;
         }
         state.camera.position.set(cx, cy, cz);
         orbitRef.current.target.set(pp.x, pp.y + 1, pp.z);
@@ -667,7 +783,8 @@ function GlbPlayerInner() {
     // ── Movement ──────────────────────────────────────────────────────────────
     let isMoving = false;
 
-    if (!chatState.isOpen && !gameState.vaultOpen && !gameState.managerKeypadOpen && !gameState.stage0KeypadOpen && !gameState.stage1KeypadOpen && !gameState.hallDoorKeypadOpen && !gameState.hall2DoorKeypadOpen && !gameState.brAKeypadOpen && !gameState.brBKeypadOpen && !gameState.brCKeypadOpen && gameState.phase === "playing") {
+    // في وضع overview لا حركة WASD — الماوس فقط عبر OrbitControls
+    if (cameraMode !== "overview" && !chatState.isOpen && !gameState.vaultOpen && !gameState.managerKeypadOpen && !gameState.stage0KeypadOpen && !gameState.stage1KeypadOpen && !gameState.hallDoorKeypadOpen && !gameState.hall2DoorKeypadOpen && !gameState.brAKeypadOpen && !gameState.brBKeypadOpen && !gameState.brCKeypadOpen && gameState.phase === "playing") {
       const direction = dirVec.current;
       direction.set(0, 0, 0);
 
@@ -772,9 +889,37 @@ function GlbPlayerInner() {
           clampedX = THREE.MathUtils.clamp(newX, minX, STAGE0_ROOM_X_MAX + PLAYER_RADIUS);
           clampedZ = THREE.MathUtils.clamp(newZ, STAGE0_ROOM_Z_MIN + PLAYER_RADIUS, STAGE0_ROOM_Z_MAX - PLAYER_RADIUS);
         } else if (isOutside) {
-          // خارج الصالة: يُسمح بالدخول فقط، لا رجوع للخارج
-          clampedX = THREE.MathUtils.clamp(newX, -ROOM_BOUNDS_X + PLAYER_RADIUS, ROOM_BOUNDS_X - PLAYER_RADIUS);
-          clampedZ = newZ <= currentZ ? newZ : currentZ;
+          // خارج الصالة: حركة حرة في المدينة (Z=6.5..232, X=-110..110)
+          clampedX = THREE.MathUtils.clamp(newX, -110, 110);
+          clampedZ = THREE.MathUtils.clamp(newZ, 6.5, 232);
+
+          // ── Perimeter Wall collision: الدخول فقط عبر البوابة ──────────────
+          const curX = playerRef.current.position.x;
+
+          // الجدار الأمامي (z=14): لا عبور إلا في نطاق البوابة
+          if (currentZ >= PERI_FRONT && clampedZ < PERI_FRONT) {
+            if (clampedX < GATE_X_MIN + PLAYER_RADIUS || clampedX > GATE_X_MAX - PLAYER_RADIUS) {
+              clampedZ = PERI_FRONT + PLAYER_RADIUS;
+            }
+          }
+          // الجدار الأيسر (x=-30): لا عبور من الخارج
+          if (curX < PERI_LEFT && clampedX > PERI_LEFT - PLAYER_RADIUS) {
+            if (clampedZ > PERI_BACK && clampedZ < PERI_FRONT) {
+              clampedX = PERI_LEFT - PLAYER_RADIUS;
+            }
+          }
+          // الجدار الأيمن (x=22): لا عبور من الخارج
+          if (curX > PERI_RIGHT && clampedX < PERI_RIGHT + PLAYER_RADIUS) {
+            if (clampedZ > PERI_BACK && clampedZ < PERI_FRONT) {
+              clampedX = PERI_RIGHT + PLAYER_RADIUS;
+            }
+          }
+          // الجدار الخلفي (z=-35): لا عبور من الخارج (خلف الشركة)
+          if (currentZ <= PERI_BACK && clampedZ > PERI_BACK + PLAYER_RADIUS) {
+            if (clampedX > PERI_LEFT && clampedX < PERI_RIGHT) {
+              clampedZ = PERI_BACK - PLAYER_RADIUS;
+            }
+          }
         } else {
           const maxX = canEnterManager ? MANAGER_ROOM_X_MAX - PLAYER_RADIUS : ROOM_BOUNDS_X - PLAYER_RADIUS;
           // عند canEnterStage0: نسمح بالتحرك حتى x=-8 (عتبة Stage0) بدل -6.7
@@ -817,26 +962,38 @@ function GlbPlayerInner() {
 
     playAnimation(isMoving ? walkAnim : idleAnim);
 
-    // ── Publish player position → store (used by doors/proximity checks) ───────
-    {
-      const pp = playerRef.current.position;
-      useGame.getState().setPlayerPos(pp.x, pp.z);
-    }
+    // ── Publish player position → store (local coords — matches door positions) ─
+    useGame.getState().setPlayerPos(playerRef.current.position.x, playerRef.current.position.z);
 
     // ── Camera follow ────────────────────────────────────────────────────────
     if (cameraMode === "fps") {
       if (orbitRef.current) orbitRef.current.enabled = false;
-      const pp = playerRef.current.position;
-      state.camera.position.set(pp.x, pp.y + 2.4, pp.z);
+      // ── زاوية رأي أوسع حتى يرى اللاعب المكتب ───────────────────────────
+      const camFps = state.camera as THREE.PerspectiveCamera;
+      if (camFps.fov !== 80) { camFps.fov = 80; camFps.updateProjectionMatrix(); }
+      const pp = worldPos.current; // world coords for camera
+      state.camera.position.set(pp.x, pp.y + 1.75, pp.z);
       state.camera.rotation.order = "YXZ";
       state.camera.rotation.y = fpsYaw.current;
       state.camera.rotation.x = fpsPitch.current;
       state.camera.rotation.z = 0;
       // الجسم يدور دائماً مع اتجاه النظر (ليس فقط عند الحركة)
       playerRef.current.rotation.y = fpsYaw.current;
+    } else if (cameraMode === "overview") {
+      // استعادة زاوية الرأي الأصلية عند الخروج من FPS
+      { const c = state.camera as THREE.PerspectiveCamera; if (c.fov !== 60) { c.fov = 60; c.updateProjectionMatrix(); } }
+      // مسقط رأسي: OrbitControls بان + زوم فقط، لا متابعة للاعب
+      if (orbitRef.current) {
+        orbitRef.current.enabled    = true;
+        orbitRef.current.enablePan  = true;
+        orbitRef.current.update();
+      }
     } else if (orbitRef.current) {
-      orbitRef.current.enabled = true;
-      const pp = playerRef.current.position;
+      // استعادة زاوية الرأي الأصلية عند الخروج من FPS
+      { const c = state.camera as THREE.PerspectiveCamera; if (c.fov !== 60) { c.fov = 60; c.updateProjectionMatrix(); } }
+      orbitRef.current.enabled   = true;
+      orbitRef.current.enablePan = false; // عودة لعدم البان في الأوضاع الأخرى
+      const pp = worldPos.current; // world coords for camera
       camTargetVec.current.set(pp.x, pp.y + 1.5, pp.z);
       orbitRef.current.target.lerp(camTargetVec.current, 0.15);
       orbitRef.current.update();
@@ -851,13 +1008,13 @@ function GlbPlayerInner() {
         enableZoom={true}
         enableRotate={true}
         minDistance={3}
-        maxDistance={70}
+        maxDistance={300}
         minPolarAngle={0}
         maxPolarAngle={Math.PI / 2.15}
-        target={[0, 1, 2]}
+        target={[COMPANY_OX, 1, COMPANY_OZ + ENTER_SPAWN_Z]}
       />
 
-      <group ref={playerRef} position={[0, 0, 8.5]}>
+      <group ref={playerRef} position={[0, 0, ENTER_SPAWN_Z]}>
         <group
           ref={avatarRef}
           scale={(() => { const s = AVATAR_SCALE_MAP[selectedAvatar] ?? AVATAR_SCALE; return [s, s, s]; })()}
@@ -947,11 +1104,14 @@ function LitePlayerInner() {
   const fpsPitch             = useRef(0);
   const bodyBobT             = useRef(0);
   const wasExteriorRef       = useRef(false);
+  const worldPos             = useRef(new THREE.Vector3()); // world position cache
 
   const carryingBox     = useGame((s) => s.carryingBox);
   const setExteriorView = useGame((s) => s.setExteriorView);
+  const wasOutsideRef   = useRef(true);  // تتبع الانتقال خارج ↔ داخل المبنى
   const cameraMode      = useGame((s) => s.cameraMode);
-  const prevCameraMode  = useRef<"focus" | "medium" | "top" | "fps">(cameraMode);
+  const cameraResetToken = useGame((s) => s.cameraResetToken);
+  const prevCameraMode  = useRef<"focus" | "medium" | "top" | "fps" | "city" | "overview">("focus"); // يبدأ بـ focus دائماً
 
   // ── Chat → box appears ──────────────────────────────────────────────────────
   const chatIsOpen     = useChat((s) => s.isOpen);
@@ -971,10 +1131,10 @@ function LitePlayerInner() {
   useEffect(() => {
     if (!pendingAutoEnter) return;
     useGame.getState().clearAutoEnter();
-    autoEnterT.current = 0;
+    // autoEnterT.current = 0; ← معطّل — اللاعب يمشي بنفسه من المدينة
     if (playerRef.current) {
       playerRef.current.position.set(0, 0, ENTER_SPAWN_Z);
-      playerRef.current.rotation.y = Math.PI;
+      playerRef.current.rotation.y = Math.PI; // وجهه ناحية الشركة (شمال)
     }
   }, [pendingAutoEnter]);
 
@@ -1020,6 +1180,18 @@ function LitePlayerInner() {
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, []);
 
+  // ── Reset Camera (LitePlayer) ─────────────────────────────────────────────
+  useEffect(() => {
+    if (cameraResetToken === 0) return;
+    if (!playerRef.current || !orbitRef.current) return;
+    playerRef.current.getWorldPosition(worldPos.current);
+    const pp = worldPos.current;
+    prevCameraMode.current = "overview"; // force re-apply focus on next frame
+    orbitRef.current.target.set(pp.x, pp.y + 1.5, pp.z);
+    orbitRef.current.update();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraResetToken]);
+
   const getNearestRobot = useCallback(() => {
     if (!playerRef.current) return null;
     const playerPos = playerRef.current.position;
@@ -1028,7 +1200,7 @@ function LitePlayerInner() {
     let minDist = Infinity;
     for (const model of models) {
       const pos  = getModelRobotPosition(model.index);
-      const dist = playerPos.distanceTo(new THREE.Vector3(...pos));
+      const dist = playerPos.distanceTo(_tmpVec.set(...pos));
       if (dist < INTERACT_DISTANCE && dist < minDist) {
         minDist = dist;
         nearest = model.id;
@@ -1045,7 +1217,7 @@ function LitePlayerInner() {
     let minDist = Infinity;
     for (const worker of hallWorkers) {
       const pos  = getHallWorkerPosition(worker.index);
-      const dist = playerPos.distanceTo(new THREE.Vector3(...pos));
+      const dist = playerPos.distanceTo(_tmpVec.set(...pos));
       if (dist < INTERACT_DISTANCE && dist < minDist) {
         minDist = dist;
         nearest = worker.id;
@@ -1056,13 +1228,30 @@ function LitePlayerInner() {
 
   useFrame((state, delta) => {
     if (!playerRef.current) return;
+    playerRef.current.getWorldPosition(worldPos.current); // world position for camera code
+    useGame.getState().setPlayerPos(playerRef.current.position.x, playerRef.current.position.z);
+
+    // ── إخفاء الجسم في FPS (كل frame بلا تأخير React) ──────────────────────
+    if (liteBodyRef.current) {
+      const isFPS = useGame.getState().cameraMode === "fps";
+      liteBodyRef.current.visible = !isFPS;
+    }
 
     // ── exterior detection ────────────────────────────────────────────────────
-    const nowExterior = state.camera.position.z > 8.5;
+    const nowExterior = state.camera.position.z > (COMPANY_OZ + 8.5);
     if (nowExterior !== wasExteriorRef.current) {
       wasExteriorRef.current = nowExterior;
       setExteriorView(nowExterior);
     }
+
+    // ── انتقال خارج → داخل: بدّل كاميرا المدينة إلى focus تلقائياً ──────────
+    const nowOutside = playerRef.current.position.z > ROOM_BOUNDS_Z_MAX;
+    if (wasOutsideRef.current && !nowOutside) {
+      if (useGame.getState().cameraMode === "city") {
+        useGame.getState().setCameraMode("fps");
+      }
+    }
+    wasOutsideRef.current = nowOutside;
 
     // ── auto-enter animation ──────────────────────────────────────────────────
     if (autoEnterT.current !== null) {
@@ -1072,16 +1261,61 @@ function LitePlayerInner() {
       const newZ  = THREE.MathUtils.lerp(ENTER_SPAWN_Z, ENTER_TARGET_Z, eased);
       playerRef.current.position.z = newZ;
       playerRef.current.rotation.y = Math.PI;
-      const camZ = THREE.MathUtils.lerp(13, 7, eased);
+      const camZ = THREE.MathUtils.lerp(COMPANY_OZ + 13, COMPANY_OZ + 7, eased);
       const camY = THREE.MathUtils.lerp(4,  5, eased);
-      state.camera.position.set(0, camY, camZ);
-      state.camera.lookAt(0, 1.2, newZ - 3);
-      if (orbitRef.current) orbitRef.current.target.set(0, 1.2, newZ);
+      state.camera.position.set(COMPANY_OX, camY, camZ);
+      state.camera.lookAt(COMPANY_OX, 1.2, newZ + COMPANY_OZ - 3);
+      if (orbitRef.current) orbitRef.current.target.set(COMPANY_OX, 1.2, newZ + COMPANY_OZ);
       if (t >= 1) {
         autoEnterT.current = null;
         if (orbitRef.current) orbitRef.current.update();
       }
       return;
+    }
+
+    // ── Teleport navigation (من لوحة الروبوتات) ─────────────────────────────
+    {
+      const tt = useGame.getState().teleportTarget;
+      if (tt) {
+        playerRef.current.position.x = tt.x;
+        playerRef.current.position.z = tt.z;
+        useGame.getState().setTeleportTarget(null);
+        playerRef.current.getWorldPosition(worldPos.current);
+        const np = worldPos.current;
+
+        let camX: number, camY: number, camZ: number;
+        let tgtX: number, tgtY: number, tgtZ: number;
+
+        if (tt.lookAtX !== undefined && tt.lookAtZ !== undefined) {
+          const dx = tt.lookAtX - tt.x;
+          const dz = tt.lookAtZ - tt.z;
+          const len = Math.sqrt(dx * dx + dz * dz) || 1;
+          const nx = dx / len;
+          const nz = dz / len;
+          camX = np.x - nx * 4;
+          camY = np.y + 4.5;
+          camZ = np.z - nz * 4;
+          tgtX = np.x + nx * len;
+          tgtY = np.y + 1.5;
+          tgtZ = np.z + nz * len;
+        } else {
+          const lx = playerRef.current.position.x;
+          const lz = playerRef.current.position.z;
+          if (lx >= MANAGER_ROOM_X_MIN)       { camX = np.x;     camY = np.y + 5; camZ = np.z + 4; }
+          else if (lx <= STAGE1_ROOM_X_MAX)   { camX = np.x;     camY = np.y + 5; camZ = np.z - 4; }
+          else if (lx <= STAGE0_ROOM_X_MAX)   { camX = np.x;     camY = np.y + 5; camZ = np.z - 4; }
+          else if (lz < HALL_Z_FRONT)         { camX = np.x - 3; camY = np.y + 5; camZ = np.z;     }
+          else                                { camX = np.x - 4; camY = np.y + 5; camZ = np.z;     }
+          tgtX = np.x; tgtY = np.y + 1.5; tgtZ = np.z;
+        }
+
+        state.camera.position.set(camX, camY, camZ);
+        prevCameraMode.current = "city";
+        if (orbitRef.current) {
+          orbitRef.current.target.set(tgtX, tgtY, tgtZ);
+          orbitRef.current.update();
+        }
+      }
     }
 
     const keys      = getKeys();
@@ -1101,18 +1335,18 @@ function LitePlayerInner() {
         } else if (gameState.managerKeypadOpen) {
           gameState.closeManagerKeypad();
         } else {
-          const pp = playerRef.current.position;
+          const pp = playerRef.current.position; // local coords — matches VAULT_POSITION
           if (!gameState.isGuest && pp.distanceTo(VAULT_POSITION) < VAULT_INTERACT_DISTANCE) {
             gameState.openVault();
             gameState.setCarryingBox(false);
-          } else {
+          } else if (!gameState.isGuest) {
             const pp2 = playerRef.current.position;
             if (pp2.distanceTo(HUMAN_DEV_POSITION) < HUMAN_DEV_INTERACT_DIST) {
               if (gameState.humanOverlayOpen) gameState.closeHumanOverlay();
               else gameState.openHumanOverlay();
             } else {
               const nearRobot = getNearestRobot() ?? getNearestHallWorker();
-              if (nearRobot) chatState.openChat(nearRobot);
+              if (nearRobot) { chatState.triggerRobotWave(nearRobot); chatState.openChat(nearRobot); }
               else if (gameState.carryingBox) gameState.setCarryingBox(false);
             }
           }
@@ -1245,13 +1479,13 @@ function LitePlayerInner() {
     const justLeft        = !playerInManager && wasInManager.current;
     wasInManager.current  = playerInManager;
     if (justLeft) { (gameState as any).lockManagerDoor?.(); useGame.getState().lockHall2Door(); }
-    if (justEntered && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(Math.max(playerPos.x - 3, 9.5), playerPos.y + 5, playerPos.z);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    if (justEntered && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 5, Math.min(worldPos.current.z + 3, COMPANY_OZ + 14));
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
-    } else if (justLeft && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 4, playerPos.z + 4);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    } else if (justLeft && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x - 4, worldPos.current.y + 4, worldPos.current.z);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
     }
 
@@ -1262,13 +1496,13 @@ function LitePlayerInner() {
     wasInStage1.current     = playerInStage1;
     if (justLeftStage1 && playerPos.z < HALL_Z_FRONT) useGame.getState().lockHallDoor();
     if (justLeftStage1 && playerPos.z >= HALL_Z_FRONT) useGame.getState().lockStage1Door();
-    if (justEnteredStage1 && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(Math.min(playerPos.x + 4, -17.5), playerPos.y + 5, playerPos.z);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    if (justEnteredStage1 && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(Math.min(worldPos.current.x + 4, COMPANY_OX - 17.5), worldPos.current.y + 5, worldPos.current.z);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
-    } else if (justLeftStage1 && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 4, playerPos.z);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    } else if (justLeftStage1 && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 4, worldPos.current.z);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
     }
 
@@ -1278,13 +1512,13 @@ function LitePlayerInner() {
     const justLeftStage0    = !playerInStage0 && wasInStage0.current;
     wasInStage0.current     = playerInStage0;
     if (justLeftStage0 && playerPos.x > STAGE0_ROOM_X_MAX) useGame.getState().lockStage0Door();
-    if (justEnteredStage0 && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(Math.min(playerPos.x + 4, -9.5), playerPos.y + 5, playerPos.z);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    if (justEnteredStage0 && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(Math.min(worldPos.current.x + 4, COMPANY_OX - 9.5), worldPos.current.y + 5, worldPos.current.z);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
-    } else if (justLeftStage0 && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 4, playerPos.z + 4);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    } else if (justLeftStage0 && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 4, worldPos.current.z + 4);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
     }
 
@@ -1304,9 +1538,9 @@ function LitePlayerInner() {
     if (justLeftBackRoomA) useGame.getState().lockBrADoor()
     if (justLeftBackRoomB) useGame.getState().lockBrBDoor()
     if (justLeftBackRoomC) useGame.getState().lockBrCDoor()
-    if (justEnteredBackRoom && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 5, playerPos.z + 4);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1.0, playerPos.z);
+    if (justEnteredBackRoom && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 5, worldPos.current.z + 4);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1.0, worldPos.current.z);
       orbitRef.current.update();
     }
 
@@ -1319,35 +1553,43 @@ function LitePlayerInner() {
       if (playerInStage1) useGame.getState().lockHallDoor();
       if (playerInManager) useGame.getState().lockHall2Door();
     }
-    if (justEnteredHall && orbitRef.current && cameraMode !== "top") {
-      state.camera.position.set(playerPos.x, playerPos.y + 6, playerPos.z + 3);
-      orbitRef.current.target.set(playerPos.x, playerPos.y + 1, playerPos.z);
+    if (justEnteredHall && orbitRef.current && cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
+      state.camera.position.set(worldPos.current.x, worldPos.current.y + 6, worldPos.current.z + 3);
+      orbitRef.current.target.set(worldPos.current.x, worldPos.current.y + 1, worldPos.current.z);
       orbitRef.current.update();
     }
 
     // ── Camera mode switch ────────────────────────────────────────────────────
     if (prevCameraMode.current !== cameraMode && orbitRef.current) {
       prevCameraMode.current = cameraMode;
-      const pp = playerRef.current.position;
-      if (cameraMode === "top") {
-        // منظور علوي ثابت يغطي الشركة كاملة
-        state.camera.position.set(-4, 60, -10.5);
-        orbitRef.current.target.set(-4, 0, -10.5);
+      const pp = worldPos.current; // world coords for camera
+      if (cameraMode === "city") {
+        // منظور بانورامي — بعد التدوير PI/2 الشركة تواجه -X
+        state.camera.position.set(COMPANY_OX - 50, 90, COMPANY_OZ);
+        orbitRef.current.target.set(COMPANY_OX - 10, 0, COMPANY_OZ);
+      } else if (cameraMode === "top") {
+        state.camera.position.set(COMPANY_OX, 60, COMPANY_OZ);
+        orbitRef.current.target.set(COMPANY_OX, 0, COMPANY_OZ);
+      } else if (cameraMode === "overview") {
+        // مسقط رأسي — مركز الشركة world(-30,0,194)، كل الغرف مرئية
+        state.camera.position.set(-30, 50, 210);
+        orbitRef.current.target.set(-30, 0, 194);
       } else {
         // focus / medium — room-aware close follow
+        // بعد التدوير PI/2: الكاميرا خلف اللاعب في اتجاه world -X (local +Z)
         const isFocus = cameraMode === "focus";
         const offY    = isFocus ? 5 : 8;
         let cx: number, cy: number, cz: number;
         if (playerInHall) {
-          cx = pp.x; cy = pp.y + offY; cz = pp.z + (isFocus ? 3 : 5);
+          cx = pp.x - (isFocus ? 3 : 5); cy = pp.y + offY; cz = pp.z;
         } else if (playerInManager) {
-          cx = Math.max(pp.x - (isFocus ? 3 : 5), 9.5); cy = pp.y + offY; cz = pp.z;
+          cx = pp.x; cy = pp.y + offY; cz = Math.min(pp.z + (isFocus ? 3 : 5), COMPANY_OZ + 14);
         } else if (playerInStage1) {
-          cx = Math.min(pp.x + (isFocus ? 4 : 6), -17.5); cy = pp.y + offY; cz = pp.z;
+          cx = pp.x; cy = pp.y + offY; cz = Math.max(pp.z - (isFocus ? 4 : 6), COMPANY_OZ - 22);
         } else if (playerInStage0) {
-          cx = Math.min(pp.x + (isFocus ? 4 : 6), -9.5); cy = pp.y + offY; cz = pp.z;
+          cx = pp.x; cy = pp.y + offY; cz = Math.max(pp.z - (isFocus ? 4 : 6), COMPANY_OZ - 14);
         } else {
-          cx = pp.x; cy = pp.y + offY; cz = pp.z + (isFocus ? 4 : 7);
+          cx = pp.x - (isFocus ? 4 : 7); cy = pp.y + offY; cz = pp.z;
         }
         state.camera.position.set(cx, cy, cz);
         orbitRef.current.target.set(pp.x, pp.y + 1, pp.z);
@@ -1357,7 +1599,8 @@ function LitePlayerInner() {
 
     // ── movement ──────────────────────────────────────────────────────────────
     let isMoving = false;
-    if (!chatState.isOpen && !gameState.vaultOpen && !gameState.managerKeypadOpen && !gameState.stage0KeypadOpen && !gameState.stage1KeypadOpen && !gameState.hallDoorKeypadOpen && !gameState.hall2DoorKeypadOpen && !gameState.brAKeypadOpen && !gameState.brBKeypadOpen && !gameState.brCKeypadOpen && gameState.phase === "playing") {
+    // في وضع overview لا حركة WASD — الماوس فقط عبر OrbitControls
+    if (cameraMode !== "overview" && !chatState.isOpen && !gameState.vaultOpen && !gameState.managerKeypadOpen && !gameState.stage0KeypadOpen && !gameState.stage1KeypadOpen && !gameState.hallDoorKeypadOpen && !gameState.hall2DoorKeypadOpen && !gameState.brAKeypadOpen && !gameState.brBKeypadOpen && !gameState.brCKeypadOpen && gameState.phase === "playing") {
       const direction = dirVec.current;
       direction.set(0, 0, 0);
       if (cameraMode === "fps") {
@@ -1455,8 +1698,37 @@ function LitePlayerInner() {
           clampedX = THREE.MathUtils.clamp(newX, minX, STAGE0_ROOM_X_MAX + PLAYER_RADIUS);
           clampedZ = THREE.MathUtils.clamp(newZ, STAGE0_ROOM_Z_MIN + PLAYER_RADIUS, STAGE0_ROOM_Z_MAX - PLAYER_RADIUS);
         } else if (isOutside) {
-          clampedX = THREE.MathUtils.clamp(newX, -ROOM_BOUNDS_X + PLAYER_RADIUS, ROOM_BOUNDS_X - PLAYER_RADIUS);
-          clampedZ = newZ <= currentZ ? newZ : currentZ;
+          // حركة حرة في المدينة (Z=6.5..232, X=-110..110)
+          clampedX = THREE.MathUtils.clamp(newX, -110, 110);
+          clampedZ = THREE.MathUtils.clamp(newZ, 6.5, 232);
+
+          // ── Perimeter Wall collision: الدخول فقط عبر البوابة ──────────────
+          const curX = playerRef.current.position.x;
+
+          // الجدار الأمامي (z=14): لا عبور إلا في نطاق البوابة
+          if (currentZ >= PERI_FRONT && clampedZ < PERI_FRONT) {
+            if (clampedX < GATE_X_MIN + PLAYER_RADIUS || clampedX > GATE_X_MAX - PLAYER_RADIUS) {
+              clampedZ = PERI_FRONT + PLAYER_RADIUS;
+            }
+          }
+          // الجدار الأيسر (x=-30): لا عبور من الخارج
+          if (curX < PERI_LEFT && clampedX > PERI_LEFT - PLAYER_RADIUS) {
+            if (clampedZ > PERI_BACK && clampedZ < PERI_FRONT) {
+              clampedX = PERI_LEFT - PLAYER_RADIUS;
+            }
+          }
+          // الجدار الأيمن (x=22): لا عبور من الخارج
+          if (curX > PERI_RIGHT && clampedX < PERI_RIGHT + PLAYER_RADIUS) {
+            if (clampedZ > PERI_BACK && clampedZ < PERI_FRONT) {
+              clampedX = PERI_RIGHT + PLAYER_RADIUS;
+            }
+          }
+          // الجدار الخلفي (z=-35): لا عبور من الخارج (خلف الشركة)
+          if (currentZ <= PERI_BACK && clampedZ > PERI_BACK + PLAYER_RADIUS) {
+            if (clampedX > PERI_LEFT && clampedX < PERI_RIGHT) {
+              clampedZ = PERI_BACK - PLAYER_RADIUS;
+            }
+          }
         } else {
           const maxX = canEnterManager ? MANAGER_ROOM_X_MAX - PLAYER_RADIUS : ROOM_BOUNDS_X - PLAYER_RADIUS;
           const minX = canEnterStage0 ? STAGE0_ROOM_X_MAX : -ROOM_BOUNDS_X + PLAYER_RADIUS;
@@ -1501,21 +1773,36 @@ function LitePlayerInner() {
     if (cameraMode === "fps") {
       // ── منظور الشخص الأول ──────────────────────────────────────────────────
       if (orbitRef.current) orbitRef.current.enabled = false;
-      const pp = playerRef.current.position;
-      state.camera.position.set(pp.x, pp.y + 2.4, pp.z);
+      // ── زاوية رأي أوسع حتى يرى اللاعب المكتب ───────────────────────────
+      const camFps2 = state.camera as THREE.PerspectiveCamera;
+      if (camFps2.fov !== 80) { camFps2.fov = 80; camFps2.updateProjectionMatrix(); }
+      const pp = worldPos.current; // world coords for camera
+      state.camera.position.set(pp.x, pp.y + 1.75, pp.z);
       state.camera.rotation.order = "YXZ";
       state.camera.rotation.y = fpsYaw.current;
       state.camera.rotation.x = fpsPitch.current;
       state.camera.rotation.z = 0;
       // الجسم يدور دائماً مع اتجاه النظر
       playerRef.current.rotation.y = fpsYaw.current;
+    } else if (cameraMode === "overview") {
+      // استعادة زاوية الرأي الأصلية عند الخروج من FPS
+      { const c = state.camera as THREE.PerspectiveCamera; if (c.fov !== 60) { c.fov = 60; c.updateProjectionMatrix(); } }
+      // مسقط رأسي: OrbitControls بان + زوم فقط، لا متابعة للاعب
+      if (orbitRef.current) {
+        orbitRef.current.enabled   = true;
+        orbitRef.current.enablePan = true;
+        orbitRef.current.update();
+      }
     } else if (orbitRef.current) {
-      orbitRef.current.enabled = true;
-      const pp = playerRef.current.position;
+      // استعادة زاوية الرأي الأصلية عند الخروج من FPS
+      { const c = state.camera as THREE.PerspectiveCamera; if (c.fov !== 60) { c.fov = 60; c.updateProjectionMatrix(); } }
+      orbitRef.current.enabled   = true;
+      orbitRef.current.enablePan = false;
+      const pp = worldPos.current; // world coords for camera
       camTargetVec.current.set(pp.x, pp.y + 1.5, pp.z);
       orbitRef.current.target.lerp(camTargetVec.current, 0.15);
       orbitRef.current.update();
-      if (cameraMode !== "top") {
+      if (cameraMode !== "top" && cameraMode !== "city" && cameraMode !== "overview") {
         const isFocus = cameraMode === "focus";
         const offY    = isFocus ? 4 : 7;
         let tx: number, ty: number, tz: number;
@@ -1570,13 +1857,13 @@ function LitePlayerInner() {
         enableZoom={true}
         enableRotate={true}
         minDistance={3}
-        maxDistance={70}
+        maxDistance={300}
         minPolarAngle={0}
         maxPolarAngle={Math.PI / 2.15}
-        target={[0, 1, 2]}
+        target={[COMPANY_OX, 1, COMPANY_OZ + ENTER_SPAWN_Z]}
       />
 
-      <group ref={playerRef} position={[0, 0, 8.5]}>
+      <group ref={playerRef} position={[0, 0, ENTER_SPAWN_Z]}>
         {/* ── Standing robot body ─────────────────────────────────────────── */}
         <group scale={1.44}>
           {/* Legs */}

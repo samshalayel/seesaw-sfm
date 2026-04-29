@@ -1,9 +1,9 @@
 import * as THREE from "three";
-import { useRef } from "react";
+import { useRef, memo, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
-import { useChat } from "@/lib/stores/useChat";
 import { useGame } from "@/lib/stores/useGame";
+import { useChat } from "@/lib/stores/useChat";
 
 interface RobotProps {
   position: [number, number, number];
@@ -13,50 +13,93 @@ interface RobotProps {
   label?: string;
 }
 
-export function Robot({
+export const Robot = memo(function Robot({
   position,
   rotation = [0, 0, 0],
   color = "#4fc3f7",
   robotId,
   label: labelProp,
 }: RobotProps) {
-  const groupRef   = useRef<THREE.Group>(null);
-  const bodyRef    = useRef<THREE.Group>(null);
-  const headRef    = useRef<THREE.Group>(null);
-  const eyeMatL    = useRef<THREE.MeshStandardMaterial>(null);
-  const eyeMatR    = useRef<THREE.MeshStandardMaterial>(null);
-  const antennaRef = useRef<THREE.Mesh>(null);
+  const groupRef    = useRef<THREE.Group>(null);
+  const bodyRef     = useRef<THREE.Group>(null);
+  const headRef     = useRef<THREE.Group>(null);
+  const eyeMatL     = useRef<THREE.MeshStandardMaterial>(null);
+  const eyeMatR     = useRef<THREE.MeshStandardMaterial>(null);
+  const antennaRef  = useRef<THREE.Mesh>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
+  const waveStartRef = useRef<number | null>(null);
 
   const label = labelProp || robotId;
   const isExteriorView = useGame((s) => s.isExteriorView);
-  const robotScreens = useChat((s) => s.robotScreens);
-  const screenContent = robotScreens[robotId] || "";
-
-  const handleClick = () => {
-    const chatState = useChat.getState();
-    chatState.isOpen ? chatState.closeChat() : chatState.openChat(robotId);
-  };
+  const wavingRobotId  = useChat((s) => s.wavingRobotId);
+  const [isNear, setIsNear] = useState(false);
 
   // ── animations ──────────────────────────────────────────────────────────────
-  useFrame(({ clock }) => {
+  useFrame(({ clock, camera }) => {
     const t = clock.elapsedTime;
     const s = Math.sin(t * 1.6);
+
+    // ── تحقق من قرب الكاميرا (تظهر الشارة عند < 4 وحدات) ──────────────────
+    if (groupRef.current) {
+      const dist = camera.position.distanceTo(groupRef.current.getWorldPosition(new THREE.Vector3()));
+      setIsNear(dist < 4);
+    }
 
     // جسم — نفَس خفيف
     if (bodyRef.current) {
       bodyRef.current.position.y = s * 0.012;
     }
-    // رأس — دوران طفيف (أبطأ دورة = أقل تحديثاً بصرياً)
+    // رأس — دوران طفيف
     if (headRef.current) {
       headRef.current.rotation.y = Math.sin(t * 0.8) * 0.12;
     }
-    // عيون — نبض الإضاءة (نفس sin مؤشر مختلف)
+    // عيون — نبض الإضاءة
     const glow = 0.55 + Math.sin(t * 2.4) * 0.35;
     if (eyeMatL.current) eyeMatL.current.emissiveIntensity = glow;
     if (eyeMatR.current) eyeMatR.current.emissiveIntensity = glow;
     // هوائي
     if (antennaRef.current) {
       antennaRef.current.position.y = 1.62 + Math.sin(t * 3.2) * 0.025;
+    }
+
+    // ── wave animation ───────────────────────────────────────────────────────
+    if (rightArmRef.current) {
+      const isWaving = wavingRobotId === robotId;
+      if (isWaving && waveStartRef.current === null) {
+        waveStartRef.current = t;
+      } else if (!isWaving && waveStartRef.current !== null) {
+        // انتهى الوقت — تأكد الإنزال اكتمل أو أوقف فوراً
+        waveStartRef.current = null;
+      }
+
+      if (waveStartRef.current !== null) {
+        const elapsed = t - waveStartRef.current;
+        const RAISE = 0.35;  // رفع الذراع
+        const WAVE  = 1.6;   // تلويح
+        const LOWER = 0.35;  // إنزال
+
+        // rz يرفع الذراع: pivot بالكتف → +1.85 = الذراع فوق وشوي لليمين
+        const TARGET_Z = 1.85;
+        let rz = 0;
+        let rx = 0;
+
+        if (elapsed < RAISE) {
+          rz = (elapsed / RAISE) * TARGET_Z;
+        } else if (elapsed < RAISE + WAVE) {
+          const wt = elapsed - RAISE;
+          rz = TARGET_Z;
+          rx = Math.sin(wt * 9) * 0.32;   // تلويح يمين/يسار
+        } else if (elapsed < RAISE + WAVE + LOWER) {
+          const lt = elapsed - RAISE - WAVE;
+          rz = (1 - lt / LOWER) * TARGET_Z;
+        }
+
+        rightArmRef.current.rotation.z = rz;
+        rightArmRef.current.rotation.x = rx;
+      } else {
+        rightArmRef.current.rotation.z = 0;
+        rightArmRef.current.rotation.x = 0;
+      }
     }
   });
 
@@ -68,10 +111,10 @@ export function Robot({
 
   return (
     <group ref={groupRef} position={position} rotation={rotation} scale={1.35}
-           userData={{ robotId }} onClick={handleClick}>
+           userData={{ robotId }}>
 
-      {/* ── شارة الاسم ──────────────────────────────────────────────────────── */}
-      {!isExteriorView && (
+      {/* ── شارة الاسم — تظهر فقط عند الاقتراب ──────────────────────────────── */}
+      {!isExteriorView && isNear && (
         <Html position={[0, 2.75, 0]} center distanceFactor={6} style={{ pointerEvents: "none" }}>
           <div style={{
             background: "rgba(5,5,15,0.92)",
@@ -85,45 +128,13 @@ export function Robot({
             fontFamily: "monospace",
             letterSpacing: "1.5px",
             boxShadow: `0 0 14px ${color}66`,
+            transition: "opacity 0.3s",
           }}>
             ◈ {label}
           </div>
         </Html>
       )}
 
-      {/* ── شاشة الرد ──────────────────────────────────────────────────────── */}
-      {!isExteriorView && screenContent && (
-        <Html position={[0, 2.2, 0]} center distanceFactor={4} style={{ pointerEvents: "none" }}>
-          <div style={{
-            background: "rgba(0,20,40,0.97)",
-            color: "#00ff88",
-            padding: "20px 26px",
-            borderRadius: "14px",
-            fontSize: "20px",
-            fontFamily: "monospace",
-            whiteSpace: "pre-wrap",
-            maxWidth: "640px",
-            maxHeight: "340px",
-            overflow: "hidden",
-            border: `3px solid ${color}`,
-            boxShadow: `0 0 36px ${color}77`,
-            position: "relative",
-            lineHeight: "1.6",
-          }}>
-            <div style={{
-              content: '""',
-              position: "absolute",
-              top: "-15px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              borderWidth: "0 15px 15px",
-              borderStyle: "solid",
-              borderColor: `transparent transparent ${color}`,
-            }} />
-            {screenContent.length > 500 ? screenContent.substring(0, 500) + "..." : screenContent}
-          </div>
-        </Html>
-      )}
 
       {/* ── كرسي مكتبي فاخر ────────────────────────────────────────────────── */}
       <OfficerChair color={color} />
@@ -200,17 +211,20 @@ export function Robot({
           </mesh>
         </group>
 
-        {/* ── الذراع الأيمن ── */}
-        <group position={[0.33, 0.52, 0]}>
-          <mesh castShadow>
+        {/* ── الذراع الأيمن — pivot عند الكتف ── */}
+        <group ref={rightArmRef} position={[0.33, 0.69, 0]}>
+          {/* العضد */}
+          <mesh position={[0, -0.17, 0]} castShadow>
             <boxGeometry args={[0.10, 0.34, 0.10]} />
             {bodyMat}
           </mesh>
-          <mesh position={[0, -0.28, 0.02]} castShadow>
+          {/* الساعد */}
+          <mesh position={[0, -0.45, 0.02]} castShadow>
             <boxGeometry args={[0.09, 0.22, 0.09]} />
             {plateMat}
           </mesh>
-          <mesh position={[0.008, -0.44, 0]} castShadow>
+          {/* اليد */}
+          <mesh position={[0.008, -0.61, 0]} castShadow>
             <boxGeometry args={[0.11, 0.10, 0.08]} />
             {darkMat}
           </mesh>
@@ -296,7 +310,7 @@ export function Robot({
       </group>{/* end bodyRef */}
     </group>
   );
-}
+});
 
 /* ══════════════════════════════════════════════════════════════════════════
    كرسي مكتبي فاخر

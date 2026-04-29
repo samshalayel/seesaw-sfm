@@ -1,11 +1,12 @@
 import * as THREE from "three";
+import { memo } from "react";
 
 interface DeskProps {
   position: [number, number, number];
   rotation?: [number, number, number];
 }
 
-export function Desk({ position, rotation = [0, 0, 0] }: DeskProps) {
+export const Desk = memo(function Desk({ position, rotation = [0, 0, 0] }: DeskProps) {
   return (
     <group position={position} rotation={rotation}>
       <ExecutiveDesk />
@@ -13,17 +14,23 @@ export function Desk({ position, rotation = [0, 0, 0] }: DeskProps) {
       <Keyboard     position={[0, 0.78, 0.12]} />
     </group>
   );
-}
+});
+
+// Shared materials — created once at module level to avoid per-render allocation
+const MAT_WOOD    = new THREE.MeshStandardMaterial({ color: "#1c0f07", roughness: 0.25, metalness: 0.05 });
+const MAT_WOODTOP = new THREE.MeshStandardMaterial({ color: "#2b1507", roughness: 0.15, metalness: 0.08 });
+const MAT_CHROME  = new THREE.MeshStandardMaterial({ color: "#aaaaaa", roughness: 0.05, metalness: 0.98 });
+const MAT_GLASS   = new THREE.MeshStandardMaterial({ color: "#8ecae6", roughness: 0,    metalness: 0.1,
+                                                      transparent: true, opacity: 0.18 });
+const MAT_DARK    = new THREE.MeshStandardMaterial({ color: "#0d0d0d", roughness: 0.3,  metalness: 0.6 });
 
 /* ── المكتب التنفيذي ─────────────────────────────────────────── */
 function ExecutiveDesk() {
-  // ألوان
-  const wood   = new THREE.MeshStandardMaterial({ color: "#1c0f07", roughness: 0.25, metalness: 0.05 });
-  const woodTop= new THREE.MeshStandardMaterial({ color: "#2b1507", roughness: 0.15, metalness: 0.08 });
-  const chrome = new THREE.MeshStandardMaterial({ color: "#aaaaaa", roughness: 0.05, metalness: 0.98 });
-  const glass  = new THREE.MeshStandardMaterial({ color: "#8ecae6", roughness: 0,    metalness: 0.1,
-                                                   transparent: true, opacity: 0.18 });
-  const dark   = new THREE.MeshStandardMaterial({ color: "#0d0d0d", roughness: 0.3,  metalness: 0.6 });
+  const wood    = MAT_WOOD;
+  const woodTop = MAT_WOODTOP;
+  const chrome  = MAT_CHROME;
+  const glass   = MAT_GLASS;
+  const dark    = MAT_DARK;
 
   return (
     <group>

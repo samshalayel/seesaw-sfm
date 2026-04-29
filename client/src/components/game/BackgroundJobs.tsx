@@ -64,54 +64,55 @@ export function BackgroundJobs() {
 
   return (
     <>
+      {/* زر صغير — أيقونة فقط */}
       <button
         onClick={() => { setIsOpen(!isOpen); setHasNewResults(false); }}
+        title="المهام الخلفية"
         style={{
-          position: "absolute",
-          top: "16px",
-          left: "16px",
-          background: "rgba(15, 15, 25, 0.9)",
-          border: "2px solid #7c4dff",
-          borderRadius: "12px",
-          padding: "8px 16px",
-          color: "white",
-          fontSize: "14px",
-          cursor: "pointer",
-          fontFamily: "Inter, sans-serif",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          zIndex: 90,
-          boxShadow: hasNewResults ? "0 0 15px #7c4dff80" : "none",
-          animation: hasNewResults ? "pulse 1.5s infinite" : "none",
+          position:       "fixed",
+          top:            "16px",
+          left:           "16px",
+          width:          "42px",
+          height:         "42px",
+          background:     isOpen
+            ? "rgba(124,77,255,0.25)"
+            : hasNewResults
+              ? "rgba(124,77,255,0.18)"
+              : "rgba(8,10,18,0.78)",
+          border:         isOpen || hasNewResults
+            ? "2px solid #7c4dff"
+            : "1.5px solid #332255",
+          borderRadius:   "10px",
+          color:          isOpen ? "#c4b5fd" : "#7c4dff",
+          cursor:         "pointer",
+          display:        "flex",
+          flexDirection:  "column",
+          alignItems:     "center",
+          justifyContent: "center",
+          gap:            "2px",
+          lineHeight:     1,
+          zIndex:         90,
+          backdropFilter: "blur(6px)",
+          boxShadow:      hasNewResults ? "0 0 12px #7c4dff80" : isOpen ? "0 0 10px #7c4dff44" : "none",
+          animation:      hasNewResults && !isOpen ? "pulse 1.5s infinite" : "none",
+          transition:     "all 0.15s",
         }}
       >
-        <span style={{ fontSize: "18px" }}>📋</span>
-        <span>المهام الخلفية</span>
-        {runningCount > 0 && (
+        <span style={{ fontSize: "17px", lineHeight: 1 }}>📋</span>
+        {runningCount > 0 ? (
           <span style={{
-            background: "#42a5f5",
-            borderRadius: "50%",
-            width: "20px",
-            height: "20px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "11px",
-            fontWeight: "bold",
-          }}>
-            {runningCount}
-          </span>
+            fontSize: "8px", fontWeight: "bold",
+            background: "#42a5f5", borderRadius: "8px",
+            padding: "0 4px", color: "#fff",
+          }}>{runningCount}</span>
+        ) : (
+          <span style={{ fontSize: "8px", opacity: 0.7 }}>مهام</span>
         )}
-        {hasNewResults && (
+        {hasNewResults && !isOpen && (
           <span style={{
-            background: "#66bb6a",
-            borderRadius: "50%",
-            width: "8px",
-            height: "8px",
-            position: "absolute",
-            top: "6px",
-            right: "6px",
+            position: "absolute", top: "5px", right: "5px",
+            background: "#66bb6a", borderRadius: "50%",
+            width: "7px", height: "7px",
           }} />
         )}
       </button>
@@ -119,8 +120,8 @@ export function BackgroundJobs() {
       {isOpen && (
         <div
           style={{
-            position: "absolute",
-            top: "60px",
+            position: "fixed",
+            top: "66px",
             left: "16px",
             width: "420px",
             maxHeight: "500px",

@@ -232,34 +232,34 @@ function Room({
   return (
     <group>
       {/* Floor */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cx, 0, ROOM_CZ]} receiveShadow>
-        <planeGeometry args={[w, ROOM_D]} />
+      <mesh position={[cx, 0.1, ROOM_CZ]} receiveShadow>
+        <boxGeometry args={[w, 0.18, ROOM_D]} />
         <meshStandardMaterial color={floorColor} roughness={0.85} metalness={0.05} />
       </mesh>
 
       {/* Floor neon border — back + sides */}
-      <mesh position={[cx, 0.012, Z_BACK + 0.2]}>
+      <mesh position={[cx, 0.2, Z_BACK + 0.2]}>
         <boxGeometry args={[w - 0.6, 0.03, 0.05]} />
         <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.5} toneMapped={false} />
       </mesh>
-      <mesh position={[cx - hw + 0.2, 0.012, ROOM_CZ]}>
+      <mesh position={[cx - hw + 0.2, 0.2, ROOM_CZ]}>
         <boxGeometry args={[0.05, 0.03, ROOM_D - 0.6]} />
         <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.5} toneMapped={false} />
       </mesh>
-      <mesh position={[cx + hw - 0.2, 0.012, ROOM_CZ]}>
+      <mesh position={[cx + hw - 0.2, 0.2, ROOM_CZ]}>
         <boxGeometry args={[0.05, 0.03, ROOM_D - 0.6]} />
         <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.5} toneMapped={false} />
       </mesh>
 
       {/* Floor grid */}
       {[-3, 0, 3].map((dz, i) => (
-        <mesh key={`fgz-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[cx, 0.003, ROOM_CZ + dz]}>
+        <mesh key={`fgz-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[cx, 0.2, ROOM_CZ + dz]}>
           <planeGeometry args={[w, 0.04]} />
           <meshStandardMaterial color={dim} emissive={dim} emissiveIntensity={0.3} />
         </mesh>
       ))}
       {[-3, 0, 3].map((dx, i) => (
-        <mesh key={`fgx-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[cx + dx, 0.003, ROOM_CZ]}>
+        <mesh key={`fgx-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[cx + dx, 0.2, ROOM_CZ]}>
           <planeGeometry args={[0.04, ROOM_D]} />
           <meshStandardMaterial color={dim} emissive={dim} emissiveIntensity={0.3} />
         </mesh>

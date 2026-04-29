@@ -49,9 +49,9 @@ async function getClient(roomId?: string) {
   return new Octokit({ auth: accessToken });
 }
 
-export async function getRepos() {
+export async function getRepos(roomId?: string) {
   try {
-    const octokit = await getClient();
+    const octokit = await getClient(roomId);
     const { data } = await octokit.repos.listForAuthenticatedUser({
       sort: "updated",
       per_page: 20,
@@ -70,9 +70,9 @@ export async function getRepos() {
   }
 }
 
-export async function getRepoContents(owner: string, repo: string, path: string = "") {
+export async function getRepoContents(owner: string, repo: string, path: string = "", roomId?: string) {
   try {
-    const octokit = await getClient();
+    const octokit = await getClient(roomId);
     const { data } = await octokit.repos.getContent({ owner, repo, path });
     if (Array.isArray(data)) {
       return data.map((item: any) => ({
@@ -102,10 +102,10 @@ export async function getAuthenticatedUser(roomId?: string) {
   }
 }
 
-export async function createOrUpdateFile(owner: string, repo: string, path: string, content: string, commitMessage: string) {
+export async function createOrUpdateFile(owner: string, repo: string, path: string, content: string, commitMessage: string, roomId?: string, isBase64 = false) {
   try {
-    const octokit = await getClient();
-    const contentBase64 = Buffer.from(content).toString('base64');
+    const octokit = await getClient(roomId);
+    const contentBase64 = isBase64 ? content : Buffer.from(content).toString('base64');
 
     let sha: string | undefined;
     try {
@@ -196,6 +196,37 @@ export async function getWorkflowRunLogs(owner: string, repo: string, runId: num
     }));
   } catch (err: any) {
     throw new Error(`GitHub workflow logs error: ${err.message}`);
+  }
+}
+
+// ── قراءة أحدث ملف مرحلة من GitHub لمشروع معين ────────────────────────────────
+export async function getLatestStageFile(
+  owner: string,
+  repo: string,
+  projectKey: string,
+  stage: string,  // "PD" | "S0" | ...
+  roomId?: string,
+): Promise<{ name: string; content: string } | null> {
+  try {
+    const octokit = await getClient(roomId);
+    const { data } = await octokit.repos.getContent({ owner, repo, path: "" });
+    if (!Array.isArray(data)) return null;
+
+    const prefix = `${projectKey.toUpperCase()}_${stage.toUpperCase()}_`;
+    const matches = (data as any[])
+      .filter(f => f.type === "file" && f.name.startsWith(prefix) && f.name.endsWith(".json"))
+      .sort((a, b) => b.name.localeCompare(a.name)); // أحدث أولاً
+
+    if (matches.length === 0) return null;
+
+    const { data: fileData } = await octokit.repos.getContent({ owner, repo, path: matches[0].name });
+    if ('content' in fileData && fileData.content) {
+      const content = Buffer.from(fileData.content, 'base64').toString('utf-8');
+      return { name: matches[0].name, content };
+    }
+    return null;
+  } catch (_e) {
+    return null;
   }
 }
 

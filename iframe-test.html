@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>iframe Test</title>
+  <style>
+    body { margin: 0; font-family: Arial; background: #1a1a2e; color: white; }
+    h2 { padding: 10px 20px; background: #16213e; margin: 0; }
+    #status { padding: 8px 20px; font-size: 13px; background: #0f3460; }
+    iframe { width: 100%; height: calc(100vh - 80px); border: none; display: block; }
+  </style>
+</head>
+<body>
+  <h2>🧪 iframe Test — seesaw.sillar.us</h2>
+  <div id="status">⏳ جاري التحميل...</div>
+
+  <iframe
+    id="testFrame"
+    src="https://v0-react-flow-builder-5j1971aup-samshalayels-projects.vercel.app/auth/api-login?key=sfm_test_key_12345"
+    allow="storage-access"
+  ></iframe>
+
+  <script>
+    const frame = document.getElementById('testFrame');
+    const status = document.getElementById('status');
+
+    frame.addEventListener('load', () => {
+      try {
+        const url = frame.contentWindow.location.href;
+        if (url.includes('/auth/login') || url.includes('/login')) {
+          status.style.background = '#c0392b';
+          status.textContent = '❌ فشل — تم التحويل لصفحة Login: ' + url;
+        } else {
+          status.style.background = '#1e8449';
+          status.textContent = '✅ نجح — الصفحة الداخلية: ' + url;
+        }
+      } catch (e) {
+        // cross-origin — can't read URL but frame loaded
+        status.style.background = '#d35400';
+        status.textContent = '⚠️ تحميل من domain مختلف — افتح DevTools > Console للتفاصيل';
+      }
+    });
+
+    frame.addEventListener('error', () => {
+      status.style.background = '#c0392b';
+      status.textContent = '❌ خطأ في تحميل الـ iframe';
+    });
+  </script>
+</body>
+</html>

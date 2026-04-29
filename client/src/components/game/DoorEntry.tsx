@@ -36,11 +36,16 @@ export function DoorEntry({ onUnlock }: DoorEntryProps) {
       const data = await res.json();
       if (data.success) {
         if (data.token) setAuthToken(data.token);
+        const role = data.user?.role || data.role || "user";
+        if (role === "admin") {
+          onUnlock({ id: data.roomId || "room-admin", username: data.user.username, roomId: data.roomId || "room-admin", role: "admin" });
+          return;
+        }
         setRoomId(data.roomId);
         setUnlocking(true);
         // بعد animation الباب (1.8s) نفتح الغرفة
         setTimeout(() => {
-          onUnlock({ id: data.roomId, username: data.user.username, roomId: data.roomId });
+          onUnlock({ id: data.roomId, username: data.user.username, roomId: data.roomId, role });
         }, 1800);
       } else {
         setError(data.error || "Authentication failed");

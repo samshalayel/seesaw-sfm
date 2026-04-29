@@ -20,18 +20,18 @@ export function Stage1Room() {
     <group position={[oX, 0, oZ]}>
 
       {/* ── Floor ──────────────────────────────────────────────── */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[roomWidth, roomDepth]} />
+      <mesh position={[0, 0.1, 0]} receiveShadow>
+        <boxGeometry args={[roomWidth, 0.18, roomDepth]} />
         <meshStandardMaterial color={floorColor} roughness={0.6} metalness={0.05} />
       </mesh>
       {([-2, 0, 2] as number[]).map((z, i) => (
-        <mesh key={`fg-z-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, z]}>
+        <mesh key={`fg-z-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, z]}>
           <planeGeometry args={[roomWidth, 0.04]} />
           <meshStandardMaterial color={purple} emissive={purple} emissiveIntensity={0.4} />
         </mesh>
       ))}
       {([-2, 0, 2] as number[]).map((x, i) => (
-        <mesh key={`fg-x-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.003, 0]}>
+        <mesh key={`fg-x-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.2, 0]}>
           <planeGeometry args={[0.04, roomDepth]} />
           <meshStandardMaterial color={purple} emissive={purple} emissiveIntensity={0.4} />
         </mesh>

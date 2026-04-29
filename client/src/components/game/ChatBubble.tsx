@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import React from "react";
 
 export function ChatBubble() {
-  const { isOpen, activeRobotId, messages, isLoading, inputText, setInputText, sendMessage, closeChat, activeProjectKey, setActiveProject, pendingImage, setPendingImage } = useChat();
+  const { isOpen, activeRobotId, messages, isLoading, inputText, setInputText, sendMessage, closeChat, activeProjectKey, setActiveProject, pendingImage, setPendingImage, sessionUsage } = useChat();
   const models = useGame((s) => s.models);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -13,8 +13,17 @@ export function ChatBubble() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [bgSending, setBgSending] = useState(false);
   const [showProjectPanel, setShowProjectPanel] = useState(false);
+  const [showSlotsPanel, setShowSlotsPanel]     = useState(false);
   const [projectInput, setProjectInput] = useState("");
   const [projects, setProjects] = useState<Array<{ id: number; projectKey: string; name: string }>>([]);
+
+  // Pipeline slots state
+  const SLOT_NAMES = ["PD","S0","S1","S2","S3","S4","S5","S6"] as const;
+  type SlotName = typeof SLOT_NAMES[number];
+  const [slots, setSlots] = useState<Record<SlotName, string>>({ PD:"",S0:"",S1:"",S2:"",S3:"",S4:"",S5:"",S6:"" });
+  const [repoFiles, setRepoFiles] = useState<string[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsSaving, setSlotsSaving] = useState<SlotName | null>(null);
   const [size, setSize] = useState({ width: 420, height: 500 });
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -154,6 +163,51 @@ export function ChatBubble() {
     apiFetch("/api/projects").then(r => r.json()).then(setProjects).catch(() => {});
   }, [isOpen, showProjectPanel]);
 
+  // تحميل السلوتات + ملفات الريبو لما تفتح لوحة الملفات
+  useEffect(() => {
+    if (!showSlotsPanel || !activeProjectKey) return;
+    setSlotsLoading(true);
+    Promise.all([
+      apiFetch(`/api/projects/${activeProjectKey}/slots`).then(r => r.json()),
+      apiFetch("/api/github/repos").then(r => r.json()).catch(() => []),
+    ]).then(([slotsData, _repos]) => {
+      // سلوتات من الـ DB
+      const raw = slotsData.slots || {};
+      const filled: Record<SlotName, string> = { PD:"",S0:"",S1:"",S2:"",S3:"",S4:"",S5:"",S6:"" };
+      for (const s of SLOT_NAMES) {
+        filled[s] = raw[s]?.filename || "";
+      }
+      setSlots(filled);
+    }).catch(() => {}).finally(() => setSlotsLoading(false));
+  }, [showSlotsPanel, activeProjectKey]);
+
+  // جلب ملفات مجلد الريبو (لقائمة الاختيار)
+  const loadRepoFiles = async (path = "") => {
+    try {
+      const r = await apiFetch(`/api/github/contents?path=${encodeURIComponent(path)}`);
+      if (!r.ok) return;
+      const data = await r.json();
+      const jsonFiles = Array.isArray(data)
+        ? data.filter((f: any) => f.type === "file" && f.name.endsWith(".json")).map((f: any) => f.name)
+        : [];
+      setRepoFiles(jsonFiles);
+    } catch { }
+  };
+
+  const saveSlot = async (slot: SlotName, filename: string) => {
+    if (!activeProjectKey || !filename.trim()) return;
+    setSlotsSaving(slot);
+    try {
+      await apiFetch(`/api/projects/${activeProjectKey}/slots/${slot}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: filename.trim(), githubPath: filename.trim() }),
+      });
+      setSlots(prev => ({ ...prev, [slot]: filename.trim() }));
+    } catch { }
+    setSlotsSaving(null);
+  };
+
   const handleCreateProject = async () => {
     const key = projectInput.trim().toUpperCase().slice(0, 6);
     if (!key) return;
@@ -171,6 +225,46 @@ export function ChatBubble() {
       setProjects(list);
     }
   };
+
+  // استخراج صور من النص (URLs + markdown images + data URLs)
+  const IMAGE_URL_RE = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?)/gi;
+  const DALLE_URL_RE = /https?:\/\/oaidalleapiprodscus\.blob\.core\.windows\.net\/\S+/gi;
+  const DATA_IMG_RE  = /(data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+)/g;
+
+  function renderContent(content: string) {
+    // جمّع كل الصور المستخرجة مع مواضعها
+    type Segment = { type: "text" | "img"; value: string; alt?: string };
+    const segments: Segment[] = [];
+    const combined = new RegExp(
+      `${IMAGE_URL_RE.source}|${DALLE_URL_RE.source}|${DATA_IMG_RE.source}`,
+      "gi"
+    );
+    let last = 0;
+    let m: RegExpExecArray | null;
+    combined.lastIndex = 0;
+    while ((m = combined.exec(content)) !== null) {
+      if (m.index > last) segments.push({ type: "text", value: content.slice(last, m.index) });
+      const url = m[2] || m[3] || m[0];
+      const alt = m[1] || "";
+      segments.push({ type: "img", value: url.trim(), alt });
+      last = m.index + m[0].length;
+    }
+    if (last < content.length) segments.push({ type: "text", value: content.slice(last) });
+
+    return segments.map((seg, idx) =>
+      seg.type === "img" ? (
+        <img
+          key={idx}
+          src={seg.value}
+          alt={seg.alt || "image"}
+          style={{ maxWidth: "100%", maxHeight: "360px", borderRadius: "10px", objectFit: "contain", display: "block", marginTop: 4 }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+      ) : (
+        <span key={idx}>{seg.value}</span>
+      )
+    );
+  }
 
   if (!isOpen) return null;
 
@@ -274,6 +368,24 @@ export function ChatBubble() {
           >
             {activeProjectKey ? `◈ ${activeProjectKey}` : "+ مشروع"}
           </button>
+          {activeProjectKey && (
+            <button
+              onClick={() => { setShowSlotsPanel(p => !p); setShowProjectPanel(false); if (!showSlotsPanel) loadRepoFiles(); }}
+              title="ملفات المراحل"
+              style={{
+                background: showSlotsPanel ? "#0369a122" : "#1e1e2e",
+                border: `1px solid ${showSlotsPanel ? "#0369a1" : "#444"}`,
+                borderRadius: "8px",
+                padding: "3px 10px",
+                color: showSlotsPanel ? "#38bdf8" : "#666",
+                fontSize: "12px",
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+            >
+              📂 ملفات
+            </button>
+          )}
           <button
             onClick={closeChat}
             style={{ background: "none", border: "none", color: "#888", fontSize: "20px", cursor: "pointer", padding: "0 4px" }}
@@ -350,6 +462,102 @@ export function ChatBubble() {
         </div>
       )}
 
+      {/* Pipeline Slots panel */}
+      {showSlotsPanel && activeProjectKey && (
+        <div style={{
+          background: "#080d1a",
+          borderBottom: "1px solid #1e3a5f",
+          padding: "10px 14px",
+          flexShrink: 0,
+          direction: "rtl",
+          maxHeight: "320px",
+          overflowY: "auto",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "11px", color: "#38bdf8", fontWeight: 600 }}>
+              📂 ملفات المشروع {activeProjectKey} — 8 مراحل
+            </span>
+            <button
+              onClick={() => loadRepoFiles()}
+              style={{ fontSize: "10px", background: "none", border: "1px solid #1e3a5f", borderRadius: "4px", color: "#64748b", cursor: "pointer", padding: "2px 6px" }}
+            >
+              🔄 تحديث
+            </button>
+          </div>
+
+          {slotsLoading ? (
+            <div style={{ fontSize: "12px", color: "#64748b", textAlign: "center", padding: "10px" }}>جاري التحميل...</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+              {SLOT_NAMES.map(slot => (
+                <div key={slot} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  {/* اسم المرحلة */}
+                  <span style={{
+                    minWidth: "28px", fontSize: "11px", fontWeight: 700,
+                    color: slots[slot] ? "#38bdf8" : "#475569",
+                    direction: "ltr",
+                  }}>
+                    {slot}
+                  </span>
+
+                  {/* قائمة الملفات من الريبو */}
+                  {repoFiles.length > 0 ? (
+                    <select
+                      value={slots[slot]}
+                      onChange={e => setSlots(prev => ({ ...prev, [slot]: e.target.value }))}
+                      style={{
+                        flex: 1, background: "#0f172a", border: "1px solid #1e3a5f",
+                        borderRadius: "5px", color: slots[slot] ? "#e2e8f0" : "#475569",
+                        padding: "3px 6px", fontSize: "11px", direction: "ltr",
+                      }}
+                    >
+                      <option value="">(لم يُحدَّد بعد)</option>
+                      {repoFiles.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={slots[slot]}
+                      onChange={e => setSlots(prev => ({ ...prev, [slot]: e.target.value }))}
+                      placeholder="اسم الملف .json"
+                      style={{
+                        flex: 1, background: "#0f172a", border: "1px solid #1e3a5f",
+                        borderRadius: "5px", color: "#e2e8f0", padding: "3px 8px",
+                        fontSize: "11px", direction: "ltr", outline: "none",
+                      }}
+                    />
+                  )}
+
+                  {/* زر حفظ */}
+                  <button
+                    onClick={() => saveSlot(slot, slots[slot])}
+                    disabled={slotsSaving === slot || !slots[slot].trim()}
+                    style={{
+                      background: slots[slot].trim() ? "#0369a1" : "#1e293b",
+                      border: "none", borderRadius: "5px", color: "#fff",
+                      padding: "3px 8px", fontSize: "10px", cursor: slots[slot].trim() ? "pointer" : "not-allowed",
+                      opacity: slotsSaving === slot ? 0.5 : 1,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {slotsSaving === slot ? "⏳" : "✓"}
+                  </button>
+
+                  {/* مؤشر المحفوظ */}
+                  {slots[slot] && slotsSaving !== slot && (
+                    <span style={{ fontSize: "10px", color: "#22c55e" }}>●</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginTop: "8px", fontSize: "10px", color: "#334155", direction: "rtl" }}>
+            💡 اكتب اسم الملف أو اختره من القائمة ثم اضغط ✓ لحفظه في المرحلة
+          </div>
+        </div>
+      )}
+
       {/* Resize handles */}
       <div onMouseDown={(e) => handleMouseDown(e, "e")} style={edgeStyle("ew-resize", { top: 0, right: -4, width: 8, height: "100%" })} />
       <div onMouseDown={(e) => handleMouseDown(e, "w")} style={edgeStyle("ew-resize", { top: 0, left: -4, width: 8, height: "100%" })} />
@@ -414,7 +622,12 @@ export function ChatBubble() {
                 style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "8px", objectFit: "contain" }}
               />
             )}
-            {msg.content && <span>{msg.content}</span>}
+            {msg.content && renderContent(msg.content)}
+            {msg.role === "assistant" && msg.cost !== undefined && (
+              <div style={{ fontSize: "11px", color: "#888", textAlign: "left", marginTop: "4px", direction: "ltr" }}>
+                💵 ${msg.cost < 0.0001 ? "<0.0001" : msg.cost.toFixed(4)} · {((msg.inputTokens || 0) + (msg.outputTokens || 0)).toLocaleString()} tokens
+              </div>
+            )}
           </div>
         ))}
         {isLoading && (
@@ -570,6 +783,21 @@ export function ChatBubble() {
           ارسل
         </button>
       </div>
+      {sessionUsage.cost > 0 && (
+        <div style={{
+          padding: "4px 12px",
+          background: "#111",
+          borderTop: "1px solid #333",
+          fontSize: "11px",
+          color: "#666",
+          display: "flex",
+          justifyContent: "space-between",
+          direction: "ltr",
+        }}>
+          <span>💰 ${sessionUsage.cost.toFixed(4)} · {(sessionUsage.input + sessionUsage.output).toLocaleString()} tokens</span>
+          <span style={{ color: "#555" }}>{sessionUsage.model}</span>
+        </div>
+      )}
     </div>
   );
 }

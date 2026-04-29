@@ -10,6 +10,14 @@ import path from "path";
 import { storage } from "./storage";
 import type { Room } from "@shared/schema";
 
+export interface HumanMember {
+  id:             string;  // auto-generated
+  name:           string;
+  role:           string;
+  joinCode:       string;  // 6-char alphanumeric, auto-generated
+  roomAssignment: string;  // الغرفة التي ينتقل إليها عند الدخول
+}
+
 export interface ModelConfig {
   id: string;
   name: string;
@@ -22,9 +30,20 @@ export interface ModelConfig {
 
 export interface VaultSettings {
   company:      { name: string; logo: string };
-  doors:        { mainCode: string; managerCode: string };
+  loginBg?:     string;
+  doors: {
+    mainCode: string; managerCode: string;
+    stage0Code: string; stage1Code: string;
+    hallCode: string;  hall2Code: string;
+    brACode: string;   brBCode: string; brCCode: string;
+  };
   github:       { token: string; owner: string; repo: string };
   clickup:      { token: string; listId: string; assignee: string };
+  sfm:          { apiKey: string };
+  huggingface?: { token: string };
+  apidog?:      { token: string };
+  figma?:       { token: string };
+  humans:       HumanMember[];
   models:       ModelConfig[];
   hallWorkers:  ModelConfig[];
   defaultModel: string;
@@ -44,11 +63,32 @@ function roomToVault(room: Room, models: ModelConfig[]): VaultSettings {
     if (Array.isArray(parsed)) hallWorkers = parsed;
   } catch { /* ignore */ }
 
+  let stageCodes: Record<string, string> = {};
+  try {
+    stageCodes = JSON.parse((room as any).stageDoorCodesJson || "{}") || {};
+  } catch { /* ignore */ }
+
   return {
     company: { name: room.companyName, logo: room.companyLogo },
-    doors:   { mainCode: room.mainDoorCode, managerCode: room.managerDoorCode },
+    loginBg: room.loginBg || "",
+    doors: {
+      mainCode:    room.mainDoorCode,
+      managerCode: room.managerDoorCode,
+      stage0Code:  stageCodes.stage0  || "0000",
+      stage1Code:  stageCodes.stage1  || "0000",
+      hallCode:    stageCodes.hall    || "0000",
+      hall2Code:   stageCodes.hall2   || "0000",
+      brACode:     stageCodes.brA     || "0000",
+      brBCode:     stageCodes.brB     || "0000",
+      brCCode:     stageCodes.brC     || "0000",
+    },
     github:  { token: room.githubToken, owner: room.githubOwner, repo: room.githubRepo },
     clickup: { token: room.clickupToken, listId: room.clickupListId, assignee: room.clickupAssignee },
+    sfm:         { apiKey: room.sfmApiKey || "" },
+    huggingface: { token: (room as any).huggingfaceToken || "" },
+    apidog:      { token: (room as any).apidogToken || "" },
+    figma:       { token: (room as any).figmaToken  || "" },
+    humans:      (() => { try { return JSON.parse((room as any).humansJson || "[]"); } catch { return []; } })(),
     models:  models.length > 0
       ? models
       : [{ id: "model-default-1", name: "Groq", apiKey: DEFAULT_GROQ_KEY }],
@@ -132,9 +172,21 @@ export async function setVaultSettings(
     update.companyName = settings.company.name || "";
     update.companyLogo = settings.company.logo || "";
   }
+  if (settings.loginBg !== undefined) {
+    update.loginBg = settings.loginBg;
+  }
   if (settings.doors) {
     update.mainDoorCode    = settings.doors.mainCode    || "1977";
     update.managerDoorCode = settings.doors.managerCode || "0000";
+    (update as any).stageDoorCodesJson = JSON.stringify({
+      stage0: settings.doors.stage0Code || "0000",
+      stage1: settings.doors.stage1Code || "0000",
+      hall:   settings.doors.hallCode   || "0000",
+      hall2:  settings.doors.hall2Code  || "0000",
+      brA:    settings.doors.brACode    || "0000",
+      brB:    settings.doors.brBCode    || "0000",
+      brC:    settings.doors.brCCode    || "0000",
+    });
   }
   if (settings.github) {
     update.githubToken = settings.github.token || "";
@@ -146,11 +198,35 @@ export async function setVaultSettings(
     update.clickupListId   = settings.clickup.listId   || "";
     update.clickupAssignee = settings.clickup.assignee || "";
   }
+  if (settings.sfm) {
+    // لا تحفظ القيمة المُقنَّعة "••••••••" — فقط المفتاح الحقيقي
+    if (settings.sfm.apiKey && settings.sfm.apiKey !== "••••••••") {
+      update.sfmApiKey = settings.sfm.apiKey;
+    }
+  }
+  if (settings.huggingface) {
+    if (settings.huggingface.token && settings.huggingface.token !== "••••••••") {
+      (update as any).huggingfaceToken = settings.huggingface.token;
+    }
+  }
+  if (settings.apidog) {
+    if (settings.apidog.token && settings.apidog.token !== "••••••••") {
+      (update as any).apidogToken = settings.apidog.token;
+    }
+  }
+  if (settings.figma) {
+    if (settings.figma.token && settings.figma.token !== "••••••••") {
+      (update as any).figmaToken = settings.figma.token;
+    }
+  }
   if (settings.systemPrompt !== undefined) {
     update.systemPrompt = settings.systemPrompt;
   }
   if (settings.hallWorkers !== undefined) {
     update.hallWorkersJson = JSON.stringify(settings.hallWorkers);
+  }
+  if (settings.humans !== undefined) {
+    (update as any).humansJson = JSON.stringify(settings.humans);
   }
 
   if (Object.keys(update).length > 0) {

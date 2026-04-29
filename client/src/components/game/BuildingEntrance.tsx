@@ -6,8 +6,9 @@
  */
 
 import { useTexture } from "@react-three/drei";
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import * as THREE from "three";
+import { useGame } from "@/lib/stores/useGame";
 
 const FACADE_WIDTH    = 22;
 const FACADE_HEIGHT   = 11;
@@ -16,9 +17,25 @@ const FACADE_Z        = 8.3;
 const NEON_BLUE       = "#00aaff";
 
 export function BuildingEntrance() {
-  const facadeTex = useTexture("/images/sillar-entrance.png");
-  facadeTex.wrapS = THREE.ClampToEdgeWrapping;
-  facadeTex.wrapT = THREE.ClampToEdgeWrapping;
+  const defaultTex = useTexture("/images/sillar-entrance.png");
+  defaultTex.wrapS = THREE.ClampToEdgeWrapping;
+  defaultTex.wrapT = THREE.ClampToEdgeWrapping;
+
+  const entranceBg = useGame((s) => s.entranceBg);
+  const [customTex, setCustomTex] = useState<THREE.Texture | null>(null);
+
+  // يُعيد تحميل الـ texture كلما تغيّرت الصورة المخصصة
+  useEffect(() => {
+    if (!entranceBg) { setCustomTex(null); return; }
+    const loader = new THREE.TextureLoader();
+    loader.load(entranceBg, (tex) => {
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.needsUpdate = true;
+      setCustomTex(tex);
+    });
+  }, [entranceBg]);
+
+  const facadeTex = customTex || defaultTex;
 
   const stoneTex = useTexture("/images/box.png");
 

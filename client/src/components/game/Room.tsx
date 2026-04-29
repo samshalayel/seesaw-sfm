@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { Html } from "@react-three/drei";
-import { useGame } from "@/lib/stores/useGame";
+import { useGame, getMeetingLayout } from "@/lib/stores/useGame";
 import { SillarStagePanel, RoomStageSign } from "./SillarStagePanel";
 
 export function Room() {
@@ -9,16 +9,26 @@ export function Room() {
       {/* ══════════════════════════════════
           FLOOR & CEILING
       ══════════════════════════════════ */}
-      {/* Floor - dark stone */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[16, 16]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.95} metalness={0.05} />
+      {/* Floor - main hall (box يغطي أرضية المدينة) */}
+      <mesh position={[0, -0.09, 0]} receiveShadow>
+        <boxGeometry args={[16, 0.18, 16]} />
+        <meshStandardMaterial color="#1e2235" roughness={0.75} metalness={0.12} />
       </mesh>
-      {/* Center carpet - meeting area */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0.5, 0.005, 1.5]}>
-        <planeGeometry args={[8, 6]} />
-        <meshStandardMaterial color="#0a1628" roughness={0.98} />
-      </mesh>
+      {/* Tile grid lines X */}
+      {([-6, -4, -2, 0, 2, 4, 6] as number[]).map((x, i) => (
+        <mesh key={`tgx-${i}`} position={[x, 0.205, 0]}>
+          <boxGeometry args={[0.05, 0.01, 16]} />
+          <meshStandardMaterial color="#4fc3f7" emissive="#4fc3f7" emissiveIntensity={0.5} />
+        </mesh>
+      ))}
+      {/* Tile grid lines Z */}
+      {([-6, -4, -2, 0, 2, 4, 6] as number[]).map((z, i) => (
+        <mesh key={`tgz-${i}`} position={[0, 0.205, z]}>
+          <boxGeometry args={[16, 0.01, 0.05]} />
+          <meshStandardMaterial color="#4fc3f7" emissive="#4fc3f7" emissiveIntensity={0.5} />
+        </mesh>
+      ))}
+
       {/* Ceiling — glass (BackSide = only visible from above, not from inside) */}
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 8, 0]}>
         <planeGeometry args={[16, 16]} />
@@ -48,11 +58,7 @@ export function Room() {
       {/* ══════════════════════════════════
           WALLS
       ══════════════════════════════════ */}
-      {/* Back wall - dark GitHub */}
-      <mesh position={[0, 4, -7.99]} receiveShadow>
-        <planeGeometry args={[16, 8]} />
-        <meshStandardMaterial color="#0d1117" side={THREE.DoubleSide} roughness={0.8} />
-      </mesh>
+      {/* Back wall removed — gap filler in ProductionHall serves as shared wall */}
       {/* Left wall — 3 sections with doorway gap (z: -4.5→-1.5) matching Stage0Door */}
       <mesh position={[-7.99, 4, -6.25]} rotation={[0, Math.PI / 2, 0]} receiveShadow>
         <planeGeometry args={[3.5, 8]} />
@@ -88,7 +94,7 @@ export function Room() {
       {/* ══════════════════════════════════
           NEON BASEBOARDS (green)
       ══════════════════════════════════ */}
-      <mesh position={[0, 0.06, -7.95]}>
+      <mesh position={[0, 0.06, -6.85]}>
         <boxGeometry args={[16, 0.1, 0.06]} />
         <meshStandardMaterial color="#00ff88" emissive="#00ff88" emissiveIntensity={2} />
       </mesh>
@@ -161,9 +167,8 @@ export function Room() {
       ══════════════════════════════════ */}
       <CoffeeCorner position={[6.2, 0, 5.5]} />
 
-      {/* ── Sillar Stage 0 Panel + sign — back wall (z=-7.99) ─────── */}
-      <SillarStagePanel position={[3.5, 4.0, -7.7]} stageNum={0} />
-      <RoomStageSign position={[-3.5, 6.3, -7.96]} stageNum={0} />
+      {/* ── Sillar Stage 0 Panel — back wall (z=-7.99) ─────── */}
+      <SillarStagePanel position={[3.5, 4.0, -6.65]} stageNum={0} />
     </group>
   );
 }
@@ -338,43 +343,42 @@ function WorkStation({ position }: { position: [number, number, number] }) {
 }
 
 /* ════════════════════════════════════════════
-   MEETING TABLE + CHAIRS
+   MEETING TABLE + CHAIRS — ديناميكية حسب عدد الروبوتات
 ════════════════════════════════════════════ */
 function MeetingTable({ position }: { position: [number, number, number] }) {
-  const chairPositions: [number, number, number][] = [
-    [-1.6, 0, -1.4], [-0.55, 0, -1.4], [0.55, 0, -1.4], [1.6, 0, -1.4],
-    [-1.6, 0,  1.4], [-0.55, 0,  1.4], [0.55, 0,  1.4], [1.6, 0,  1.4],
-  ];
+  const models      = useGame((s) => s.models);
+  const hallWorkers = useGame((s) => s.hallWorkers);
+  const { tableW, legX, relChairs } = getMeetingLayout(models.length + hallWorkers.length);
 
   return (
     <group position={position}>
       {/* Table top */}
       <mesh position={[0, 0.82, 0]} castShadow>
-        <boxGeometry args={[4.2, 0.1, 2.0]} />
+        <boxGeometry args={[tableW, 0.1, 2.0]} />
         <meshStandardMaterial color="#1a1a1a" roughness={0.15} metalness={0.5} />
       </mesh>
-      {/* Neon edges */}
-      <mesh position={[0, 0.78, 1.01]}>
-        <boxGeometry args={[4.2, 0.04, 0.04]} />
+      {/* Neon edges — تتمدد مع الطاولة */}
+      <mesh position={[0, 0.78,  1.01]}>
+        <boxGeometry args={[tableW, 0.04, 0.04]} />
         <meshStandardMaterial color="#00ff88" emissive="#00ff88" emissiveIntensity={2} />
       </mesh>
       <mesh position={[0, 0.78, -1.01]}>
-        <boxGeometry args={[4.2, 0.04, 0.04]} />
+        <boxGeometry args={[tableW, 0.04, 0.04]} />
         <meshStandardMaterial color="#00ff88" emissive="#00ff88" emissiveIntensity={2} />
       </mesh>
-      {/* Center leg (single pedestal style - 2 legs) */}
-      {([-1.6, 1.6] as number[]).map((x, i) => (
+      {/* الأرجل — تتحرك مع الحواف */}
+      {([-legX, legX] as number[]).map((x, i) => (
         <mesh key={i} position={[x, 0.41, 0]} castShadow>
           <boxGeometry args={[0.1, 0.82, 0.1]} />
           <meshStandardMaterial color="#2d2d2d" roughness={0.3} metalness={0.8} />
         </mesh>
       ))}
-      {/* Chairs */}
-      {chairPositions.map((p, i) => (
-        <BlockChair key={i} position={p} rotation={[0, i < 4 ? 0 : Math.PI, 0]} />
+      {/* الكراسي — تتولد حسب عدد الروبوتات */}
+      {relChairs.map((c, i) => (
+        <BlockChair key={i} position={c.pos} rotation={c.rot} />
       ))}
       {/* Table ambient */}
-      <pointLight position={[0, 1.5, 0]} intensity={0.4} color="#00ff88" distance={4} />
+      <pointLight position={[0, 1.5, 0]} intensity={0.4} color="#00ff88" distance={Math.max(4, tableW)} />
     </group>
   );
 }

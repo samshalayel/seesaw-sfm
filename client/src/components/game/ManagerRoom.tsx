@@ -1,5 +1,9 @@
 import * as THREE from "three";
-import { useTexture } from "@react-three/drei";
+import { useRef, useState, useMemo } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
+import { useTexture, Html } from "@react-three/drei";
+import { useGame } from "@/lib/stores/useGame";
 
 export function ManagerRoom() {
   const woodTexture = useTexture("/textures/wood.jpg");
@@ -22,8 +26,8 @@ export function ManagerRoom() {
 
   return (
     <group position={[offsetX, 0, offsetZ]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[roomWidth, roomDepth]} />
+      <mesh position={[0, 0.1, 0]} receiveShadow>
+        <boxGeometry args={[roomWidth, 0.18, roomDepth]} />
         <meshStandardMaterial map={woodTexture} color={floorTint} roughness={0.3} metalness={0.1} />
       </mesh>
 
@@ -394,8 +398,62 @@ function VaultSafe({ position }: { position: [number, number, number] }) {
   const metalColor = "#c4a44a";
   const darkMetal = "#1a1a28";
 
+  const groupRef    = useRef<THREE.Group>(null);
+  const [isNear, setIsNear] = useState(false);
+  const { camera }  = useThree();
+  const worldPos    = useMemo(() => new THREE.Vector3(), []);
+  const vaultOpen   = useGame((s) => s.vaultOpen);
+  const isGuest     = useGame((s) => s.isGuest);
+
+  useFrame(() => {
+    if (!groupRef.current || isGuest) return;
+    groupRef.current.getWorldPosition(worldPos);
+    const dist = camera.position.distanceTo(worldPos);
+    const near = dist < 7;
+    setIsNear(prev => prev !== near ? near : prev);
+  });
+
   return (
-    <group position={position}>
+    <group ref={groupRef} position={position}>
+      {/* ── Proximity hint — اضغط F لفتح الخزنة ── */}
+      {isNear && !vaultOpen && (
+        <Html
+          position={[0, 3.0, 0.6]}
+          center
+          distanceFactor={6}
+          style={{ pointerEvents: "none", userSelect: "none" }}
+        >
+          <div style={{
+            background: "rgba(10,14,22,0.92)",
+            border: "1px solid rgba(196,164,74,0.5)",
+            borderRadius: "8px",
+            padding: "8px 16px",
+            display: "flex", alignItems: "center", gap: "10px",
+            boxShadow: "0 0 20px rgba(196,164,74,0.15)",
+            backdropFilter: "blur(6px)",
+            whiteSpace: "nowrap",
+          }}>
+            <div style={{
+              background: "rgba(196,164,74,0.18)",
+              border: "1px solid rgba(196,164,74,0.6)",
+              borderRadius: "5px",
+              padding: "2px 8px",
+              color: "#c4a44a",
+              fontSize: "13px",
+              fontFamily: "monospace",
+              fontWeight: "bold",
+              letterSpacing: "1px",
+            }}>F</div>
+            <div style={{
+              color: "#e8d9a0",
+              fontSize: "12px",
+              fontFamily: "Inter, sans-serif",
+              direction: "rtl",
+            }}>فتح الخزنة</div>
+          </div>
+        </Html>
+      )}
+
       <mesh position={[0, 1.0, 0]} castShadow>
         <boxGeometry args={[1.2, 2.0, 0.9]} />
         <meshStandardMaterial color={bodyColor} roughness={0.2} metalness={0.6} />

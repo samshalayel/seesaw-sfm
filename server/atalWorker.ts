@@ -9,27 +9,29 @@ import { createOrUpdateFile } from "./github";
 import { getVaultSettings, getModels, getHallWorkers } from "./vaultStore";
 
 export interface AtalFile {
-  id:      string;
-  roomId:  string;
-  path:    string;
-  content: string;
-  addedAt: number;
-  status:  "pending" | "uploading" | "done" | "error";
-  error?:  string;
+  id:       string;
+  roomId:   string;
+  path:     string;
+  content:  string;
+  isBase64?: boolean; // true = content is already base64 (binary files like images)
+  addedAt:  number;
+  status:   "pending" | "uploading" | "done" | "error";
+  error?:   string;
 }
 
 // ── Queue ─────────────────────────────────────────────────────────────────────
 const queue: AtalFile[] = [];
 const MAX_QUEUE = 200;
 
-export function atalEnqueue(roomId: string, path: string, content: string): AtalFile {
+export function atalEnqueue(roomId: string, path: string, content: string, isBase64 = false): AtalFile {
   const file: AtalFile = {
-    id:      Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    id:       Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     roomId,
-    path:    path.trim().replace(/^\/+/, ""),
+    path:     path.trim().replace(/^\/+/, ""),
     content,
-    addedAt: Date.now(),
-    status:  "pending",
+    isBase64,
+    addedAt:  Date.now(),
+    status:   "pending",
   };
   queue.unshift(file);
   if (queue.length > MAX_QUEUE) queue.splice(MAX_QUEUE);
@@ -39,6 +41,19 @@ export function atalEnqueue(roomId: string, path: string, content: string): Atal
 
 export function atalGetQueue(roomId?: string): AtalFile[] {
   return roomId ? queue.filter(f => f.roomId === roomId) : [...queue];
+}
+
+export function atalRetryErrors(roomId: string) {
+  let count = 0;
+  queue.forEach(f => {
+    if (f.roomId === roomId && f.status === "error") {
+      f.status = "pending";
+      f.error  = undefined;
+      count++;
+    }
+  });
+  console.log(`[عتال] 🔄 retrying ${count} errored files (room: ${roomId})`);
+  processNext();
 }
 
 export function atalClearDone(roomId: string) {
@@ -136,69 +151,78 @@ async function processNext() {
     // ابحث عن روبوت العتال
     const atalBot = await findAtalRobot(file.roomId);
 
+    // ── محاولة استخدام روبوت العتال (اختياري) ────────────────────────────
+    let usedRobot = false;
     if (atalBot && atalBot.apiKey) {
-      // ── استخدم موديل العتال المعرّف ─────────────────────────────────────
-      console.log(`[عتال] 🤖 using robot: ${atalBot.alias || atalBot.name} (${atalBot.name})`);
-      const baseURL  = getBaseURL(atalBot.name);
-      const modelId  = atalBot.modelId?.trim() || getDefaultModelId(atalBot.name);
-      const client   = new OpenAI({ apiKey: atalBot.apiKey, ...(baseURL ? { baseURL } : {}) });
+      try {
+        console.log(`[عتال] 🤖 using robot: ${atalBot.alias || atalBot.name} (${atalBot.name})`);
+        const baseURL  = getBaseURL(atalBot.name);
+        const modelId  = atalBot.modelId?.trim() || getDefaultModelId(atalBot.name);
+        const client   = new OpenAI({ apiKey: atalBot.apiKey, ...(baseURL ? { baseURL } : {}) });
 
-      const prompt =
-        `ارفع الملف التالي على GitHub فوراً بدون أي نص إضافي:\n` +
-        `- المالك: ${owner}\n- الريبو: ${repo}\n` +
-        `- المسار: ${file.path}\n- المحتوى:\n${file.content}\n` +
-        `استخدم create_or_update_file الآن.`;
+        const prompt =
+          `ارفع الملف التالي على GitHub فوراً بدون أي نص إضافي:\n` +
+          `- المالك: ${owner}\n- الريبو: ${repo}\n` +
+          `- المسار: ${file.path}\n- المحتوى:\n${file.content}\n` +
+          `استخدم create_or_update_file الآن.`;
 
-      const tool: OpenAI.Chat.Completions.ChatCompletionTool = {
-        type: "function",
-        function: {
-          name: "create_or_update_file",
-          description: "Creates or updates a file in a GitHub repository",
-          parameters: {
-            type: "object",
-            properties: {
-              owner:          { type: "string" },
-              repo:           { type: "string" },
-              path:           { type: "string" },
-              content:        { type: "string" },
-              commit_message: { type: "string" },
+        const tool: OpenAI.Chat.Completions.ChatCompletionTool = {
+          type: "function",
+          function: {
+            name: "create_or_update_file",
+            description: "Creates or updates a file in a GitHub repository",
+            parameters: {
+              type: "object",
+              properties: {
+                owner:          { type: "string" },
+                repo:           { type: "string" },
+                path:           { type: "string" },
+                content:        { type: "string" },
+                commit_message: { type: "string" },
+              },
+              required: ["owner", "repo", "path", "content", "commit_message"],
             },
-            required: ["owner", "repo", "path", "content", "commit_message"],
           },
-        },
-      };
+        };
 
-      const response = await (client.chat.completions.create as any)({
-        model: modelId,
-        messages: [
-          ...(atalBot.systemPrompt ? [{ role: "system" as const, content: atalBot.systemPrompt }] : []),
-          { role: "user" as const, content: prompt },
-        ],
-        tools: [tool],
-        max_tokens: 1024,
-      });
+        const response = await (client.chat.completions.create as any)({
+          model: modelId,
+          messages: [
+            ...(atalBot.systemPrompt ? [{ role: "system" as const, content: atalBot.systemPrompt }] : []),
+            { role: "user" as const, content: prompt },
+          ],
+          tools: [tool],
+          max_tokens: 1024,
+        });
 
-      const choice = response.choices[0];
-      if (choice.message.tool_calls?.length) {
-        const tc   = choice.message.tool_calls[0];
-        const args = JSON.parse(tc.function.arguments);
-        await createOrUpdateFile(
-          args.owner || owner,
-          args.repo  || repo,
-          args.path  || file.path,
-          file.content,
-          args.commit_message || `[عتال] auto-upload: ${file.path}`
-        );
-        console.log(`[عتال] ✅ robot uploaded: ${file.path}`);
-      } else {
-        // الموديل ما استخدم الـ tool — نرفع مباشرة كـ fallback
-        console.warn(`[عتال] ⚠️ robot didn't use tool, falling back to direct upload`);
-        await createOrUpdateFile(owner, repo, file.path, file.content, `[عتال] auto-upload: ${file.path}`);
+        const choice = response.choices[0];
+        if (choice.message.tool_calls?.length) {
+          const tc   = choice.message.tool_calls[0];
+          const args = JSON.parse(tc.function.arguments);
+          await createOrUpdateFile(
+            args.owner || owner,
+            args.repo  || repo,
+            args.path  || file.path,
+            file.content,
+            args.commit_message || `[عتال] auto-upload: ${file.path}`,
+            file.roomId,
+            file.isBase64
+          );
+          console.log(`[عتال] ✅ robot uploaded: ${file.path}`);
+        } else {
+          console.warn(`[عتال] ⚠️ robot didn't use tool, falling back to direct upload`);
+          await createOrUpdateFile(owner, repo, file.path, file.content, `[عتال] auto-upload: ${file.path}`, file.roomId, file.isBase64);
+        }
+        usedRobot = true;
+      } catch (robotErr: any) {
+        console.warn(`[عتال] ⚠️ robot failed (${robotErr.message}), falling back to direct upload`);
       }
-    } else {
-      // ── لا يوجد روبوت عتال — رفع مباشر ─────────────────────────────────
-      console.log(`[عتال] 📁 no atal robot found, direct upload`);
-      await createOrUpdateFile(owner, repo, file.path, file.content, `[عتال] auto-upload: ${file.path}`);
+    }
+
+    // ── رفع مباشر (fallback أو لا يوجد روبوت) ───────────────────────────
+    if (!usedRobot) {
+      console.log(`[عتال] 📁 direct upload: ${file.path}`);
+      await createOrUpdateFile(owner, repo, file.path, file.content, `[عتال] auto-upload: ${file.path}`, file.roomId, file.isBase64);
     }
 
     file.status = "done";
