@@ -126,10 +126,16 @@ INSTRUCTIONS:
 IMPORTANT: You MUST update the task status to "${config.doneStatus}" when done. The task ID is: ${task.id}`;
 
   let githubUser = "";
-  try { githubUser = await getAuthenticatedUser(); } catch (_e) {}
+  let githubRepos: any[] = [];
+  try { githubUser = await getAuthenticatedUser(triggerRoomId); } catch (_e) {}
+  try { githubRepos = await getRepos(triggerRoomId); } catch (_e) {}
+
+  const repoLine = githubRepos.length > 0
+    ? `GitHub repos available: ${githubRepos.map((r: any) => `${r.owner?.login || githubUser}/${r.name}`).join(", ")}`
+    : (githubUser ? `GitHub user: ${githubUser} (use get_github_repos to list repos)` : "GitHub: not connected");
 
   const systemPrompt = `You are sillar-model, an autonomous AI agent. You execute ClickUp tasks automatically. Use all available tools to complete tasks. Always respond in Arabic.
-${githubUser ? `GitHub username: ${githubUser}` : ""}
+${repoLine}
 
 Available tools: get_clickup_tasks, get_workspace_structure, get_workspace_members, search_clickup_tasks, get_task_details, update_clickup_task, create_clickup_task, get_github_repos, get_repo_contents, create_or_update_file`;
 
