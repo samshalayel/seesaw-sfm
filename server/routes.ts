@@ -2526,9 +2526,10 @@ export async function registerRoutes(
 
   app.post("/api/auto-trigger/start", async (req, res) => {
     try {
+      const roomId = getRoomId(req);
       const { userId, intervalMinutes, robotId, watchStatuses, doneStatus } = req.body;
       if (!userId) return res.status(400).json({ error: "userId is required" });
-      startAutoTrigger(userId, intervalMinutes, robotId, watchStatuses, doneStatus);
+      startAutoTrigger(userId, intervalMinutes, robotId, watchStatuses, doneStatus, roomId);
       res.json({ success: true, config: getAutoTriggerConfig() });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

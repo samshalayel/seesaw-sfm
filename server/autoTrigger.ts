@@ -37,6 +37,9 @@ const config: AutoTriggerConfig = {
   doneStatus: "complete",
 };
 
+// roomId مرتبط بالغرفة التي شغّلت المراقب
+let triggerRoomId: string | undefined = undefined;
+
 const processedTaskIds: Set<string> = new Set();
 const triggerLogs: TriggerLog[] = [];
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -69,22 +72,22 @@ const anthropicTools: Anthropic.Tool[] = toolDefinitions.map(t => ({
 async function executeToolCall(name: string, args: any): Promise<string> {
   try {
     switch (name) {
-      case "get_clickup_tasks": return await getClickUpSummary();
-      case "get_workspace_structure": return await getFullWorkspaceStructure();
-      case "get_workspace_members": return JSON.stringify(await getWorkspaceMembers(), null, 2);
-      case "search_clickup_tasks": return JSON.stringify(await searchTasksByName(args.query), null, 2);
-      case "get_task_details": return JSON.stringify(await getTask(args.task_id), null, 2);
+      case "get_clickup_tasks": return await getClickUpSummary(triggerRoomId);
+      case "get_workspace_structure": return await getFullWorkspaceStructure(triggerRoomId);
+      case "get_workspace_members": return JSON.stringify(await getWorkspaceMembers(triggerRoomId), null, 2);
+      case "search_clickup_tasks": return JSON.stringify(await searchTasksByName(args.query, triggerRoomId), null, 2);
+      case "get_task_details": return JSON.stringify(await getTask(args.task_id, triggerRoomId), null, 2);
       case "update_clickup_task":
         return JSON.stringify(await updateTask(args.task_id, {
           name: args.name, description: args.description, status: args.status,
           priority: args.priority, assignees_add: args.assignees_add, assignees_rem: args.assignees_rem,
-        }), null, 2);
+        }, triggerRoomId), null, 2);
       case "create_clickup_task":
         return JSON.stringify(await createTask(args.list_id, {
           name: args.name, description: args.description, status: args.status,
           priority: args.priority, assignees: args.assignees,
-        }), null, 2);
-      case "get_github_repos": return JSON.stringify(await getRepos(), null, 2);
+        }, triggerRoomId), null, 2);
+      case "get_github_repos": return JSON.stringify(await getRepos(triggerRoomId), null, 2);
       case "get_repo_contents": return JSON.stringify(await getRepoContents(args.owner, args.repo, args.path || ""), null, 2);
       case "create_or_update_file":
         return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message), null, 2);
@@ -222,10 +225,10 @@ async function scanAndProcess() {
   if (isScanning || !config.enabled || !config.watchUserId) return;
   isScanning = true;
 
-  console.log(`[AutoTrigger] Scanning ClickUp for tasks assigned to user ${config.watchUserId}...`);
+  console.log(`[AutoTrigger] Scanning ClickUp for tasks assigned to user ${config.watchUserId} (room: ${triggerRoomId})...`);
 
   try {
-    const allTasks = await getAllTasksRaw();
+    const allTasks = await getAllTasksRaw(triggerRoomId);
     const matchingTasks = allTasks.filter(t => {
       const isAssigned = t.assignees.some((a: any) => a.id === config.watchUserId);
       const statusMatch = config.watchStatuses.some(s => t.status?.toLowerCase() === s.toLowerCase());
@@ -265,12 +268,13 @@ async function scanAndProcess() {
   isScanning = false;
 }
 
-export function startAutoTrigger(userId: number, intervalMinutes?: number, robotId?: string, watchStatuses?: string[], doneStatus?: string) {
+export function startAutoTrigger(userId: number, intervalMinutes?: number, robotId?: string, watchStatuses?: string[], doneStatus?: string, roomId?: string) {
   config.watchUserId = userId;
   if (intervalMinutes) config.intervalMinutes = intervalMinutes;
   if (robotId) config.robotId = robotId;
   if (watchStatuses) config.watchStatuses = watchStatuses;
   if (doneStatus) config.doneStatus = doneStatus;
+  if (roomId) triggerRoomId = roomId;
   config.enabled = true;
 
   if (intervalHandle) {
