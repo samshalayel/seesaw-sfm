@@ -437,14 +437,18 @@ export function TopRightPanel() {
                   style={{ width: "70px", background: "#0d1117", border: "1px solid #333", borderRadius: "7px", padding: "6px 10px", color: "white", fontSize: "12px", marginBottom: "8px" }}
                 />
                 <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                  {(["robot-1", "robot-2"] as const).map((r, i) => (
-                    <button key={r} onClick={() => setSelRobot(r)} style={{
+                  {([
+                    { id: "robot-1", label: "GPT-4o",     color: "#4fc3f7" },
+                    { id: "robot-2", label: "Claude API",  color: "#66bb6a" },
+                    { id: "robot-3", label: "Claude CLI 🆓", color: "#c084fc" },
+                  ] as const).map(r => (
+                    <button key={r.id} onClick={() => setSelRobot(r.id)} style={{
                       flex: 1, padding: "6px", borderRadius: "7px", cursor: "pointer",
-                      border: selRobot === r ? `2px solid ${i === 0 ? "#4fc3f7" : "#66bb6a"}` : "1px solid #333",
-                      background: selRobot === r ? `${i === 0 ? "#4fc3f720" : "#66bb6a20"}` : "#0d1117",
-                      color: "white", fontSize: "11px",
+                      border: selRobot === r.id ? `2px solid ${r.color}` : "1px solid #333",
+                      background: selRobot === r.id ? `${r.color}20` : "#0d1117",
+                      color: selRobot === r.id ? r.color : "#aaa", fontSize: "10px",
                     }}>
-                      {i === 0 ? "GPT-4o" : "Claude"}
+                      {r.label}
                     </button>
                   ))}
                 </div>
@@ -464,7 +468,10 @@ export function TopRightPanel() {
                     يراقب: {(Array.isArray(members) ? members : []).find(m => m.id === config?.watchUserId)?.username || config?.watchUserId}
                   </div>
                   <div style={{ color: "#aaa", fontSize: "11px" }}>
-                    كل {config?.intervalMinutes} دقائق · {config?.robotId === "robot-1" ? "GPT-4o" : "Claude"}
+                    كل {config?.intervalMinutes} دقائق · {
+                      config?.robotId === "robot-1" ? "GPT-4o" :
+                      config?.robotId === "robot-3" ? "Claude CLI 🆓" : "Claude API"
+                    }
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>

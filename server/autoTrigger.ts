@@ -1,8 +1,10 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { spawn } from "child_process";
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
+import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo } from "./vaultStore";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -102,6 +104,85 @@ function generateId(): string {
   return "trig_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
 }
 
+// ─── Robot-3: Claude CLI (uses claude.ai subscription, zero API tokens) ───────
+async function processTaskWithCLI(task: any, log: TriggerLog): Promise<void> {
+  const clickupToken = await getClickUpToken(triggerRoomId);
+  const githubToken  = await getGitHubToken(triggerRoomId);
+  const githubOwner  = await getGitHubOwner(triggerRoomId);
+  const githubRepo   = await getGitHubRepo(triggerRoomId);
+
+  const prompt = `أنت مطور ذكاء اصطناعي مستقل في شركة Sillar Digital Production.
+لديك مهمة من ClickUp يجب تنفيذها الآن.
+
+═══════════════ تفاصيل المهمة ═══════════════
+الاسم: ${task.name}
+الوصف: ${task.description || "لا يوجد وصف"}
+المعرف: ${task.id}
+المساحة: ${task.space}
+القائمة: ${task.list}
+═══════════════════════════════════════════
+
+بيانات API:
+CLICKUP_TOKEN=${clickupToken}
+GITHUB_TOKEN=${githubToken}
+GITHUB_OWNER=${githubOwner}
+GITHUB_REPO=${githubRepo}
+
+كيفية استخدام ClickUp API (bash/curl):
+  - جلب تفاصيل مهمة:  curl -H "Authorization: CLICKUP_TOKEN" "https://api.clickup.com/api/v2/task/TASK_ID"
+  - تحديث حالة:        curl -X PUT "https://api.clickup.com/api/v2/task/TASK_ID" -H "Authorization: CLICKUP_TOKEN" -H "Content-Type: application/json" -d '{"status":"complete"}'
+  - جلب ملف GitHub:    curl -H "Authorization: token GITHUB_TOKEN" "https://api.github.com/repos/OWNER/REPO/contents/PATH"
+  - إنشاء/تعديل ملف:   curl -X PUT "https://api.github.com/repos/OWNER/REPO/contents/PATH" -H "Authorization: token GITHUB_TOKEN" -H "Content-Type: application/json" -d '{"message":"commit msg","content":"BASE64_CONTENT"}'
+
+التعليمات:
+1. افهم المهمة جيداً من الاسم والوصف
+2. نفّذها فعلاً باستخدام bash وcurl
+3. إذا تطلبت ملفات في GitHub، أنشئها أو عدّلها (الـ content يجب أن يكون base64)
+4. بعد الانتهاء من كل الشغل، حدّث حالة المهمة إلى "complete" في ClickUp
+5. قدّم ملخصاً بالعربية عن كل ما نفذته
+
+مهم جداً: نفّذ الأوامر فعلاً عبر bash، لا تكتفِ بالشرح.`;
+
+  console.log(`[AutoTrigger CLI ${log.id}] Spawning claude CLI for task: ${task.name}`);
+
+  return new Promise<void>((resolve) => {
+    const proc = spawn("claude", ["-p", prompt, "--dangerously-skip-permissions"], {
+      shell: true,
+      env: { ...process.env },
+      cwd: process.cwd(),
+    });
+
+    let fullOutput = "";
+
+    proc.stdout.on("data", (data: Buffer) => {
+      const text = data.toString();
+      fullOutput += text;
+      log.result = fullOutput;
+    });
+
+    proc.stderr.on("data", (data: Buffer) => {
+      console.error(`[AutoTrigger CLI ${log.id}]`, data.toString().trim());
+    });
+
+    proc.on("close", (code) => {
+      log.status = code === 0 ? "completed" : "failed";
+      log.completedAt = Date.now();
+      if (code !== 0) log.error = `claude CLI exited with code ${code}`;
+      console.log(`[AutoTrigger CLI ${log.id}] Done (exit ${code})`);
+      resolve();
+    });
+
+    proc.on("error", (err: Error) => {
+      log.status = "failed";
+      log.error = `Spawn error: ${err.message} — هل claude CLI مثبت؟`;
+      log.completedAt = Date.now();
+      console.error(`[AutoTrigger CLI ${log.id}] Spawn error:`, err.message);
+      resolve();
+    });
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function processTaskWithAI(task: any, log: TriggerLog) {
   const taskPrompt = `You are an autonomous AI developer at Sillar Digital Production. A ClickUp task has been assigned and you must execute it.
 
@@ -127,7 +208,7 @@ CRITICAL RULES:
 - Do NOT mark the task as done before completing the actual work.
 - If creating a GitHub file, you MUST call create_or_update_file before calling update_clickup_task.
 - Never say "I will do X" without actually calling the tool to do X.
-- The task ID is: ${task.id}
+- The task ID is: ${task.id}`;
 
   let githubUser = "";
   let githubRepos: any[] = [];
@@ -150,6 +231,12 @@ WORKFLOW FOR GITHUB FILE TASKS:
 You must actually execute tool calls — do not describe what you will do, just do it.`;
 
   try {
+    // robot-3: Claude CLI — uses claude.ai subscription (zero API tokens)
+    if (config.robotId === "robot-3") {
+      await processTaskWithCLI(task, log);
+      return;
+    }
+
     if (config.robotId === "robot-2") {
       let messages: Anthropic.MessageParam[] = [{ role: "user", content: taskPrompt }];
       let fullResult = "";
