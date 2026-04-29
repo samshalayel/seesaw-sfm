@@ -3062,9 +3062,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/clickup/members", async (_req, res) => {
+  app.get("/api/clickup/members", async (req, res) => {
     try {
-      const members = await getWorkspaceMembers();
+      const roomId = getRoomId(req);
+      const members = await getWorkspaceMembers(roomId);
       res.json(members);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
