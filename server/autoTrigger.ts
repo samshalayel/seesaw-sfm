@@ -88,9 +88,9 @@ async function executeToolCall(name: string, args: any): Promise<string> {
           priority: args.priority, assignees: args.assignees,
         }, triggerRoomId), null, 2);
       case "get_github_repos": return JSON.stringify(await getRepos(triggerRoomId), null, 2);
-      case "get_repo_contents": return JSON.stringify(await getRepoContents(args.owner, args.repo, args.path || ""), null, 2);
+      case "get_repo_contents": return JSON.stringify(await getRepoContents(args.owner, args.repo, args.path || "", triggerRoomId), null, 2);
       case "create_or_update_file":
-        return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message), null, 2);
+        return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message, triggerRoomId), null, 2);
       default: return `Unknown tool: ${name}`;
     }
   } catch (err: any) {
