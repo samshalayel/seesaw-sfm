@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
+import fs from "fs";
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
@@ -145,19 +146,17 @@ GITHUB_REPO=${githubRepo}
 
   // Find claude CLI path (Windows: npm global bin)
   const claudePath = (() => {
-    const { execSync } = require("child_process");
     try {
       const p = execSync("where claude.cmd", { shell: true }).toString().trim().split("\n")[0].trim();
       if (p && p.length > 0) return p;
     } catch (_) {}
     // fallback: common npm global bin locations
     const candidates = [
-      process.env.APPDATA + "\\npm\\claude.cmd",
-      process.env.APPDATA + "\\npm\\claude",
+      (process.env.APPDATA ?? "") + "\\npm\\claude.cmd",
+      (process.env.APPDATA ?? "") + "\\npm\\claude",
       "/usr/local/bin/claude",
       "/usr/bin/claude",
     ];
-    const fs = require("fs");
     for (const c of candidates) { try { fs.accessSync(c); return c; } catch (_) {} }
     return "claude"; // last resort
   })();
