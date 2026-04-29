@@ -220,7 +220,7 @@ export function TopRightPanel() {
 
   useEffect(() => {
     fetchTriggerData();
-    apiFetch("/api/clickup/members").then(r => r.json()).then(setMembers).catch(() => {});
+    apiFetch("/api/clickup/members").then(r => r.json()).then(d => setMembers(Array.isArray(d) ? d : d.members ?? [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -426,7 +426,7 @@ export function TopRightPanel() {
                   style={{ width: "100%", background: "#0d1117", border: "1px solid #333", borderRadius: "7px", padding: "7px 10px", color: "white", fontSize: "12px", marginBottom: "8px", direction: "rtl" }}
                 >
                   <option value="">اختر عضو الفريق</option>
-                  {members.map(m => <option key={m.id} value={m.id}>{m.username}</option>)}
+                  {(Array.isArray(members) ? members : []).map(m => <option key={m.id} value={m.id}>{m.username}</option>)}
                 </select>
                 <label style={{ color: "#ccc", fontSize: "12px", display: "block", marginBottom: 4 }}>فحص كل (دقائق):</label>
                 <input
@@ -459,7 +459,7 @@ export function TopRightPanel() {
               <div>
                 <div style={{ background: "rgba(30,60,30,0.5)", borderRadius: "8px", padding: "10px", marginBottom: "10px", border: "1px solid #66bb6a30" }}>
                   <div style={{ color: "#aaa", fontSize: "11px" }}>
-                    يراقب: {members.find(m => m.id === config?.watchUserId)?.username || config?.watchUserId}
+                    يراقب: {(Array.isArray(members) ? members : []).find(m => m.id === config?.watchUserId)?.username || config?.watchUserId}
                   </div>
                   <div style={{ color: "#aaa", fontSize: "11px" }}>
                     كل {config?.intervalMinutes} دقائق · {config?.robotId === "robot-1" ? "GPT-4o" : "Claude"}
