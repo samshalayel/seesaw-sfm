@@ -203,12 +203,35 @@ Now execute the task. Provide a brief Arabic summary when done.`;
       console.error(`[AutoTrigger CLI ${log.id}]`, data.toString().trim());
     });
 
-    proc.on("close", (code) => {
-      log.status = code === 0 ? "completed" : "failed";
-      log.completedAt = Date.now();
-      if (code !== 0) log.error = `claude CLI exited with code ${code}`;
-      console.log(`[AutoTrigger CLI ${log.id}] Done (exit ${code})`);
-      try { fs.unlinkSync(promptFile); } catch (_) {} // cleanup temp file
+    proc.on("close", async (code) => {
+      try { fs.unlinkSync(promptFile); } catch (_) {}
+
+      // Detect limit exhaustion phrases
+      const limitHit =
+        fullOutput.includes("out of extra usage") ||
+        fullOutput.includes("Credit balance is too low") ||
+        fullOutput.includes("Usage limit reached") ||
+        fullOutput.includes("rate limit") ||
+        fullOutput.includes("exceeded");
+
+      if (limitHit) {
+        console.warn(`[AutoTrigger CLI ${log.id}] ⚠ Limit reached — falling back to robot-2 (Claude API)`);
+        log.result = "⚠ Claude CLI limit reached — switching to Claude API...\n\n";
+        log.toolsUsed.push("fallback:robot-2");
+        // Switch to robot-2 (Anthropic API) transparently
+        const savedRobot = config.robotId;
+        config.robotId = "robot-2";
+        try {
+          await processTaskWithAI(task, log);
+        } finally {
+          config.robotId = savedRobot;
+        }
+      } else {
+        log.status = code === 0 ? "completed" : "failed";
+        log.completedAt = Date.now();
+        if (code !== 0) log.error = `claude CLI exited with code ${code}`;
+        console.log(`[AutoTrigger CLI ${log.id}] Done (exit ${code})`);
+      }
       resolve();
     });
 
@@ -217,6 +240,7 @@ Now execute the task. Provide a brief Arabic summary when done.`;
       log.error = `Spawn error: ${err.message} — هل claude CLI مثبت؟`;
       log.completedAt = Date.now();
       console.error(`[AutoTrigger CLI ${log.id}] Spawn error:`, err.message);
+      try { fs.unlinkSync(promptFile); } catch (_) {}
       resolve();
     });
   });
