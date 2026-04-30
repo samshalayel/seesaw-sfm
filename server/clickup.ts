@@ -161,6 +161,33 @@ export async function createTask(listId: string, taskData: {
   };
 }
 
+export async function attachFileToTask(
+  taskId: string,
+  filename: string,
+  content: string,
+  roomId?: string
+): Promise<void> {
+  const token = await getClickUpToken(roomId) || process.env.CLICKUP_API_TOKEN;
+  if (!token) throw new Error("ClickUp not connected");
+
+  const blob = Buffer.from(content, "utf-8");
+  const boundary = "----FormBoundary" + Date.now().toString(16);
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="attachment"; filename="${filename}"\r\nContent-Type: text/plain\r\n\r\n`),
+    blob,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+
+  await fetch(`${CLICKUP_BASE}/task/${taskId}/attachment`, {
+    method: "POST",
+    headers: {
+      Authorization: token,
+      "Content-Type": `multipart/form-data; boundary=${boundary}`,
+    },
+    body,
+  });
+}
+
 export async function searchTasksByName(query: string, roomId?: string): Promise<any[]> {
   const teams = await getTeams(roomId);
   if (!teams.length) return [];

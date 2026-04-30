@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { spawn, execSync } from "child_process";
 import fs from "fs";
 import path from "path";
-import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers } from "./clickup";
+import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToTask } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
 import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo } from "./vaultStore";
@@ -402,7 +402,38 @@ async function scanAndProcess() {
       }
 
       console.log(`[AutoTrigger] Processing task: ${task.name} (${task.id})`);
+
+      // ① Mark as "in progress" so team can track
+      try {
+        await updateTask(task.id, { status: "in progress" }, triggerRoomId);
+        console.log(`[AutoTrigger] Task ${task.id} marked as in progress`);
+      } catch (e: any) {
+        console.warn(`[AutoTrigger] Could not set in-progress:`, e.message);
+      }
+
       await processTaskWithAI(task, log);
+
+      // ② Attach result file after completion
+      if (log.result || log.error) {
+        try {
+          const timestamp = new Date(log.startedAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+          const filename = `result-${timestamp}.txt`;
+          const content = [
+            `المهمة: ${task.name}`,
+            `الحالة: ${log.status}`,
+            `الوقت: ${new Date(log.startedAt).toLocaleString("ar-SA")}`,
+            `الأدوات: ${log.toolsUsed.join(", ") || "—"}`,
+            "",
+            log.result || "",
+            log.error ? `\nخطأ: ${log.error}` : "",
+          ].join("\n");
+
+          await attachFileToTask(task.id, filename, content, triggerRoomId);
+          console.log(`[AutoTrigger] Attached result file to task ${task.id}`);
+        } catch (e: any) {
+          console.warn(`[AutoTrigger] Could not attach file:`, e.message);
+        }
+      }
     }
   } catch (err: any) {
     console.error("[AutoTrigger] Scan error:", err.message);
