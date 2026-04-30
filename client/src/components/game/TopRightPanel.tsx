@@ -205,7 +205,9 @@ export function TopRightPanel() {
   const [selUser, setSelUser] = useState<number | null>(null);
   const [trigInterval, setTrigInterval] = useState(5);
   const [selRobot, setSelRobot] = useState("robot-1");
-  const [expLog, setExpLog]   = useState<string | null>(null);
+  const [expLog, setExpLog]       = useState<string | null>(null);
+  const [fullLog, setFullLog]     = useState<TriggerLog | null>(null);
+  const [copied, setCopied]       = useState(false);
   const [trigLoading, setTrigLoading] = useState(false);
   const fetchTriggerData = (isInit = false) => {
     apiFetch("/api/auto-trigger/config").then(r => r.json()).then(d => {
@@ -259,6 +261,24 @@ export function TopRightPanel() {
 
   const fmtTime = (ts: number) =>
     new Date(ts).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+
+  const buildLogText = (log: TriggerLog) =>
+    `المهمة: ${log.taskName}\nالحالة: ${log.status}\nالوقت: ${new Date(log.startedAt).toLocaleString("ar-SA")}\nالأدوات: ${log.toolsUsed.join(", ") || "—"}\n\n${log.result || ""}${log.error ? `\n\nخطأ: ${log.error}` : ""}`;
+
+  const handleExportTxt = (log: TriggerLog) => {
+    const blob = new Blob([buildLogText(log)], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `task-${log.id}.txt`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyLog = (log: TriggerLog) => {
+    navigator.clipboard.writeText(buildLogText(log)).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
   const sInfo = (s: string) => ({
     running:   { label: "قيد التنفيذ", color: "#42a5f5", icon: "⚙️" },
     completed: { label: "تم",           color: "#66bb6a", icon: "✅" },
@@ -286,6 +306,89 @@ export function TopRightPanel() {
   const atalErr    = atalQueue.filter(f => f.status === "error").length;
 
   return (
+    <>
+    {/* ── Fullscreen log review modal ──────────────────────────────── */}
+    {fullLog && (() => {
+      const si = sInfo(fullLog.status);
+      return (
+        <div
+          onClick={() => setFullLog(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,0.85)", backdropFilter: "blur(6px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "min(820px, 92vw)", maxHeight: "85vh",
+              background: "#0a0e1a", border: "1.5px solid #1e3a5f",
+              borderRadius: "16px", display: "flex", flexDirection: "column",
+              boxShadow: "0 8px 60px #000a",
+            }}
+          >
+            {/* header */}
+            <div style={{
+              padding: "16px 20px", borderBottom: "1px solid #1e3a5f",
+              display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12,
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: "white", fontSize: "15px", fontWeight: 700, marginBottom: 4 }}>
+                  {si.icon} {fullLog.taskName}
+                </div>
+                <div style={{ color: "#555", fontSize: "12px" }}>
+                  {new Date(fullLog.startedAt).toLocaleString("ar-SA")}
+                  {fullLog.toolsUsed.length > 0 && ` · أدوات: ${fullLog.toolsUsed.join(", ")}`}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <button onClick={() => handleCopyLog(fullLog)} style={{
+                  padding: "6px 12px", borderRadius: "8px", border: "1px solid #334",
+                  background: copied ? "#66bb6a20" : "#1a2030", color: copied ? "#66bb6a" : "#aaa",
+                  fontSize: "12px", cursor: "pointer",
+                }}>
+                  {copied ? "✅ تم النسخ" : "📋 نسخ"}
+                </button>
+                <button onClick={() => handleExportTxt(fullLog)} style={{
+                  padding: "6px 12px", borderRadius: "8px", border: "1px solid #334",
+                  background: "#1a2030", color: "#4fc3f7", fontSize: "12px", cursor: "pointer",
+                }}>
+                  💾 TXT
+                </button>
+                <button onClick={() => setFullLog(null)} style={{
+                  padding: "6px 12px", borderRadius: "8px", border: "1px solid #334",
+                  background: "#1a2030", color: "#ef5350", fontSize: "12px", cursor: "pointer",
+                }}>
+                  ✕
+                </button>
+              </div>
+            </div>
+            {/* body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+              {fullLog.error && (
+                <div style={{
+                  background: "#ef535015", border: "1px solid #ef535040",
+                  borderRadius: "8px", padding: "10px 14px", marginBottom: "12px",
+                  color: "#ef5350", fontSize: "13px",
+                }}>
+                  ⚠ {fullLog.error}
+                </div>
+              )}
+              <pre style={{
+                color: "#c9d1d9", fontSize: "13px", lineHeight: 1.7,
+                whiteSpace: "pre-wrap", wordBreak: "break-word",
+                fontFamily: "'Cascadia Code', 'Fira Code', monospace",
+                margin: 0,
+              }}>
+                {fullLog.result || "(لا يوجد نتيجة)"}
+              </pre>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+
     <div style={{
       position: "fixed", top: 14, right: 16, zIndex: 500,
       display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
@@ -489,10 +592,16 @@ export function TopRightPanel() {
                   const si = sInfo(log.status);
                   const exp = expLog === log.id;
                   return (
-                    <div key={log.id} onClick={() => setExpLog(exp ? null : log.id)} style={{
-                      background: "#0d1117", borderRadius: "8px", padding: "8px",
-                      marginBottom: "5px", cursor: "pointer", border: `1px solid ${si.color}30`,
-                    }}>
+                    <div
+                      key={log.id}
+                      onClick={() => setExpLog(exp ? null : log.id)}
+                      onDoubleClick={(e) => { e.stopPropagation(); setFullLog(log); }}
+                      title="دبل كليك للعرض الكامل"
+                      style={{
+                        background: "#0d1117", borderRadius: "8px", padding: "8px",
+                        marginBottom: "5px", cursor: "pointer", border: `1px solid ${si.color}30`,
+                      }}
+                    >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{
                           color: "white", fontSize: "11px", flex: 1,
@@ -532,5 +641,6 @@ export function TopRightPanel() {
       </div>
 
     </div>
+    </>
   );
 }
