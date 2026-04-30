@@ -147,8 +147,6 @@ curl -s -X PUT "https://api.clickup.com/api/v2/task/${task.id}" \\
 
 Now execute the task. Provide a brief Arabic summary when done.`;
 
-BEGIN:`;
-
   // Find claude CLI: prefer local node_modules binary, fallback to global
   const localExe = new URL("../../node_modules/@anthropic-ai/claude-code/bin/claude.exe", import.meta.url).pathname.replace(/^\//, "");
   const claudePath = (() => {
