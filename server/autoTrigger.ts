@@ -6,10 +6,20 @@ import path from "path";
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToTask } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
-import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo } from "./vaultStore";
+import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName } from "./vaultStore";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// clients مؤقتة — يتم إعادة إنشاؤها من الخزنة عند كل مهمة
+let openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "placeholder" });
+let anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || "placeholder" });
+
+async function refreshClients() {
+  const gptModel     = await getModelByName("GPT",    triggerRoomId).catch(() => undefined);
+  const claudeModel  = await getModelByName("Claude", triggerRoomId).catch(() => undefined);
+  const openaiKey    = gptModel?.apiKey    || process.env.OPENAI_API_KEY    || "";
+  const anthropicKey = claudeModel?.apiKey || process.env.ANTHROPIC_API_KEY || "";
+  if (openaiKey)    openai    = new OpenAI({ apiKey: openaiKey });
+  if (anthropicKey) anthropic = new Anthropic({ apiKey: anthropicKey });
+}
 
 export interface AutoTriggerConfig {
   enabled: boolean;
@@ -426,6 +436,9 @@ async function scanAndProcess() {
       }
 
       console.log(`[AutoTrigger] Processing task: ${task.name} (${task.id})`);
+
+      // تحديث مفاتيح API من الخزنة قبل كل مهمة
+      await refreshClients();
 
       // ① Mark as "in progress" so team can track
       try {

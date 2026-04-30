@@ -209,6 +209,8 @@ export function TopRightPanel() {
   const [fullLog, setFullLog]     = useState<TriggerLog | null>(null);
   const [copied, setCopied]       = useState(false);
   const [trigLoading, setTrigLoading] = useState(false);
+  const [scanFeedback,  setScanFeedback]  = useState<"idle"|"loading"|"done">("idle");
+  const [clearFeedback, setClearFeedback] = useState<"idle"|"loading"|"done">("idle");
   const fetchTriggerData = (isInit = false) => {
     apiFetch("/api/auto-trigger/config").then(r => r.json()).then(d => {
       setConfig(d);
@@ -251,12 +253,26 @@ export function TopRightPanel() {
     catch (_e) {} finally { setTrigLoading(false); }
   };
   const handleScanNow = async () => {
-    setTrigLoading(true);
-    try { await apiFetch("/api/auto-trigger/scan", { method: "POST" }); setTimeout(fetchTriggerData, 2000); }
-    catch (_e) {} finally { setTrigLoading(false); }
+    if (scanFeedback === "loading") return;
+    setScanFeedback("loading");
+    try {
+      await apiFetch("/api/auto-trigger/scan", { method: "POST" });
+      setScanFeedback("done");
+      setTimeout(() => { setScanFeedback("idle"); fetchTriggerData(false); }, 1800);
+    } catch (_e) {
+      setScanFeedback("idle");
+    }
   };
   const handleClearCache = async () => {
-    try { await apiFetch("/api/auto-trigger/clear-cache", { method: "POST" }); } catch (_e) {}
+    if (clearFeedback === "loading") return;
+    setClearFeedback("loading");
+    try {
+      await apiFetch("/api/auto-trigger/clear-cache", { method: "POST" });
+      setClearFeedback("done");
+      setTimeout(() => { setClearFeedback("idle"); fetchTriggerData(false); }, 1800);
+    } catch (_e) {
+      setClearFeedback("idle");
+    }
   };
 
   const fmtTime = (ts: number) =>
@@ -578,8 +594,53 @@ export function TopRightPanel() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
-                  <button onClick={handleScanNow} disabled={trigLoading} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #42a5f5", background: "#42a5f520", color: "#42a5f5", fontSize: "11px", cursor: "pointer" }}>فحص الآن</button>
-                  <button onClick={handleClearCache} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #f59e0b", background: "#f59e0b15", color: "#f59e0b", fontSize: "11px", cursor: "pointer", fontWeight: 600 }}>🔄 إعادة فحص</button>
+                  {/* زر فحص الآن */}
+                  <button
+                    onClick={handleScanNow}
+                    disabled={scanFeedback === "loading"}
+                    style={{
+                      flex: 1, padding: "6px", borderRadius: "7px", fontSize: "11px", cursor: "pointer",
+                      border: scanFeedback === "done"
+                        ? "1px solid #66bb6a"
+                        : "1px solid #42a5f5",
+                      background: scanFeedback === "done"
+                        ? "#66bb6a25"
+                        : scanFeedback === "loading"
+                          ? "#42a5f510"
+                          : "#42a5f520",
+                      color: scanFeedback === "done" ? "#66bb6a" : "#42a5f5",
+                      transition: "all 0.25s",
+                      opacity: scanFeedback === "loading" ? 0.7 : 1,
+                    }}
+                  >
+                    {scanFeedback === "loading" ? "⏳ جاري..." : scanFeedback === "done" ? "✅ تم الفحص" : "فحص الآن"}
+                  </button>
+
+                  {/* زر إعادة فحص */}
+                  <button
+                    onClick={handleClearCache}
+                    disabled={clearFeedback === "loading"}
+                    style={{
+                      flex: 1, padding: "6px", borderRadius: "7px", fontSize: "11px", fontWeight: 600, cursor: "pointer",
+                      border: clearFeedback === "done"
+                        ? "2px solid #66bb6a"
+                        : clearFeedback === "loading"
+                          ? "1px solid #f59e0b"
+                          : "1px solid #f59e0b",
+                      background: clearFeedback === "done"
+                        ? "#66bb6a25"
+                        : clearFeedback === "loading"
+                          ? "#f59e0b08"
+                          : "#f59e0b15",
+                      color: clearFeedback === "done" ? "#66bb6a" : "#f59e0b",
+                      boxShadow: clearFeedback === "loading" ? "0 0 10px #f59e0b55" : clearFeedback === "done" ? "0 0 10px #66bb6a55" : "none",
+                      transition: "all 0.25s",
+                      opacity: clearFeedback === "loading" ? 0.7 : 1,
+                    }}
+                  >
+                    {clearFeedback === "loading" ? "⏳ جاري..." : clearFeedback === "done" ? "✅ تم المسح" : "🔄 إعادة فحص"}
+                  </button>
+
                   <button onClick={handleStop} disabled={trigLoading} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #ef5350", background: "#ef535020", color: "#ef5350", fontSize: "11px", cursor: "pointer" }}>أوقف</button>
                 </div>
                 <div style={{ color: "#bbb", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>سجل التنفيذ:</div>
