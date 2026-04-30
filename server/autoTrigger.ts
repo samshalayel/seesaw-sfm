@@ -6,20 +6,24 @@ import path from "path";
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToTask } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
-import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName } from "./vaultStore";
+import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
 
 // clients مؤقتة — يتم إعادة إنشاؤها من الخزنة عند كل مهمة
-let openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "placeholder" });
+let openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "placeholder" });
+let gemini    = new OpenAI({ apiKey: "placeholder", baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" });
 let anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || "placeholder" });
 
 async function refreshClients() {
   const gptModel     = await getModelByName("GPT",    triggerRoomId).catch(() => undefined);
   const claudeModel  = await getModelByName("Claude", triggerRoomId).catch(() => undefined);
+  const geminiModel  = await getModelByName("Gemini", triggerRoomId).catch(() => undefined);
   const openaiKey    = gptModel?.apiKey    || process.env.OPENAI_API_KEY    || "";
   const anthropicKey = claudeModel?.apiKey || process.env.ANTHROPIC_API_KEY || "";
+  const geminiKey    = geminiModel?.apiKey || process.env.GEMINI_API_KEY    || "";
   if (openaiKey)    openai    = new OpenAI({ apiKey: openaiKey });
   if (anthropicKey) anthropic = new Anthropic({ apiKey: anthropicKey });
+  if (geminiKey)    gemini    = new OpenAI({ apiKey: geminiKey, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" });
 }
 
 export interface AutoTriggerConfig {
@@ -55,16 +59,13 @@ const config: AutoTriggerConfig = {
 // roomId مرتبط بالغرفة التي شغّلت المراقب
 let triggerRoomId: string | undefined = undefined;
 
-// ─── VPS SSH config (مأخوذة من متغيرات البيئة أو الافتراضي) ─────────────────
-const VPS_CONFIG = {
-  host:     process.env.VPS_HOST     || "144.172.102.6",
-  port:     Number(process.env.VPS_PORT || 22),
-  username: process.env.VPS_USER     || "root",
-  password: process.env.VPS_PASSWORD || "21vU9xtxSVyFt3",
-};
-
+// ─── VPS SSH ─────────────────────────────────────────────────────────────────
 // تشغيل أمر على الـ VPS وإرجاع stdout + stderr
-function runOnVps(command: string, timeoutMs = 120000): Promise<string> {
+function runOnVps(command: string, timeoutMs = 120000, vpsConfig?: { host: string; port: number; user: string; password: string }): Promise<string> {
+  const cfg = vpsConfig || {
+    host: process.env.VPS_HOST || "", port: Number(process.env.VPS_PORT || 22),
+    user: process.env.VPS_USER || "root", password: process.env.VPS_PASSWORD || "",
+  };
   return new Promise((resolve) => {
     const conn = new SshClient();
     let output = "";
@@ -82,7 +83,7 @@ function runOnVps(command: string, timeoutMs = 120000): Promise<string> {
       });
     });
     conn.on("error", (err) => { clearTimeout(timer); resolve(`SSH connection error: ${err.message}`); });
-    conn.connect(VPS_CONFIG);
+    conn.connect({ host: cfg.host, port: cfg.port, username: cfg.user, password: cfg.password });
   });
 }
 
@@ -148,7 +149,9 @@ async function executeToolCall(name: string, args: any): Promise<string> {
       case "run_on_vps": {
         const timeoutMs = Math.min((args.timeout_seconds || 60), 300) * 1000;
         console.log(`[AutoTrigger] VPS command: ${args.command.slice(0, 100)}`);
-        const result = await runOnVps(args.command, timeoutMs);
+        const vpsCfg = await getVpsConfig(triggerRoomId);
+        if (!vpsCfg.host) return "Error: VPS not configured. Add VPS settings in the vault.";
+        const result = await runOnVps(args.command, timeoutMs, vpsCfg);
         return result;
       }
       default: return `Unknown tool: ${name}`;
@@ -424,7 +427,42 @@ You must actually execute tool calls — do not describe what you will do, just 
       }
 
       log.result = fullResult;
+    } else if (config.robotId === "robot-4") {
+      // Gemini — OpenAI-compatible API
+      let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: taskPrompt },
+      ];
+      let fullResult = "";
+      let maxIterations = 20;
+
+      while (maxIterations-- > 0) {
+        const response = await gemini.chat.completions.create({
+          model: "gemini-2.0-flash",
+          messages,
+          tools: openaiTools,
+          max_tokens: 2048,
+        });
+
+        const choice = response.choices[0];
+        if (choice.message.content) fullResult += choice.message.content;
+
+        if (choice.finish_reason === "tool_calls" && choice.message.tool_calls) {
+          messages.push(choice.message);
+          for (const toolCall of choice.message.tool_calls) {
+            const tc = toolCall as any;
+            const args = JSON.parse(tc.function.arguments);
+            log.toolsUsed.push(tc.function.name);
+            console.log(`[AutoTrigger ${log.id}] Gemini Tool: ${tc.function.name}`);
+            const toolResult = await executeToolCall(tc.function.name, args);
+            messages.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
+          }
+        } else { break; }
+      }
+
+      log.result = fullResult;
     } else {
+      // robot-1: GPT-4o
       let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
         { role: "user", content: taskPrompt },

@@ -557,9 +557,10 @@ export function TopRightPanel() {
                 />
                 <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                   {([
-                    { id: "robot-1", label: "GPT-4o",     color: "#4fc3f7" },
-                    { id: "robot-2", label: "Claude API",  color: "#66bb6a" },
+                    { id: "robot-1", label: "GPT-4o",       color: "#4fc3f7" },
+                    { id: "robot-2", label: "Claude API",   color: "#66bb6a" },
                     { id: "robot-3", label: "Claude CLI 🆓", color: "#c084fc" },
+                    { id: "robot-4", label: "Gemini ⚡",    color: "#facc15" },
                   ] as const).map(r => (
                     <button key={r.id} onClick={() => setSelRobot(r.id)} style={{
                       flex: 1, padding: "6px", borderRadius: "7px", cursor: "pointer",
@@ -589,7 +590,8 @@ export function TopRightPanel() {
                   <div style={{ color: "#aaa", fontSize: "11px" }}>
                     كل {config?.intervalMinutes} دقائق · {
                       config?.robotId === "robot-1" ? "GPT-4o" :
-                      config?.robotId === "robot-3" ? "Claude CLI 🆓" : "Claude API"
+                      config?.robotId === "robot-3" ? "Claude CLI 🆓" :
+                      config?.robotId === "robot-4" ? "Gemini ⚡" : "Claude API"
                     }
                   </div>
                 </div>
