@@ -7,6 +7,7 @@ import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToT
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
 import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName } from "./vaultStore";
+import { Client as SshClient } from "ssh2";
 
 // clients مؤقتة — يتم إعادة إنشاؤها من الخزنة عند كل مهمة
 let openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "placeholder" });
@@ -54,6 +55,37 @@ const config: AutoTriggerConfig = {
 // roomId مرتبط بالغرفة التي شغّلت المراقب
 let triggerRoomId: string | undefined = undefined;
 
+// ─── VPS SSH config (مأخوذة من متغيرات البيئة أو الافتراضي) ─────────────────
+const VPS_CONFIG = {
+  host:     process.env.VPS_HOST     || "144.172.102.6",
+  port:     Number(process.env.VPS_PORT || 22),
+  username: process.env.VPS_USER     || "root",
+  password: process.env.VPS_PASSWORD || "21vU9xtxSVyFt3",
+};
+
+// تشغيل أمر على الـ VPS وإرجاع stdout + stderr
+function runOnVps(command: string, timeoutMs = 120000): Promise<string> {
+  return new Promise((resolve) => {
+    const conn = new SshClient();
+    let output = "";
+    const timer = setTimeout(() => {
+      conn.end();
+      resolve(`[timeout after ${timeoutMs / 1000}s]\n${output}`);
+    }, timeoutMs);
+
+    conn.on("ready", () => {
+      conn.exec(command, (err, stream) => {
+        if (err) { clearTimeout(timer); conn.end(); resolve(`SSH exec error: ${err.message}`); return; }
+        stream.on("data", (d: Buffer) => { output += d.toString(); });
+        stream.stderr.on("data", (d: Buffer) => { output += "[stderr] " + d.toString(); });
+        stream.on("close", () => { clearTimeout(timer); conn.end(); resolve(output || "(no output)"); });
+      });
+    });
+    conn.on("error", (err) => { clearTimeout(timer); resolve(`SSH connection error: ${err.message}`); });
+    conn.connect(VPS_CONFIG);
+  });
+}
+
 const processedTaskIds: Set<string> = new Set();
 const triggerLogs: TriggerLog[] = [];
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -70,6 +102,14 @@ const toolDefinitions = [
   { name: "get_github_repos", description: "List GitHub repositories", parameters: { type: "object" as const, properties: {}, required: [] as string[] } },
   { name: "get_repo_contents", description: "Get repo contents at a path", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" } }, required: ["owner", "repo"] } },
   { name: "create_or_update_file", description: "Create/update a file in GitHub", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" }, content: { type: "string" }, commit_message: { type: "string" } }, required: ["owner", "repo", "path", "content", "commit_message"] } },
+  {
+    name: "run_on_vps",
+    description: "Run a bash command on the production VPS server (Linux). Use for: composer, npm, php artisan, git, mkdir, apt, etc. Returns stdout+stderr. Working directory is /var/www unless you cd first.",
+    parameters: { type: "object" as const, properties: {
+      command:    { type: "string", description: "Bash command to run on the VPS" },
+      timeout_seconds: { type: "integer", description: "Max wait time in seconds (default 60, max 300)" },
+    }, required: ["command"] },
+  },
 ];
 
 const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = toolDefinitions.map(t => ({
@@ -105,6 +145,12 @@ async function executeToolCall(name: string, args: any): Promise<string> {
       case "get_repo_contents": return JSON.stringify(await getRepoContents(args.owner, args.repo, args.path || "", triggerRoomId), null, 2);
       case "create_or_update_file":
         return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message, triggerRoomId), null, 2);
+      case "run_on_vps": {
+        const timeoutMs = Math.min((args.timeout_seconds || 60), 300) * 1000;
+        console.log(`[AutoTrigger] VPS command: ${args.command.slice(0, 100)}`);
+        const result = await runOnVps(args.command, timeoutMs);
+        return result;
+      }
       default: return `Unknown tool: ${name}`;
     }
   } catch (err: any) {
@@ -298,21 +344,39 @@ CRITICAL RULES:
     ? `${vaultOwner}/${vaultRepo}`
     : "not configured";
 
-  const systemPrompt = `You are sillar-model, an autonomous AI agent. You execute ClickUp tasks automatically. Always respond in Arabic.
+  const systemPrompt = `You are sillar-model, an autonomous CI/CD agent. You execute ClickUp tasks automatically. Always respond in Arabic.
 
-━━━ GITHUB TARGET (FIXED — DO NOT CHANGE) ━━━
+━━━ GITHUB TARGET (FIXED) ━━━
 Owner : ${vaultOwner || "not configured"}
 Repo  : ${vaultRepo  || "not configured"}
-Full  : ${targetRepo}
+
+━━━ VPS SERVER ━━━
+Host  : ${VPS_CONFIG.host} (Linux, /var/www is the web root)
+Tool  : run_on_vps("command") — runs bash directly on the server
+
+━━━ DECISION GUIDE ━━━
+Use run_on_vps when the task needs:
+  • Local project setup   → composer create-project, npm init, php artisan
+  • Install dependencies  → apt install, composer install, npm install
+  • File system ops       → mkdir, cp, chmod, chown
+  • Run migrations/seeds  → php artisan migrate, npm run build
+  • Git on server         → git clone, git pull
+
+Use create_or_update_file (GitHub) when the task needs:
+  • Add/edit source files  → .php, .ts, .vue, README, config files
+  • Document something     → markdown, JSON config
+  • Code review artifacts  → any text file that belongs in the repo
+
+Use BOTH for full CI/CD tasks:
+  1. run_on_vps → create project / run commands on server
+  2. create_or_update_file → push code/config to GitHub repo
+  3. update_clickup_task → mark done
 
 RULES:
-- ALWAYS use ONLY the repo above. NEVER use any other repo.
-- Do NOT call get_github_repos — the target is already given above.
-
-WORKFLOW FOR GITHUB FILE TASKS:
-1. Call get_repo_contents("${vaultOwner}", "${vaultRepo}", "") to explore
-2. Call create_or_update_file with owner="${vaultOwner}", repo="${vaultRepo}" — MANDATORY
-3. Only after file is created, call update_clickup_task to mark done
+- NEVER use get_github_repos — target repo is already given above.
+- For GitHub: always owner="${vaultOwner}", repo="${vaultRepo}".
+- For VPS: project root is typically /var/www/<project-name>.
+- Chain commands with && to keep them in one run_on_vps call.
 
 You must actually execute tool calls — do not describe what you will do, just do it.`;
 
