@@ -475,8 +475,8 @@ export function TopRightPanel() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
-                  <button onClick={handleScanNow} disabled={trigLoading} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #42a5f5", background: "#42a5f520", color: "#42a5f5", fontSize: "11px", cursor: "pointer" }}>افحص الحين</button>
-                  <button onClick={handleClearCache} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #555", background: "transparent", color: "#999", fontSize: "11px", cursor: "pointer" }}>إعادة فحص</button>
+                  <button onClick={handleScanNow} disabled={trigLoading} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #42a5f5", background: "#42a5f520", color: "#42a5f5", fontSize: "11px", cursor: "pointer" }}>فحص الآن</button>
+                  <button onClick={handleClearCache} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #f59e0b", background: "#f59e0b15", color: "#f59e0b", fontSize: "11px", cursor: "pointer", fontWeight: 600 }}>🔄 إعادة فحص</button>
                   <button onClick={handleStop} disabled={trigLoading} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #ef5350", background: "#ef535020", color: "#ef5350", fontSize: "11px", cursor: "pointer" }}>أوقف</button>
                 </div>
                 <div style={{ color: "#bbb", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>سجل التنفيذ:</div>
