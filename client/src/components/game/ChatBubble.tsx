@@ -3,6 +3,7 @@ import { useGame, getModelColor } from "@/lib/stores/useGame";
 import { apiFetch } from "@/lib/utils";
 import { useEffect, useRef, useState, useCallback } from "react";
 import React from "react";
+import { GeminiLiveChat } from "./GeminiLiveChat";
 
 export function ChatBubble() {
   const { isOpen, activeRobotId, messages, isLoading, inputText, setInputText, sendMessage, closeChat, activeProjectKey, setActiveProject, pendingImage, setPendingImage, sessionUsage } = useChat();
@@ -271,6 +272,7 @@ export function ChatBubble() {
   const activeModel = models.find((m) => m.id === activeRobotId);
   const robotName = activeModel ? `Sillar ${activeModel.name}` : "Sillar AI";
   const robotColor = activeModel ? getModelColor(activeModel.index) : "#4fc3f7";
+  const roomId = useGame.getState().user?.roomId;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     e.stopPropagation();
@@ -782,6 +784,14 @@ export function ChatBubble() {
         >
           ارسل
         </button>
+      </div>
+
+      {/* ── Gemini Live Voice ── */}
+      <div style={{ padding: "6px 12px 8px", borderTop: "1px solid #1e293b" }}>
+        <GeminiLiveChat
+          roomId={roomId}
+          robotName={robotName}
+        />
       </div>
       {sessionUsage.cost > 0 && (
         <div style={{
