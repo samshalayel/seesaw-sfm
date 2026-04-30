@@ -28,17 +28,30 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
     } catch (_) {}
 
     if (!apiKey) {
-      clientWs.send(JSON.stringify({ type: "error", message: "Gemini API key غير مُعدّ في الخزنة" }));
+      console.warn("[GeminiLive] No API key found for room:", roomId);
+      clientWs.send(JSON.stringify({ type: "error", message: "Gemini API key غير مُعدّ — أضف موديل باسم 'Gemini' في الخزنة" }));
       clientWs.close();
       return;
     }
 
-    console.log(`[GeminiLive] Client connected (room: ${roomId || "default"})`);
+    console.log(`[GeminiLive] Client connected (room: ${roomId || "default"}) key: ${apiKey.slice(0,8)}...`);
 
     // افتح connection مع Gemini
     const geminiWs = new WebSocket(`${GEMINI_LIVE_URL}?key=${apiKey}`);
 
+    // timeout للاتصال
+    const connectTimeout = setTimeout(() => {
+      if (geminiWs.readyState !== WebSocket.OPEN) {
+        console.error("[GeminiLive] Connection timeout");
+        clientWs.send(JSON.stringify({ type: "error", message: "انتهت مهلة الاتصال بـ Gemini" }));
+        geminiWs.terminate();
+        clientWs.close();
+      }
+    }, 10000);
+
     geminiWs.on("open", () => {
+      clearTimeout(connectTimeout);
+      console.log("[GeminiLive] Gemini WS opened — sending setup");
       // أرسل setup message أول شيء
       const setup = {
         setup: {
@@ -96,8 +109,10 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
     });
 
     geminiWs.on("error", (err) => {
+      clearTimeout(connectTimeout);
       console.error("[GeminiLive] Gemini WS error:", err.message);
-      clientWs.send(JSON.stringify({ type: "error", message: err.message }));
+      if (clientWs.readyState === WebSocket.OPEN)
+        clientWs.send(JSON.stringify({ type: "error", message: `Gemini error: ${err.message}` }));
     });
 
     geminiWs.on("close", () => {
