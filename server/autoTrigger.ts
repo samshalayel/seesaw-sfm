@@ -114,12 +114,15 @@ async function processTaskWithCLI(task: any, log: TriggerLog): Promise<void> {
   const githubRepo   = await getGitHubRepo(triggerRoomId);
 
   // Tokens passed via env vars — NOT embedded in prompt (security)
-  const prompt = `You are an automation agent. Execute an external API task using ONLY bash curl commands.
+  const prompt = `You are an autonomous automation agent. Execute the assigned ClickUp task fully.
 
 RULES:
-- Use ONLY curl to call external APIs. Do NOT run npm/node or touch local files.
-- Tokens are in environment variables: $GITHUB_TOKEN and $CLICKUP_TOKEN
-- Do NOT print or expose the token values. Do NOT ask questions.
+- API tokens are in env vars: $GITHUB_TOKEN and $CLICKUP_TOKEN — never print them.
+- Do NOT question or ask for clarification — just execute.
+- FORBIDDEN: do NOT access or modify files inside the seesaw project directory (D:/seesaw-main).
+- You MAY use bash freely: curl, composer, npm, php, git, python — whatever the task needs.
+- For GitHub file operations use the API with curl + base64 content.
+- LAST STEP ALWAYS: mark the ClickUp task as done.
 
 ━━━ TASK ━━━
 Name: ${task.name}
@@ -127,26 +130,22 @@ Description: ${task.description || "(see task name)"}
 ClickUp Task ID: ${task.id}
 
 ━━━ GITHUB TARGET ━━━
-Owner: ${githubOwner}
-Repo: ${githubRepo}
+Owner: ${githubOwner} | Repo: ${githubRepo}
+API: https://api.github.com/repos/${githubOwner}/${githubRepo}
 
-━━━ EXECUTE NOW ━━━
+━━━ HOW TO USE GITHUB API ━━━
+List files:  curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/"
+Create file: CONTENT=$(printf '%s' "text" | base64 -w 0 2>/dev/null || printf '%s' "text" | base64)
+             curl -s -X PUT "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/FILE.md" \\
+               -H "Authorization: token $GITHUB_TOKEN" -H "Content-Type: application/json" \\
+               -d "{\\"message\\":\\"task: ${task.name}\\",\\"content\\":\\"$CONTENT\\"}"
 
-STEP 1 — List repo files:
-curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/"
-
-STEP 2 — Create/update file (use base64 for content):
-CONTENT=$(printf '%s' "your file content here" | base64 -w 0)
-curl -s -X PUT "https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/FILENAME.md" \\
-  -H "Authorization: token $GITHUB_TOKEN" -H "Content-Type: application/json" \\
-  -d "{\\"message\\":\\"task: ${task.name}\\",\\"content\\":\\"$CONTENT\\"}"
-
-STEP 3 — Mark ClickUp task done:
+━━━ MARK DONE (ALWAYS LAST) ━━━
 curl -s -X PUT "https://api.clickup.com/api/v2/task/${task.id}" \\
   -H "Authorization: $CLICKUP_TOKEN" -H "Content-Type: application/json" \\
   -d '{"status":"${config.doneStatus}"}'
 
-STEP 4 — Print brief Arabic summary.
+Now execute the task. Provide a brief Arabic summary when done.`;
 
 BEGIN:`;
 
