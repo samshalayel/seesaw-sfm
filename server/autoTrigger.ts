@@ -270,37 +270,49 @@ TASK DETAILS:
 - List: ${task.list}
 - Task ID: ${task.id}
 
+GITHUB TARGET (use ONLY this):
+- Owner: ${vaultOwner || "not configured"}
+- Repo:  ${vaultRepo  || "not configured"}
+
 INSTRUCTIONS:
 1. Read the task description carefully and understand what needs to be done.
-2. If the task involves creating/editing files in GitHub: use get_github_repos to list repos, then get_repo_contents to explore, then create_or_update_file to write the file. You MUST actually call create_or_update_file — do not stop at planning.
+2. If the task involves GitHub files: use get_repo_contents("${vaultOwner}", "${vaultRepo}", "") to explore, then create_or_update_file with owner="${vaultOwner}", repo="${vaultRepo}". NEVER use a different repo.
 3. If the task involves ClickUp operations, use ClickUp tools.
-4. ONLY after the actual work is fully done (file created, task created, etc.), update this task's status to "${config.doneStatus}" using update_clickup_task.
+4. ONLY after the actual work is fully done, update this task's status to "${config.doneStatus}" using update_clickup_task.
 5. Provide a summary in Arabic of exactly what you did (include file paths created, URLs, etc.).
-6. If the task description is unclear, ask clarifying questions in the ClickUp task comment using update_clickup_task with a description, then still mark it done.
 
 CRITICAL RULES:
+- Do NOT call get_github_repos — the target repo is already specified above.
+- ALWAYS use owner="${vaultOwner}", repo="${vaultRepo}" — no exceptions.
 - Do NOT mark the task as done before completing the actual work.
-- If creating a GitHub file, you MUST call create_or_update_file before calling update_clickup_task.
 - Never say "I will do X" without actually calling the tool to do X.
 - The task ID is: ${task.id}`;
 
+  // قراءة الـ repo المحدد من الخزنة — هذا هو المرجع الوحيد
+  const vaultOwner = await getGitHubOwner(triggerRoomId).catch(() => "");
+  const vaultRepo  = await getGitHubRepo(triggerRoomId).catch(() => "");
   let githubUser = "";
-  let githubRepos: any[] = [];
   try { githubUser = await getAuthenticatedUser(triggerRoomId); } catch (_e) {}
-  try { githubRepos = await getRepos(triggerRoomId); } catch (_e) {}
 
-  const repoLine = githubRepos.length > 0
-    ? `GitHub repos available: ${githubRepos.map((r: any) => `${r.owner?.login || githubUser}/${r.name}`).join(", ")}`
-    : (githubUser ? `GitHub user: ${githubUser} (use get_github_repos to list repos)` : "GitHub: not connected");
+  const targetRepo = (vaultOwner && vaultRepo)
+    ? `${vaultOwner}/${vaultRepo}`
+    : "not configured";
 
   const systemPrompt = `You are sillar-model, an autonomous AI agent. You execute ClickUp tasks automatically. Always respond in Arabic.
-${repoLine}
+
+━━━ GITHUB TARGET (FIXED — DO NOT CHANGE) ━━━
+Owner : ${vaultOwner || "not configured"}
+Repo  : ${vaultRepo  || "not configured"}
+Full  : ${targetRepo}
+
+RULES:
+- ALWAYS use ONLY the repo above. NEVER use any other repo.
+- Do NOT call get_github_repos — the target is already given above.
 
 WORKFLOW FOR GITHUB FILE TASKS:
-1. Call get_repo_contents(owner, repo, "") to list root files
-2. Gather any additional info needed (e.g., get_repo_contents for sub-folders)
-3. Call create_or_update_file with the complete file content — this is MANDATORY
-4. Only after step 3 succeeds, call update_clickup_task to mark done
+1. Call get_repo_contents("${vaultOwner}", "${vaultRepo}", "") to explore
+2. Call create_or_update_file with owner="${vaultOwner}", repo="${vaultRepo}" — MANDATORY
+3. Only after file is created, call update_clickup_task to mark done
 
 You must actually execute tool calls — do not describe what you will do, just do it.`;
 
