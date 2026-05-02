@@ -2674,6 +2674,22 @@ export async function registerRoutes(
         apiKey: settings.sfm?.apiKey ? "••••••••" : "",
         hasKey: !!(settings.sfm?.apiKey),
       },
+      huggingface: {
+        token: settings.huggingface?.token ? "••••••••" : "",
+      },
+      apidog: {
+        token: settings.apidog?.token ? "••••••••" : "",
+      },
+      figma: {
+        token: settings.figma?.token ? "••••••••" : "",
+      },
+      vps: {
+        host:    settings.vps?.host    || "",
+        port:    settings.vps?.port    || "22",
+        user:    settings.vps?.user    || "root",
+        password: settings.vps?.password ? "••••••••" : "",
+        webRoot: settings.vps?.webRoot || "/var/www",
+      },
       humans: settings.humans || [],
     });
   });
@@ -2822,8 +2838,8 @@ export async function registerRoutes(
 
   app.post("/api/vault-settings", async (req, res) => {
     const roomId = getRoomId(req);
-    const { company, loginBg, doors, github, clickup, sfm, models, hallWorkers, humans, systemPrompt } = req.body;
-    if (!github && !clickup && !sfm && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
+    const { company, loginBg, doors, github, clickup, sfm, huggingface, apidog, figma, vps, models, hallWorkers, humans, systemPrompt } = req.body;
+    if (!github && !clickup && !sfm && !huggingface && !apidog && !figma && !vps && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
       return res.status(400).json({ error: "Invalid payload" });
     }
     const current = await getVaultSettings(roomId);
@@ -2867,6 +2883,30 @@ export async function registerRoutes(
     if (sfm) {
       updatePayload.sfm = {
         apiKey: sfm.apiKey === "••••••••" ? current.sfm.apiKey : (sfm.apiKey || ""),
+      };
+    }
+    if (huggingface) {
+      updatePayload.huggingface = {
+        token: huggingface.token === "••••••••" ? current.huggingface?.token : (huggingface.token || ""),
+      };
+    }
+    if (apidog) {
+      updatePayload.apidog = {
+        token: apidog.token === "••••••••" ? current.apidog?.token : (apidog.token || ""),
+      };
+    }
+    if (figma) {
+      updatePayload.figma = {
+        token: figma.token === "••••••••" ? current.figma?.token : (figma.token || ""),
+      };
+    }
+    if (vps) {
+      updatePayload.vps = {
+        host:     vps.host     ?? current.vps?.host     ?? "",
+        port:     vps.port     ?? current.vps?.port     ?? "22",
+        user:     vps.user     ?? current.vps?.user     ?? "root",
+        password: vps.password === "••••••••" ? current.vps?.password : (vps.password ?? ""),
+        webRoot:  vps.webRoot  ?? current.vps?.webRoot  ?? "/var/www",
       };
     }
     if (models && Array.isArray(models)) {
