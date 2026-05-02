@@ -48,6 +48,7 @@ export interface ModelInfo {
   index: number;
   modelId?: string;
   roomAssignment: RoomAssignment;
+  systemPrompt?: string;
 }
 
 const ROBOT_COLORS = [

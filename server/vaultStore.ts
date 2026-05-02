@@ -43,6 +43,7 @@ export interface VaultSettings {
   huggingface?: { token: string };
   apidog?:      { token: string };
   figma?:       { token: string };
+  vps?: { host: string; port: string; user: string; password: string; webRoot: string };
   humans:       HumanMember[];
   models:       ModelConfig[];
   hallWorkers:  ModelConfig[];
@@ -88,6 +89,13 @@ function roomToVault(room: Room, models: ModelConfig[]): VaultSettings {
     huggingface: { token: (room as any).huggingfaceToken || "" },
     apidog:      { token: (room as any).apidogToken || "" },
     figma:       { token: (room as any).figmaToken  || "" },
+    vps: {
+      host:     (room as any).vpsHost     || "",
+      port:     (room as any).vpsPort     || "22",
+      user:     (room as any).vpsUser     || "root",
+      password: (room as any).vpsPassword || "",
+      webRoot:  (room as any).vpsWebRoot  || "/var/www",
+    },
     humans:      (() => { try { return JSON.parse((room as any).humansJson || "[]"); } catch { return []; } })(),
     models:  models.length > 0
       ? models
@@ -219,6 +227,15 @@ export async function setVaultSettings(
       (update as any).figmaToken = settings.figma.token;
     }
   }
+  if (settings.vps) {
+    if (settings.vps.host     !== undefined) (update as any).vpsHost     = settings.vps.host;
+    if (settings.vps.port     !== undefined) (update as any).vpsPort     = settings.vps.port;
+    if (settings.vps.user     !== undefined) (update as any).vpsUser     = settings.vps.user;
+    if (settings.vps.webRoot  !== undefined) (update as any).vpsWebRoot  = settings.vps.webRoot;
+    if (settings.vps.password && settings.vps.password !== "••••••••") {
+      (update as any).vpsPassword = settings.vps.password;
+    }
+  }
   if (settings.systemPrompt !== undefined) {
     update.systemPrompt = settings.systemPrompt;
   }
@@ -286,6 +303,17 @@ export async function getClickUpListId(roomId?: string): Promise<string> {
 export async function getClickUpAssignee(roomId?: string): Promise<string> {
   const room = await storage.getRoom(roomId || "default");
   return room?.clickupAssignee || process.env.CLICKUP_ASSIGNEE || "";
+}
+
+export async function getVpsConfig(roomId?: string): Promise<{ host: string; port: number; user: string; password: string; webRoot: string }> {
+  const room = await storage.getRoom(roomId || "default");
+  return {
+    host:     (room as any)?.vpsHost     || process.env.VPS_HOST     || "",
+    port:     Number((room as any)?.vpsPort || process.env.VPS_PORT || 22),
+    user:     (room as any)?.vpsUser     || process.env.VPS_USER     || "root",
+    password: (room as any)?.vpsPassword || process.env.VPS_PASSWORD || "",
+    webRoot:  (room as any)?.vpsWebRoot  || process.env.VPS_WEB_ROOT || "/var/www",
+  };
 }
 
 export async function getMainDoorCode(roomId?: string): Promise<string> {

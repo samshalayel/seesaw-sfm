@@ -52,6 +52,13 @@ export const rooms = pgTable("rooms", {
   // Figma
   figmaToken: text("figma_token").notNull().default(""),
 
+  // VPS / SSH
+  vpsHost:     text("vps_host").notNull().default(""),
+  vpsPort:     text("vps_port").notNull().default("22"),
+  vpsUser:     text("vps_user").notNull().default("root"),
+  vpsPassword: text("vps_password").notNull().default(""),
+  vpsWebRoot:  text("vps_web_root").notNull().default("/var/www"),
+
   // AI
   defaultModel:    text("default_model").notNull().default(""),
   systemPrompt:    text("system_prompt").notNull().default(""),

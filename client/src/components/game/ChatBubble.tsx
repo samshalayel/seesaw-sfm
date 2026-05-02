@@ -791,6 +791,8 @@ export function ChatBubble() {
         <GeminiLiveChat
           roomId={roomId}
           robotName={robotName}
+          systemPrompt={activeModel?.systemPrompt}
+          messages={messages}
         />
       </div>
       {sessionUsage.cost > 0 && (

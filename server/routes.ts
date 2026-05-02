@@ -2740,6 +2740,7 @@ export async function registerRoutes(
       index: i,
       ...(m.modelId ? { modelId: m.modelId } : {}),
       roomAssignment: m.roomAssignment || "main",
+      systemPrompt: m.systemPrompt || "",
     })));
   });
 
