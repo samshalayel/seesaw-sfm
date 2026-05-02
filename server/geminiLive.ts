@@ -192,7 +192,7 @@ function connectToGemini(
     clearTimeout(connectTimeout);
     const setup: any = {
       setup: {
-        model: "models/gemini-2.5-flash-preview-native-audio-dialog",
+        model: "models/gemini-2.5-flash-exp-native-audio-thinking-dialog",
         generation_config: {
           response_modalities: ["AUDIO"],
           speech_config: {
