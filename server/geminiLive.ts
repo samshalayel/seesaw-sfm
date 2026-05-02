@@ -1,7 +1,7 @@
 /**
  * geminiLive.ts
  * WebSocket proxy: Browser ↔ Server ↔ Gemini Live API
- * يدعم tool calling: GitHub (قراءة/كتابة) + ClickUp (مهام)
+ * يدعم tool calling: GitHub (قراءة/كتابة) + ClickUp (مهام) + VPS/SSH
  *
  * تدفق الاتصال:
  * 1. Browser يفتح WS → Server يحمّل إعدادات الخزنة
@@ -14,9 +14,36 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
 import { Server as HttpServer } from "http";
-import { getModelByName, getGitHubOwner, getGitHubRepo, getClickUpListId } from "./vaultStore";
+import { Client as SshClient } from "ssh2";
+import { getModelByName, getGitHubOwner, getGitHubRepo, getClickUpListId, getVpsConfig } from "./vaultStore";
 import { getRepoContents, createOrUpdateFile, getRepos } from "./github";
 import { getTasks, getTask, updateTask, searchTasksByName } from "./clickup";
+
+// ── SSH helper ────────────────────────────────────────────────────────────────
+function sshExec(
+  host: string, port: number, username: string, password: string,
+  command: string,
+): Promise<string> {
+  return new Promise((resolve) => {
+    const conn = new SshClient();
+    let output = "";
+    const timeout = setTimeout(() => {
+      conn.end();
+      resolve("⏱️ انتهت مهلة SSH (30 ثانية)");
+    }, 30000);
+
+    conn.on("ready", () => {
+      conn.exec(command, (err, stream) => {
+        if (err) { clearTimeout(timeout); conn.end(); resolve(`❌ SSH exec error: ${err.message}`); return; }
+        stream.on("data", (d: Buffer) => { output += d.toString(); });
+        stream.stderr.on("data", (d: Buffer) => { output += d.toString(); });
+        stream.on("close", () => { clearTimeout(timeout); conn.end(); resolve(output.trim() || "✅ تم (بدون output)"); });
+      });
+    });
+    conn.on("error", (err) => { clearTimeout(timeout); resolve(`❌ SSH connection error: ${err.message}`); });
+    conn.connect({ host, port, username, password, readyTimeout: 10000 });
+  });
+}
 
 const GEMINI_LIVE_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 
@@ -89,6 +116,36 @@ const TOOLS = [
       required: ["task_id", "status"],
     },
   },
+  {
+    name: "vps_exec",
+    description: "نفّذ أمر shell على السيرفر (VPS) عبر SSH — مثال: ls, pm2 list, git pull, npm run build",
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "الأمر المطلوب تنفيذه على السيرفر" },
+      },
+      required: ["command"],
+    },
+  },
+  {
+    name: "vps_deploy",
+    description: "انشر آخر تحديثات الكود على السيرفر: git pull + npm run build + pm2 restart",
+    parameters: {
+      type: "object",
+      properties: {
+        app_name: { type: "string", description: "اسم التطبيق في PM2 (افتراضي: sillar)" },
+        web_root: { type: "string", description: "مسار مجلد المشروع على السيرفر (اختياري)" },
+      },
+    },
+  },
+  {
+    name: "vps_status",
+    description: "اعرض حالة السيرفر: PM2 processes, disk, memory, uptime",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
 ];
 
 // ── تنفيذ الأدوات ─────────────────────────────────────────────────────────────
@@ -99,6 +156,7 @@ async function executeTool(
   repo: string,
   listId: string,
   roomId?: string,
+  vpsConfig?: { host: string; port: number; user: string; password: string; webRoot: string },
 ): Promise<string> {
   try {
     if (name === "get_repo_contents") {
@@ -159,6 +217,33 @@ async function executeTool(
       return `✅ تم تغيير حالة المهمة [${args.task_id}] إلى "${args.status}"`;
     }
 
+    // ── VPS tools ──────────────────────────────────────────────────────────────
+    if (name === "vps_exec" || name === "vps_deploy" || name === "vps_status") {
+      if (!vpsConfig?.host) return "❌ VPS غير مُعدّ — أضف بيانات SSH في إعدادات الخزنة > تبويب VPS";
+      const { host, port, user, password, webRoot } = vpsConfig;
+
+      if (name === "vps_exec") {
+        return await sshExec(host, port, user, password, args.command);
+      }
+
+      if (name === "vps_deploy") {
+        const appName = args.app_name || "sillar";
+        const projectPath = args.web_root || `${webRoot}/${appName}`;
+        const cmd = `cd ${projectPath} && git pull origin master 2>&1 && npm run build 2>&1 | tail -5 && pm2 restart ${appName} 2>&1 | tail -3 && echo "✅ تم النشر بنجاح"`;
+        return await sshExec(host, port, user, password, cmd);
+      }
+
+      if (name === "vps_status") {
+        const cmd = [
+          "echo '=== PM2 ===' && pm2 list --no-color",
+          "echo '=== Memory ===' && free -h | head -2",
+          "echo '=== Disk ===' && df -h / | tail -1",
+          "echo '=== Uptime ===' && uptime",
+        ].join(" && ");
+        return await sshExec(host, port, user, password, cmd);
+      }
+    }
+
     return `خطأ: الأداة "${name}" غير معروفة`;
   } catch (err: any) {
     return `خطأ في تنفيذ ${name}: ${err.message}`;
@@ -175,8 +260,9 @@ function connectToGemini(
   clickupListId: string,
   roomId: string | undefined,
   initMessages: { role: string; content: string }[],
+  vpsConfig?: { host: string; port: number; user: string; password: string; webRoot: string },
 ) {
-  const hasTools = !!(githubOwner && githubRepoName) || !!clickupListId;
+  const hasTools = !!(githubOwner && githubRepoName) || !!clickupListId || !!vpsConfig?.host;
 
   const geminiWs = new WebSocket(`${GEMINI_LIVE_URL}?key=${apiKey}`);
 
@@ -237,7 +323,7 @@ function connectToGemini(
           const result = await executeTool(
             fc.name, fc.args || {},
             githubOwner, githubRepoName, clickupListId,
-            roomId,
+            roomId, vpsConfig,
           );
           console.log(`[GeminiLive] ✅ ${fc.name} →`, result.slice(0, 100));
           responses.push({ id: fc.id, response: { output: result } });
@@ -349,20 +435,23 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
       let githubOwner    = "";
       let githubRepoName = "";
       let clickupListId  = "";
+      let vpsConfig: { host: string; port: number; user: string; password: string; webRoot: string } | undefined;
 
       try {
         const geminiModel = await getModelByName("Gemini", roomId);
         apiKey      = geminiModel?.apiKey || process.env.GEMINI_API_KEY || "";
         vaultPrompt = geminiModel?.systemPrompt || "";
 
-        const [owner, repo, listId] = await Promise.all([
+        const [owner, repo, listId, vps] = await Promise.all([
           getGitHubOwner(roomId),
           getGitHubRepo(roomId),
           getClickUpListId(roomId),
+          getVpsConfig(roomId),
         ]);
         githubOwner    = owner  || "";
         githubRepoName = repo   || "";
         clickupListId  = listId || "";
+        if (vps?.host) vpsConfig = vps;
       } catch (_) {}
 
       if (!apiKey) {
@@ -389,10 +478,11 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
       let systemPrompt = robotSystemPrompt
         || "أنت مساعد ذكي في مكتب Sillar الرقمي. أجب باختصار وبوضوح.";
 
-      // أضف سياق GitHub / ClickUp
+      // أضف سياق GitHub / ClickUp / VPS
       const ctx: string[] = [];
       if (githubOwner && githubRepoName) ctx.push(`GitHub repo: ${githubOwner}/${githubRepoName}`);
       if (clickupListId) ctx.push(`ClickUp list ID: ${clickupListId}`);
+      if (vpsConfig) ctx.push(`VPS: ${vpsConfig.host} (port ${vpsConfig.port}, user: ${vpsConfig.user}, webRoot: ${vpsConfig.webRoot})`);
       if (ctx.length) systemPrompt += "\n\n[سياق المشروع]\n" + ctx.join("\n");
 
       systemPrompt += `
@@ -417,6 +507,7 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
         clickupListId,
         roomId,
         initMessages,
+        vpsConfig,
       );
     })();
   });
