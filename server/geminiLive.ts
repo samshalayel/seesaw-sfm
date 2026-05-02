@@ -32,7 +32,9 @@ function sshExec(
       resolve("⏱️ انتهت مهلة SSH (30 ثانية)");
     }, 30000);
 
+    console.log(`[SSH] Connecting to ${host}:${port} as ${username}...`);
     conn.on("ready", () => {
+      console.log(`[SSH] Connected! Running: ${command.slice(0, 80)}`);
       conn.exec(command, (err, stream) => {
         if (err) { clearTimeout(timeout); conn.end(); resolve(`❌ SSH exec error: ${err.message}`); return; }
         stream.on("data", (d: Buffer) => { output += d.toString(); });
@@ -40,7 +42,7 @@ function sshExec(
         stream.on("close", () => { clearTimeout(timeout); conn.end(); resolve(output.trim() || "✅ تم (بدون output)"); });
       });
     });
-    conn.on("error", (err) => { clearTimeout(timeout); resolve(`❌ SSH connection error: ${err.message}`); });
+    conn.on("error", (err) => { clearTimeout(timeout); console.error(`[SSH] Error: ${err.message}`); resolve(`❌ SSH connection error: ${err.message}`); });
     conn.connect({
       host, port, username, password,
       readyTimeout: 10000,
