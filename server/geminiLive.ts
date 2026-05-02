@@ -41,7 +41,12 @@ function sshExec(
       });
     });
     conn.on("error", (err) => { clearTimeout(timeout); resolve(`❌ SSH connection error: ${err.message}`); });
-    conn.connect({ host, port, username, password, readyTimeout: 10000 });
+    conn.connect({
+      host, port, username, password,
+      readyTimeout: 10000,
+      hostVerifier: () => true,           // تجاوز التحقق من host key
+      algorithms: { serverHostKey: ["ssh-rsa", "ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp521"] },
+    });
   });
 }
 
