@@ -18,7 +18,7 @@ import { getModelByName, getGitHubOwner, getGitHubRepo, getClickUpListId } from 
 import { getRepoContents, createOrUpdateFile, getRepos } from "./github";
 import { getTasks, getTask, updateTask, searchTasksByName } from "./clickup";
 
-const GEMINI_LIVE_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent";
+const GEMINI_LIVE_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 
 // ── تعريف الأدوات ─────────────────────────────────────────────────────────────
 const TOOLS = [
@@ -192,7 +192,7 @@ function connectToGemini(
     clearTimeout(connectTimeout);
     const setup: any = {
       setup: {
-        model: "models/gemini-2.0-flash-live-001",
+        model: "models/gemini-3.1-flash-live-preview",
         generation_config: {
           response_modalities: ["AUDIO"],
           speech_config: {
