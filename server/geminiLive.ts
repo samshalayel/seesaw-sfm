@@ -330,42 +330,50 @@ function connectToGemini(
 export function setupGeminiLiveProxy(httpServer: HttpServer) {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws/gemini-live" });
 
-  wss.on("connection", async (clientWs: WebSocket, req: IncomingMessage) => {
+  wss.on("connection", (clientWs: WebSocket, req: IncomingMessage) => {
     const url    = new URL(req.url || "/", "http://localhost");
     const roomId = url.searchParams.get("roomId") || undefined;
 
-    // ── حمّل إعدادات الخزنة ───────────────────────────────────────────────
-    let apiKey         = "";
-    let vaultPrompt    = "";
-    let githubOwner    = "";
-    let githubRepoName = "";
-    let clickupListId  = "";
-
-    try {
-      const geminiModel = await getModelByName("Gemini", roomId);
-      apiKey      = geminiModel?.apiKey || process.env.GEMINI_API_KEY || "";
-      vaultPrompt = geminiModel?.systemPrompt || "";
-
-      const [owner, repo, listId] = await Promise.all([
-        getGitHubOwner(roomId),
-        getGitHubRepo(roomId),
-        getClickUpListId(roomId),
-      ]);
-      githubOwner    = owner  || "";
-      githubRepoName = repo   || "";
-      clickupListId  = listId || "";
-    } catch (_) {}
-
-    if (!apiKey) {
-      clientWs.send(JSON.stringify({ type: "error", message: "Gemini API key غير مُعدّ" }));
-      clientWs.close();
-      return;
-    }
-
     console.log(`[GeminiLive] connected room:${roomId || "default"} — waiting for init...`);
 
-    // ── انتظر رسالة init من البراوزر قبل الاتصال بـ Gemini ───────────────
-    clientWs.once("message", async (rawData: Buffer) => {
+    // ── سجّل handler الـ init فوراً (قبل أي async) لتجنّب race condition ──
+    // البراوزر يرسل init في ws.onopen مباشرة، لازم نكون جاهزين
+    let initResolve!: (data: Buffer) => void;
+    const initPromise = new Promise<Buffer>(resolve => { initResolve = resolve; });
+    clientWs.once("message", (data: Buffer) => initResolve(data));
+
+    // ── الآن نحمّل إعدادات الخزنة بشكل async ────────────────────────────
+    (async () => {
+      let apiKey         = "";
+      let vaultPrompt    = "";
+      let githubOwner    = "";
+      let githubRepoName = "";
+      let clickupListId  = "";
+
+      try {
+        const geminiModel = await getModelByName("Gemini", roomId);
+        apiKey      = geminiModel?.apiKey || process.env.GEMINI_API_KEY || "";
+        vaultPrompt = geminiModel?.systemPrompt || "";
+
+        const [owner, repo, listId] = await Promise.all([
+          getGitHubOwner(roomId),
+          getGitHubRepo(roomId),
+          getClickUpListId(roomId),
+        ]);
+        githubOwner    = owner  || "";
+        githubRepoName = repo   || "";
+        clickupListId  = listId || "";
+      } catch (_) {}
+
+      if (!apiKey) {
+        clientWs.send(JSON.stringify({ type: "error", message: "Gemini API key غير مُعدّ" }));
+        clientWs.close();
+        return;
+      }
+
+      // ── انتظر رسالة init (قد تكون وصلت مسبقاً أو ستصل لاحقاً) ──────────
+      const rawData = await initPromise;
+
       let robotSystemPrompt = vaultPrompt;
       let initMessages: { role: string; content: string }[] = [];
 
@@ -410,12 +418,7 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
         roomId,
         initMessages,
       );
-    });
-
-    // لو البراوزر أغلق قبل إرسال init
-    clientWs.on("close", () => {
-      // nothing to cleanup yet
-    });
+    })();
   });
 
   console.log("[GeminiLive] Proxy ready on /ws/gemini-live");
