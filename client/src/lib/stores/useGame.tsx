@@ -188,13 +188,15 @@ interface RoomSlot {
 const HALF_PI = Math.PI / 2;
 
 const ROOM_SLOTS: Record<string, RoomSlot[]> = {
-  // Main room — left wall, Z axis (5 slots) — تبدأ من Z=-3 بعيداً عن WorkStations (Z=-5.2)
+  // Main room — 3 على الجدار الأيسر + 2 على الجدار الخلفي (بجانب الشعار)
   main: [
-    { desk: [-5.5, 0, -3],   robot: [-6.8, 0, -3],   deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
-    { desk: [-5.5, 0, -1],   robot: [-6.8, 0, -1],   deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
-    { desk: [-5.5, 0,  1.5], robot: [-6.8, 0,  1.5], deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
-    { desk: [-5.5, 0,  3.5], robot: [-6.8, 0,  3.5], deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
-    { desk: [-5.5, 0,  5.5], robot: [-6.8, 0,  5.5], deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
+    // جدار أيسر (X=-7) — وجه الروبوت للداخل (+X)
+    { desk: [-5.5, 0, -1],  robot: [-6.8, 0, -1],  deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
+    { desk: [-5.5, 0,  2],  robot: [-6.8, 0,  2],  deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
+    { desk: [-5.5, 0,  5],  robot: [-6.8, 0,  5],  deskRotation: [0, -HALF_PI, 0], robotRotation: [0, HALF_PI, 0] },
+    // جدار خلفي (Z=-7) بجانب الشعار — وجه الروبوت للمدخل (+Z)
+    { desk: [-4,   0, -6.5], robot: [-4,   0, -5.2], deskRotation: [0, 0, 0], robotRotation: [0, 0, 0] },
+    { desk: [-1.5, 0, -6.5], robot: [-1.5, 0, -5.2], deskRotation: [0, 0, 0], robotRotation: [0, 0, 0] },
   ],
   // Stage 0 (S1) — center at world [-12, 0, -3], width=8, depth=8 → X[-16,-8], Z[-7,1]
   // slot0 = left wall (+z) middle, slot1/2 = back wall side

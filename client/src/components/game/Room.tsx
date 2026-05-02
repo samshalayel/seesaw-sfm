@@ -143,11 +143,9 @@ export function Room() {
       <ServerRack position={[-7.3, 0, 0]} />
 
       {/* ══════════════════════════════════
-          WORKSTATIONS (3 desks)
+          WORKSTATIONS (1 desk — center only)
       ══════════════════════════════════ */}
-      <WorkStation position={[-3.5, 0, -5.2]} />
-      <WorkStation position={[0,    0, -5.2]} />
-      <WorkStation position={[3.5,  0, -5.2]} />
+      <WorkStation position={[0, 0, -5.2]} />
 
       {/* ══════════════════════════════════
           MEETING TABLE (center)
