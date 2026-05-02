@@ -88,7 +88,7 @@ export function VaultSettingsDialog() {
   const fetchHumans = useGame((s) => s.fetchHumans);
   const setCompanyInfo = useGame((s) => s.setCompanyInfo);
   const setEntranceBg  = useGame((s) => s.setEntranceBg);
-  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans">("company");
+  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "vps" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans">("company");
   const [pdfIndexLog, setPdfIndexLog] = useState<string[]>([]);
   const [pdfIndexing, setPdfIndexing] = useState(false);
   const [pdfIndexes, setPdfIndexes] = useState<{name:string,chunkCount:number,createdAt:string}[]>([]);
@@ -119,6 +119,12 @@ export function VaultSettingsDialog() {
   const [clickupToken, setClickupToken] = useState("");
   const [clickupListId, setClickupListId] = useState("");
   const [clickupAssignee, setClickupAssignee] = useState("");
+
+  const [vpsHost, setVpsHost] = useState("");
+  const [vpsPort, setVpsPort] = useState("22");
+  const [vpsUser, setVpsUser] = useState("root");
+  const [vpsPassword, setVpsPassword] = useState("");
+  const [vpsWebRoot, setVpsWebRoot] = useState("/var/www");
 
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [hallWorkers, setHallWorkers] = useState<ModelEntry[]>([]);
@@ -315,6 +321,13 @@ export function VaultSettingsDialog() {
             if (data.apidog) setApidogToken(data.apidog.token || "");
             if (data.figma)  setFigmaToken(data.figma.token || "");
           }
+          if (data.vps) {
+            setVpsHost(data.vps.host || "");
+            setVpsPort(data.vps.port || "22");
+            setVpsUser(data.vps.user || "root");
+            setVpsPassword(data.vps.password || "");
+            setVpsWebRoot(data.vps.webRoot || "/var/www");
+          }
           if (data.models && Array.isArray(data.models)) {
             setModels(data.models);
           }
@@ -382,6 +395,7 @@ export function VaultSettingsDialog() {
           huggingface: { token: hfToken },
           apidog: { token: apidogToken },
           figma:  { token: figmaToken },
+          vps: { host: vpsHost, port: vpsPort, user: vpsUser, password: vpsPassword, webRoot: vpsWebRoot },
           models: models.filter(m => m.name.trim() || m.apiKey.trim()),
           hallWorkers: hallWorkers.filter(m => m.name.trim() || m.apiKey.trim()),
           humans,
@@ -520,11 +534,12 @@ export function VaultSettingsDialog() {
     display: "block",
   };
 
-  const tabs = ["company", "github", "clickup", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
+  const tabs = ["company", "github", "clickup", "vps", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
   const tabLabels: Record<string, string> = {
     company: "الشركة",
     github: "GitHub",
     clickup: "ClickUp",
+    vps: "🖥️ VPS",
     sfm: "🌐 Sillar",
     models: "Models",
     "ai-worker": "🤖 AI Workers",
@@ -986,6 +1001,87 @@ export function VaultSettingsDialog() {
               />
             </div>
           </>
+        ) : activeTab === "vps" ? (
+          <>
+            {/* شرح */}
+            <div style={{ background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, padding: "12px 14px", marginBottom: 4 }}>
+              <div style={{ color: "#4ade80", fontWeight: "bold", marginBottom: 6, fontSize: 13 }}>🖥️ إعدادات VPS / SSH</div>
+              <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6 }}>
+                بيانات الاتصال بالسيرفر عبر SSH — تستخدمها الروبوتات لنشر التحديثات ومتابعة حالة الموقع.
+              </div>
+            </div>
+
+            {/* Host */}
+            <div>
+              <label style={labelStyle}>🌍 عنوان السيرفر (IP أو Domain)</label>
+              <input
+                type="text"
+                value={vpsHost}
+                onChange={(e) => setVpsHost(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="144.172.102.6"
+                style={inputStyle}
+              />
+            </div>
+
+            {/* Port + User — صفين جنب بعض */}
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>🔌 Port</label>
+                <input
+                  type="text"
+                  value={vpsPort}
+                  onChange={(e) => setVpsPort(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  placeholder="22"
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ flex: 2 }}>
+                <label style={labelStyle}>👤 اسم المستخدم</label>
+                <input
+                  type="text"
+                  value={vpsUser}
+                  onChange={(e) => setVpsUser(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  placeholder="root"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div>
+              <label style={labelStyle}>🔑 كلمة المرور</label>
+              <input
+                type="password"
+                value={vpsPassword}
+                onChange={(e) => setVpsPassword(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="••••••••••••"
+                style={inputStyle}
+              />
+            </div>
+
+            {/* Web Root */}
+            <div>
+              <label style={labelStyle}>📁 مسار ملفات الموقع (Web Root)</label>
+              <input
+                type="text"
+                value={vpsWebRoot}
+                onChange={(e) => setVpsWebRoot(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="/var/www"
+                style={inputStyle}
+              />
+            </div>
+
+            {/* تحذير */}
+            <div style={{ color: "#64748b", fontSize: 11, marginTop: 4, direction: "rtl" }}>
+              ⚠️ بيانات SSH محفوظة بشكل مشفر في قاعدة البيانات ولا تُشارك مع أحد.
+            </div>
+          </>
+
         ) : activeTab === "sfm" ? (
           <>
             {/* شرح */}
