@@ -22,6 +22,17 @@ const ROOM_OPTIONS = [
   { value: "brC",     label: "🟢 المرحلة 6 — Production Ready" },
 ];
 
+// الحد الأقصى لعدد الروبوتات لكل غرفة
+const ROOM_MAX: Record<string, number> = {
+  main:    3,
+  stage0:  2,
+  stage1:  2,
+  manager: 2,
+  brA:     2,
+  brB:     2,
+  brC:     2,
+};
+
 const MODEL_PRESETS = ["Groq", "GPT", "Claude", "GLM", "Grok", "Gemini", "Mistral", "OpenRouter", "OpenCode", "v0", "Devin", "HuggingFace", "Other"];
 const FREE_MODELS = ["Groq", "GLM", "Gemini", "OpenCode", "v0", "HuggingFace"];
 
@@ -1427,13 +1438,26 @@ export function VaultSettingsDialog() {
                   <label style={labelStyle}>📍 الغرفة</label>
                   <select
                     value={model.roomAssignment || "main"}
-                    onChange={(e) => updateModel(idx, "roomAssignment", e.target.value)}
+                    onChange={(e) => {
+                      const newRoom = e.target.value;
+                      const count = models.filter((m, i) => i !== idx && (m.roomAssignment || "main") === newRoom).length;
+                      const max = ROOM_MAX[newRoom] ?? 2;
+                      if (count >= max) return; // الغرفة ممتلئة — لا تغيير
+                      updateModel(idx, "roomAssignment", newRoom);
+                    }}
                     onKeyDown={(e) => e.stopPropagation()}
                     style={{ ...inputStyle, fontSize: "13px", padding: "8px 12px", cursor: "pointer" }}
                   >
-                    {ROOM_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
+                    {ROOM_OPTIONS.map((opt) => {
+                      const count = models.filter((m, i) => i !== idx && (m.roomAssignment || "main") === opt.value).length;
+                      const max = ROOM_MAX[opt.value] ?? 2;
+                      const full = count >= max;
+                      return (
+                        <option key={opt.value} value={opt.value} disabled={full && (model.roomAssignment || "main") !== opt.value}>
+                          {opt.label} {full ? `(ممتلئة ${max}/${max})` : `(${count}/${max})`}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
