@@ -465,7 +465,7 @@ export function AgoraMeeting() {
             const pCtx = aiPlaybackCtxRef.current;
             const pDest = aiDestinationRef.current;
             if (!pCtx || !pDest) return;
-            if (pCtx.state === "suspended") await pCtx.resume();
+            if (pCtx.state === "suspended") pCtx.resume().catch(() => {});
 
             const raw = atob(msg.data);
             const u8 = new Uint8Array(raw.length);
