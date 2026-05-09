@@ -133,9 +133,26 @@ export function AgoraMeeting() {
   const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([]);
   const [copiedId,    setCopiedId]    = useState<string | null>(null);
 
+  // ── AI (Gemini Live) in meeting ───────────────────────────────────────────
+  const [aiActive,     setAiActive]     = useState(false);
+  const [aiStatus,     setAiStatus]     = useState<"idle"|"connecting"|"listening"|"speaking"|"error">("idle");
+  const [aiTranscript, setAiTranscript] = useState("");
+  const [aiError,      setAiError]      = useState("");
+
   const clientRef    = useRef<IAgoraRTCClient | null>(null);
   const audioTrack   = useRef<IMicrophoneAudioTrack | null>(null);
   const videoTrack   = useRef<ICameraVideoTrack | null>(null);
+
+  // AI bridge refs
+  const geminiWsRef       = useRef<WebSocket | null>(null);
+  const aiAudioCtxRef     = useRef<AudioContext | null>(null);
+  const aiProcessorRef    = useRef<ScriptProcessorNode | null>(null);
+  const aiPlaybackCtxRef  = useRef<AudioContext | null>(null);
+  const aiDestinationRef  = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const aiCustomTrackRef  = useRef<ReturnType<typeof AgoraRTC.createCustomAudioTrack> | null>(null);
+  const aiNextPlayTimeRef = useRef(0);
+  const aiMixerRef        = useRef<GainNode | null>(null);
+  const aiSourcesRef      = useRef<Map<string | number, MediaStreamAudioSourceNode>>(new Map());
 
   const roomId = user?.roomId || "default";
   const myName = user?.username || "أنت";
@@ -154,6 +171,40 @@ export function AgoraMeeting() {
     setRemoteUsers([]);
   }, []);
 
+  // ── AI deactivation ─────────────────────────────────────────────────────────
+  const deactivateAI = useCallback(async () => {
+    geminiWsRef.current?.close();
+    geminiWsRef.current = null;
+
+    aiProcessorRef.current?.disconnect();
+    aiProcessorRef.current = null;
+    aiMixerRef.current?.disconnect();
+    aiMixerRef.current = null;
+
+    aiSourcesRef.current.forEach((s) => { try { s.disconnect(); } catch {} });
+    aiSourcesRef.current.clear();
+
+    aiAudioCtxRef.current?.close().catch(() => {});
+    aiAudioCtxRef.current = null;
+
+    if (aiCustomTrackRef.current && clientRef.current) {
+      try { await clientRef.current.unpublish(aiCustomTrackRef.current); } catch {}
+      aiCustomTrackRef.current.stop();
+      aiCustomTrackRef.current.close();
+    }
+    aiCustomTrackRef.current = null;
+
+    aiDestinationRef.current = null;
+    aiPlaybackCtxRef.current?.close().catch(() => {});
+    aiPlaybackCtxRef.current = null;
+
+    aiNextPlayTimeRef.current = 0;
+    setAiActive(false);
+    setAiStatus("idle");
+    setAiTranscript("");
+    setAiError("");
+  }, []);
+
   // ESC / close
   useEffect(() => {
     if (!open) return;
@@ -169,6 +220,37 @@ export function AgoraMeeting() {
 
   // cleanup on unmount
   useEffect(() => () => { leaveChannel(); }, [leaveChannel]);
+
+  // deactivate AI when leaving meeting
+  useEffect(() => {
+    if (!joined) deactivateAI();
+  }, [joined, deactivateAI]);
+
+  // sync remote audio sources into the AI mixer
+  useEffect(() => {
+    if (!aiActive || !aiAudioCtxRef.current || !aiMixerRef.current) return;
+    const ctx = aiAudioCtxRef.current;
+    const mixer = aiMixerRef.current;
+
+    remoteUsers.forEach((u) => {
+      if (u.audioTrack && !aiSourcesRef.current.has(u.uid)) {
+        try {
+          const mst = (u.audioTrack as any).getMediaStreamTrack() as MediaStreamTrack;
+          const src = ctx.createMediaStreamSource(new MediaStream([mst]));
+          src.connect(mixer);
+          aiSourcesRef.current.set(u.uid, src);
+        } catch {}
+      }
+    });
+
+    const uids = new Set(remoteUsers.map((u) => u.uid));
+    aiSourcesRef.current.forEach((src, uid) => {
+      if (uid !== "local" && !uids.has(uid)) {
+        try { src.disconnect(); } catch {}
+        aiSourcesRef.current.delete(uid);
+      }
+    });
+  }, [aiActive, remoteUsers]);
 
   // ── join ─────────────────────────────────────────────────────────────────────
   const joinMeeting = async () => {
@@ -268,6 +350,149 @@ export function AgoraMeeting() {
     if (!videoTrack.current) return;
     await videoTrack.current.setEnabled(videoMuted);
     setVideoMuted(!videoMuted);
+  };
+
+  // ── activate AI in meeting ────────────────────────────────────────────────
+  const activateAI = async () => {
+    if (!clientRef.current || !joined) return;
+    setAiActive(true);
+    setAiStatus("connecting");
+    setAiError("");
+
+    try {
+      // capture AudioContext at 16 kHz (Gemini input)
+      const capCtx = new AudioContext({ sampleRate: 16000 });
+      aiAudioCtxRef.current = capCtx;
+
+      const mixer = capCtx.createGain();
+      mixer.gain.value = 1.0;
+      aiMixerRef.current = mixer;
+
+      // connect local mic
+      if (audioTrack.current) {
+        try {
+          const mst = audioTrack.current.getMediaStreamTrack();
+          const src = capCtx.createMediaStreamSource(new MediaStream([mst]));
+          src.connect(mixer);
+          aiSourcesRef.current.set("local", src);
+        } catch {}
+      }
+
+      // connect current remote users
+      remoteUsers.forEach((u) => {
+        if (u.audioTrack) {
+          try {
+            const mst = (u.audioTrack as any).getMediaStreamTrack() as MediaStreamTrack;
+            const src = capCtx.createMediaStreamSource(new MediaStream([mst]));
+            src.connect(mixer);
+            aiSourcesRef.current.set(u.uid, src);
+          } catch {}
+        }
+      });
+
+      // playback AudioContext at 24 kHz (Gemini output)
+      const playCtx = new AudioContext({ sampleRate: 24000 });
+      aiPlaybackCtxRef.current = playCtx;
+      const dest = playCtx.createMediaStreamDestination();
+      aiDestinationRef.current = dest;
+
+      // publish Gemini voice as a custom Agora track
+      const geminiTrack = AgoraRTC.createCustomAudioTrack({
+        mediaStreamTrack: dest.stream.getAudioTracks()[0],
+      });
+      aiCustomTrackRef.current = geminiTrack;
+      await clientRef.current!.publish(geminiTrack);
+
+      // open WebSocket to Gemini Live proxy
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const qs = new URLSearchParams();
+      if (roomId) qs.set("roomId", roomId);
+      const ws = new WebSocket(`${proto}://${location.host}/ws/gemini-live?${qs}`);
+      geminiWsRef.current = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: "init",
+          systemPrompt: [
+            "أنت مساعد ذكي في اجتماع عمل جماعي على منصة Seesaw.",
+            `عدد المشاركين: ${remoteUsers.length + 1}.`,
+            "استمع لجميع المشاركين وأجب باختصار ووضوح.",
+            "يمكنك تنفيذ المهام عبر الأدوات المتاحة (GitHub, ClickUp, VPS).",
+          ].join(" "),
+          messages: [],
+        }));
+      };
+
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+
+          if (msg.type === "ready") {
+            const proc = capCtx.createScriptProcessor(4096, 1, 1);
+            aiProcessorRef.current = proc;
+
+            proc.onaudioprocess = (e: AudioProcessingEvent) => {
+              if (!geminiWsRef.current || geminiWsRef.current.readyState !== WebSocket.OPEN) return;
+              const f32 = e.inputBuffer.getChannelData(0);
+              const pcm = new Int16Array(f32.length);
+              for (let i = 0; i < f32.length; i++)
+                pcm[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
+              const bytes = new Uint8Array(pcm.buffer);
+              let bin = "";
+              for (let j = 0; j < bytes.length; j++) bin += String.fromCharCode(bytes[j]);
+              geminiWsRef.current!.send(JSON.stringify({ type: "audio", data: btoa(bin) }));
+            };
+
+            mixer.connect(proc);
+            // silent output — prevent double-playing through speakers
+            const silence = capCtx.createGain();
+            silence.gain.value = 0;
+            proc.connect(silence);
+            silence.connect(capCtx.destination);
+            setAiStatus("listening");
+          }
+
+          if (msg.type === "audio") {
+            const pCtx = aiPlaybackCtxRef.current;
+            const pDest = aiDestinationRef.current;
+            if (!pCtx || !pDest) return;
+
+            const raw = atob(msg.data);
+            const u8 = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++) u8[i] = raw.charCodeAt(i);
+            const pcm16 = new Int16Array(u8.buffer);
+            const f32 = new Float32Array(pcm16.length);
+            for (let i = 0; i < pcm16.length; i++) f32[i] = pcm16[i] / 32768;
+
+            const buf = pCtx.createBuffer(1, f32.length, 24000);
+            buf.copyToChannel(f32, 0);
+
+            const now = pCtx.currentTime;
+            if (aiNextPlayTimeRef.current < now) aiNextPlayTimeRef.current = now;
+
+            const src = pCtx.createBufferSource();
+            src.buffer = buf;
+            src.connect(pDest);
+            src.start(aiNextPlayTimeRef.current);
+            aiNextPlayTimeRef.current += buf.duration;
+
+            setAiStatus("speaking");
+          }
+
+          if (msg.type === "text" && msg.text) setAiTranscript((t) => t + msg.text);
+          if (msg.type === "turn_complete") { setAiStatus("listening"); setAiTranscript(""); }
+          if (msg.type === "tool_call") setAiTranscript(`🔧 ${msg.name}...`);
+          if (msg.type === "error") { setAiError(msg.message); setAiStatus("error"); }
+        } catch {}
+      };
+
+      ws.onerror = () => { setAiError("فشل الاتصال بـ Gemini"); setAiStatus("error"); };
+      ws.onclose = () => { setAiActive(false); setAiStatus("idle"); };
+    } catch (err: any) {
+      setAiError(err.message || "خطأ في تفعيل AI");
+      setAiStatus("error");
+      deactivateAI();
+    }
   };
 
   if (!open || !meetingMode) return null;
@@ -438,11 +663,51 @@ export function AgoraMeeting() {
                 {videoMuted ? "📵" : "📹"}
                 <span style={{ fontSize: "10px", display: "block" }}>{videoMuted ? "كاميرا" : "مرئي"}</span>
               </button>
+              <button
+                onClick={aiActive ? deactivateAI : activateAI}
+                disabled={aiStatus === "connecting"}
+                style={ctrlBtn(aiActive, "#a855f7")}
+              >
+                🤖
+                <span style={{ fontSize: "10px", display: "block" }}>
+                  {aiStatus === "connecting" ? "⏳" : aiActive ? "إيقاف" : "AI"}
+                </span>
+              </button>
               <button onClick={() => { leaveChannel(); close(); }} style={ctrlBtn(false, "#cc2222")}>
                 📞
                 <span style={{ fontSize: "10px", display: "block", color: "#ff6666" }}>إنهاء</span>
               </button>
             </div>
+
+            {/* ── AI status ── */}
+            {aiActive && (
+              <div style={{
+                marginTop: "12px", textAlign: "center",
+                padding: "8px 16px", borderRadius: "10px",
+                background: aiStatus === "speaking" ? "rgba(168,85,247,0.15)" : "rgba(66,165,245,0.15)",
+                border: `1px solid ${aiStatus === "speaking" ? "rgba(168,85,247,0.4)" : "rgba(66,165,245,0.4)"}`,
+                transition: "all 0.3s",
+              }}>
+                <span style={{
+                  fontSize: "12px", fontWeight: 600,
+                  color: aiStatus === "speaking" ? "#c084fc" : "#42a5f5",
+                }}>
+                  {aiStatus === "connecting" ? "⏳ جارٍ الاتصال بالذكاء الاصطناعي..." :
+                   aiStatus === "listening"  ? "🎤 AI يسمع الاجتماع" :
+                   aiStatus === "speaking"   ? "🔊 AI يتحدث" :
+                   aiStatus === "error"      ? `⚠️ ${aiError}` : ""}
+                </span>
+                {aiTranscript && (
+                  <div style={{
+                    marginTop: "6px", fontSize: "11px",
+                    color: "#e2e8f0", lineHeight: 1.5,
+                    maxHeight: "60px", overflowY: "auto",
+                  }}>
+                    {aiTranscript}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
