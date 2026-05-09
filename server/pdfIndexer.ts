@@ -6,16 +6,13 @@
 
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createRequire } from "module";
-const _require = createRequire(import.meta.url);
+// process.cwd() يعمل في كل بيئة (ESM + CJS bundle)
+const _require = createRequire(process.cwd() + "/package.json");
 const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> = _require("pdf-parse");
 import { embedTexts, chunkText, findRelevantChunks } from "./embeddings";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const DATA_DIR = path.join(__dirname, "data");
+const DATA_DIR = path.join(process.cwd(), "data");
 
 // ── تأكد من وجود مجلد البيانات ──────────────────────────────────────────────
 function ensureDataDir() {

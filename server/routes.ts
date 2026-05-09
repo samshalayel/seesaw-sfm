@@ -1,9 +1,5 @@
 import { createRequire } from "module";
-// In CJS bundles (esbuild prod) import.meta is {} so .url === undefined
-// but Node.js CJS injects __filename as a global — use it as fallback
-const _require = createRequire(
-  (globalThis as any).__filename ?? import.meta.url
-);
+const _require = createRequire(process.cwd() + "/package.json");
 
 import type { Express } from "express";
 import { createServer, type Server } from "http";
@@ -29,7 +25,7 @@ try {
 }
 import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs";
 import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY } from "./vaultStore";
-import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow } from "./autoTrigger";
+import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
 import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
 import { validateStage, type ValidationResult, type ValidationFailure } from "./sfmQualityValidator";
@@ -2527,9 +2523,9 @@ export async function registerRoutes(
   app.post("/api/auto-trigger/start", async (req, res) => {
     try {
       const roomId = getRoomId(req);
-      const { userId, intervalMinutes, robotId, watchStatuses, doneStatus } = req.body;
+      const { userId, intervalMinutes, robotId, watchStatuses, doneStatus, parallelMode } = req.body;
       if (!userId) return res.status(400).json({ error: "userId is required" });
-      startAutoTrigger(userId, intervalMinutes, robotId, watchStatuses, doneStatus, roomId);
+      startAutoTrigger(userId, intervalMinutes, robotId, watchStatuses, doneStatus, roomId, parallelMode);
       res.json({ success: true, config: getAutoTriggerConfig() });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -2574,6 +2570,17 @@ export async function registerRoutes(
     try {
       clearProcessedTasks();
       res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // جلب الموديلات المتاحة من الخزنة للوضع المتوازي
+  app.get("/api/auto-trigger/vault-models", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const models = await getAvailableVaultModels(roomId);
+      res.json(models);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -3279,6 +3286,119 @@ export async function registerRoutes(
   // ── Agora: App ID فقط (للـ client) ───────────────────────────────────────
   app.get("/api/agora/app-id", (_req, res) => {
     res.json({ appId: process.env.AGORA_APP_ID || "" });
+  });
+
+  // ── Lite Office: محادثة مباشرة بدون DB ────────────────────────────────────
+  app.post("/api/lite/chat", async (req, res) => {
+    try {
+      const { message, history, apiKey, model, systemPrompt } = req.body as {
+        message: string;
+        history?: Array<{ role: string; content: string }>;
+        apiKey: string;
+        model: string;
+        systemPrompt?: string;
+      };
+
+      if (!message?.trim()) return res.status(400).json({ error: "message required" });
+      if (!apiKey?.trim())  return res.status(400).json({ error: "apiKey required" });
+      if (!model?.trim())   return res.status(400).json({ error: "model required" });
+
+      const chatHistory = Array.isArray(history) ? history : [];
+      const sysPrompt   = systemPrompt?.trim() || "";
+      const modelLower  = model.toLowerCase();
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      // ── Anthropic (claude-*) ──────────────────────────────────────────────
+      if (modelLower.includes("claude")) {
+        const client = new Anthropic({ apiKey: apiKey.trim() });
+        const msgs: Anthropic.MessageParam[] = [
+          ...chatHistory.map(m => ({
+            role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+            content: m.content,
+          })),
+          { role: "user", content: message },
+        ];
+        try {
+          const response = await client.messages.create({
+            model,
+            max_tokens: 4096,
+            ...(sysPrompt ? { system: sysPrompt } : {}),
+            messages: msgs,
+          });
+          for (const block of response.content) {
+            if (block.type === "text") {
+              res.write(`data: ${JSON.stringify({ content: block.text })}\n\n`);
+            }
+          }
+          const inp = response.usage?.input_tokens  || 0;
+          const out = response.usage?.output_tokens || 0;
+          res.write(`data: ${JSON.stringify({ usage: { input: inp, output: out, model, cost: 0 } })}\n\n`);
+        } catch (e: any) {
+          res.write(`data: ${JSON.stringify({ content: `خطأ: ${e.message}` })}\n\n`);
+        }
+        res.write(`data: [DONE]\n\n`);
+        return res.end();
+      }
+
+      // ── OpenAI / OpenAI-compatible (gpt-*, o1, o3, ...) ──────────────────
+      const oaiMessages: Array<{ role: string; content: string }> = [
+        ...(sysPrompt ? [{ role: "system", content: sysPrompt }] : []),
+        ...chatHistory.map(m => ({ role: m.role, content: m.content })),
+        { role: "user", content: message },
+      ];
+      const oaiClient = new OpenAI({ apiKey: apiKey.trim() });
+      try {
+        const stream = await oaiClient.chat.completions.create({
+          model,
+          messages: oaiMessages as any,
+          stream: true,
+        });
+        let inp = 0; let out = 0;
+        for await (const chunk of stream) {
+          const delta = chunk.choices?.[0]?.delta?.content;
+          if (delta) res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+          if (chunk.usage) { inp = chunk.usage.prompt_tokens || 0; out = chunk.usage.completion_tokens || 0; }
+        }
+        res.write(`data: ${JSON.stringify({ usage: { input: inp, output: out, model, cost: 0 } })}\n\n`);
+      } catch (e: any) {
+        res.write(`data: ${JSON.stringify({ content: `خطأ: ${e.message}` })}\n\n`);
+      }
+      res.write(`data: [DONE]\n\n`);
+      return res.end();
+
+    } catch (err: any) {
+      console.error("[lite/chat]", err);
+      if (!res.headersSent) return res.status(500).json({ error: err.message });
+      res.write(`data: ${JSON.stringify({ content: "خطأ داخلي" })}\n\n`);
+      res.write(`data: [DONE]\n\n`);
+      return res.end();
+    }
+  });
+
+  // ── إعدادات الغرف الصوتية (Gemini Voice Rooms) ───────────────────────────
+  const VOICE_ROOMS_FILE = path.join(process.cwd(), "data/voice-rooms-settings.json");
+
+  app.get("/api/vault/voice-rooms", (_req, res) => {
+    try {
+      const data = JSON.parse(fs.readFileSync(VOICE_ROOMS_FILE, "utf-8"));
+      res.json(data);
+    } catch {
+      res.json({ geminiKey: "", systemPrompt: "" });
+    }
+  });
+
+  app.post("/api/vault/voice-rooms", (req, res) => {
+    try {
+      const { geminiKey = "", systemPrompt = "" } = req.body || {};
+      fs.mkdirSync(path.dirname(VOICE_ROOMS_FILE), { recursive: true });
+      fs.writeFileSync(VOICE_ROOMS_FILE, JSON.stringify({ geminiKey, systemPrompt }, null, 2));
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   return httpServer;

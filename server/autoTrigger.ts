@@ -6,7 +6,8 @@ import path from "path";
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToTask } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
-import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig } from "./vaultStore";
+import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig, getModels } from "./vaultStore";
+import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
 
 // clients مؤقتة — يتم إعادة إنشاؤها من الخزنة عند كل مهمة
@@ -33,6 +34,7 @@ export interface AutoTriggerConfig {
   intervalMinutes: number;
   robotId: string;
   doneStatus: string;
+  parallelMode: boolean;   // تشغيل مهمة لكل موديل في الخزنة بالتوازي
 }
 
 export interface TriggerLog {
@@ -45,6 +47,7 @@ export interface TriggerLog {
   startedAt: number;
   completedAt: number | null;
   error: string | null;
+  modelUsed?: string;  // اسم الموديل من الخزنة (في وضع التوازي)
 }
 
 const config: AutoTriggerConfig = {
@@ -54,6 +57,7 @@ const config: AutoTriggerConfig = {
   intervalMinutes: 5,
   robotId: "robot-1",
   doneStatus: "complete",
+  parallelMode: false,
 };
 
 // roomId مرتبط بالغرفة التي شغّلت المراقب
@@ -306,7 +310,53 @@ Now execute the task. Provide a brief Arabic summary when done.`;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function processTaskWithAI(task: any, log: TriggerLog) {
+// ─── كشف مزوّد الذكاء الاصطناعي من اسم/موديل الموديل ────────────────────────
+function detectProvider(model: ModelConfig): "openai" | "anthropic" | "gemini" {
+  const text = (model.name + " " + (model.modelId || "") + " " + (model.alias || "")).toLowerCase();
+  if (text.includes("claude") || text.includes("anthropic") || text.includes("sonnet") || text.includes("haiku") || text.includes("opus"))
+    return "anthropic";
+  if (text.includes("gemini") || text.includes("google") || text.includes("flash") || text.includes("bison"))
+    return "gemini";
+  return "openai"; // الافتراضي GPT
+}
+
+// ─── تنفيذ مهمة باستخدام موديل محدد من الخزنة (للوضع المتوازي) ───────────────
+async function processTaskWithModel(task: any, log: TriggerLog, model: ModelConfig): Promise<void> {
+  if (!model.apiKey.trim()) {
+    log.status  = "failed";
+    log.error   = `الموديل "${model.name}" لا يملك API Key في الخزنة`;
+    log.completedAt = Date.now();
+    return;
+  }
+
+  const provider = detectProvider(model);
+  log.modelUsed = model.name;
+
+  const oaiClient  = provider === "openai"  ? new OpenAI({ apiKey: model.apiKey }) : openai;
+  const antClient  = provider === "anthropic" ? new Anthropic({ apiKey: model.apiKey }) : anthropic;
+  const gemClient  = provider === "gemini"
+    ? new OpenAI({ apiKey: model.apiKey, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" })
+    : gemini;
+
+  const robotOverride = provider === "anthropic" ? "robot-2" : provider === "gemini" ? "robot-4" : "robot-1";
+  await processTaskWithAI(task, log, { robotId: robotOverride, openaiClient: oaiClient, anthropicClient: antClient, geminiClient: gemClient });
+}
+
+interface ProcessOpts {
+  robotId?:          string;
+  openaiClient?:     OpenAI;
+  anthropicClient?:  Anthropic;
+  geminiClient?:     OpenAI;
+}
+
+async function processTaskWithAI(task: any, log: TriggerLog, opts: ProcessOpts = {}) {
+  // قراءة الـ repo والـ VPS من الخزنة أولاً — يجب أن تسبق بناء الـ prompts
+  const vaultOwner = await getGitHubOwner(triggerRoomId).catch(() => "");
+  const vaultRepo  = await getGitHubRepo(triggerRoomId).catch(() => "");
+  let githubUser = "";
+  try { githubUser = await getAuthenticatedUser(triggerRoomId); } catch (_e) {}
+  const vpsCfg = await getVpsConfig(triggerRoomId).catch(() => ({ host: "", port: 22, user: "root", password: "", webRoot: "/var/www" }));
+
   const taskPrompt = `You are an autonomous AI developer at Sillar Digital Production. A ClickUp task has been assigned and you must execute it.
 
 TASK DETAILS:
@@ -337,12 +387,6 @@ CRITICAL RULES:
 - Never say "I will do X" without actually calling the tool to do X.
 - The task ID is: ${task.id}`;
 
-  // قراءة الـ repo المحدد من الخزنة — هذا هو المرجع الوحيد
-  const vaultOwner = await getGitHubOwner(triggerRoomId).catch(() => "");
-  const vaultRepo  = await getGitHubRepo(triggerRoomId).catch(() => "");
-  let githubUser = "";
-  try { githubUser = await getAuthenticatedUser(triggerRoomId); } catch (_e) {}
-
   const targetRepo = (vaultOwner && vaultRepo)
     ? `${vaultOwner}/${vaultRepo}`
     : "not configured";
@@ -354,7 +398,7 @@ Owner : ${vaultOwner || "not configured"}
 Repo  : ${vaultRepo  || "not configured"}
 
 ━━━ VPS SERVER ━━━
-Host  : ${VPS_CONFIG.host} (Linux, /var/www is the web root)
+Host  : ${vpsCfg.host || "not configured"} (Linux, /var/www is the web root)
 Tool  : run_on_vps("command") — runs bash directly on the server
 
 ━━━ DECISION GUIDE ━━━
@@ -383,20 +427,26 @@ RULES:
 
 You must actually execute tool calls — do not describe what you will do, just do it.`;
 
+  // استخدم الـ clients المُمررة أو الـ globals الافتراضية
+  const _robotId  = opts.robotId          ?? config.robotId;
+  const _openai   = opts.openaiClient     ?? openai;
+  const _anthropic = opts.anthropicClient ?? anthropic;
+  const _gemini   = opts.geminiClient     ?? gemini;
+
   try {
     // robot-3: Claude CLI — uses claude.ai subscription (zero API tokens)
-    if (config.robotId === "robot-3") {
+    if (_robotId === "robot-3") {
       await processTaskWithCLI(task, log);
       return;
     }
 
-    if (config.robotId === "robot-2") {
+    if (_robotId === "robot-2") {
       let messages: Anthropic.MessageParam[] = [{ role: "user", content: taskPrompt }];
       let fullResult = "";
       let maxIterations = 20;
 
       while (maxIterations-- > 0) {
-        const response = await anthropic.messages.create({
+        const response = await _anthropic.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2048,
           system: systemPrompt,
@@ -427,7 +477,7 @@ You must actually execute tool calls — do not describe what you will do, just 
       }
 
       log.result = fullResult;
-    } else if (config.robotId === "robot-4") {
+    } else if (_robotId === "robot-4") {
       // Gemini — OpenAI-compatible API
       let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
@@ -437,7 +487,7 @@ You must actually execute tool calls — do not describe what you will do, just 
       let maxIterations = 20;
 
       while (maxIterations-- > 0) {
-        const response = await gemini.chat.completions.create({
+        const response = await _gemini.chat.completions.create({
           model: "gemini-2.0-flash",
           messages,
           tools: openaiTools,
@@ -462,7 +512,7 @@ You must actually execute tool calls — do not describe what you will do, just 
 
       log.result = fullResult;
     } else {
-      // robot-1: GPT-4o
+      // robot-1: GPT-4o (default)
       let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
         { role: "user", content: taskPrompt },
@@ -471,7 +521,7 @@ You must actually execute tool calls — do not describe what you will do, just 
       let maxIterations = 20;
 
       while (maxIterations-- > 0) {
-        const response = await openai.chat.completions.create({
+        const response = await _openai.chat.completions.create({
           model: "gpt-4o",
           messages,
           tools: openaiTools,
@@ -529,62 +579,89 @@ async function scanAndProcess() {
 
     console.log(`[AutoTrigger] Found ${matchingTasks.length} new tasks to process`);
 
-    for (const task of matchingTasks) {
-      processedTaskIds.add(task.id);
-
-      const log: TriggerLog = {
-        id: generateId(),
-        taskId: task.id,
-        taskName: task.name,
-        status: "running",
-        result: "",
-        toolsUsed: [],
-        startedAt: Date.now(),
-        completedAt: null,
-        error: null,
-      };
+    // ─── مساعد: تنفيذ مهمة واحدة وإرفاق النتيجة ─────────────────────────────
+    const runOne = async (task: any, log: TriggerLog, vaultModel?: ModelConfig) => {
       triggerLogs.unshift(log);
+      if (triggerLogs.length > 50) triggerLogs.splice(50);
 
-      if (triggerLogs.length > 50) {
-        triggerLogs.splice(50);
-      }
+      console.log(`[AutoTrigger${vaultModel ? ` ✦${vaultModel.name}` : ""}] Processing: ${task.name} (${task.id})`);
 
-      console.log(`[AutoTrigger] Processing task: ${task.name} (${task.id})`);
-
-      // تحديث مفاتيح API من الخزنة قبل كل مهمة
-      await refreshClients();
-
-      // ① Mark as "in progress" so team can track
       try {
         await updateTask(task.id, { status: "in progress" }, triggerRoomId);
-        console.log(`[AutoTrigger] Task ${task.id} marked as in progress`);
       } catch (e: any) {
         console.warn(`[AutoTrigger] Could not set in-progress:`, e.message);
       }
 
-      await processTaskWithAI(task, log);
+      if (vaultModel) {
+        await processTaskWithModel(task, log, vaultModel);
+      } else {
+        await refreshClients();
+        await processTaskWithAI(task, log);
+      }
 
-      // ② Attach result file after completion
+      // إرفاق ملف النتيجة بمهمة ClickUp
       if (log.result || log.error) {
         try {
           const timestamp = new Date(log.startedAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
-          const filename = `result-${timestamp}.txt`;
-          const content = [
+          const filename  = `result-${timestamp}.txt`;
+          const content   = [
             `المهمة: ${task.name}`,
             `الحالة: ${log.status}`,
+            vaultModel ? `الموديل: ${vaultModel.name}` : `الروبوت: ${config.robotId}`,
             `الوقت: ${new Date(log.startedAt).toLocaleString("ar-SA")}`,
             `الأدوات: ${log.toolsUsed.join(", ") || "—"}`,
             "",
             log.result || "",
             log.error ? `\nخطأ: ${log.error}` : "",
           ].join("\n");
-
           await attachFileToTask(task.id, filename, content, triggerRoomId);
-          console.log(`[AutoTrigger] Attached result file to task ${task.id}`);
         } catch (e: any) {
           console.warn(`[AutoTrigger] Could not attach file:`, e.message);
         }
       }
+    };
+
+    // ─── وضع التوازي: كل مهمة على موديل مختلف من الخزنة ─────────────────────
+    if (config.parallelMode) {
+      const vaultModels = (await getModels(triggerRoomId)).filter(m => m.apiKey.trim());
+      if (vaultModels.length === 0) {
+        console.warn("[AutoTrigger] Parallel mode: no vault models with API keys — falling back to sequential");
+      } else {
+        // أقصى عدد مهام = عدد الموديلات المتاحة
+        const tasksToRun = matchingTasks.slice(0, vaultModels.length);
+        tasksToRun.forEach(t => processedTaskIds.add(t.id));
+
+        console.log(`[AutoTrigger] Parallel: ${tasksToRun.length} tasks × ${vaultModels.length} models`);
+
+        await Promise.all(tasksToRun.map((task, i) => {
+          const model = vaultModels[i % vaultModels.length];
+          const log: TriggerLog = {
+            id: generateId(), taskId: task.id, taskName: task.name,
+            status: "running", result: "", toolsUsed: [],
+            startedAt: Date.now(), completedAt: null, error: null,
+            modelUsed: model.name,
+          };
+          return runOne(task, log, model);
+        }));
+
+        // إذا كان في مهام زيادة عن الموديلات — تُعالَج في الدورة القادمة
+        if (matchingTasks.length > vaultModels.length) {
+          console.log(`[AutoTrigger] ${matchingTasks.length - vaultModels.length} tasks deferred to next scan`);
+        }
+        isScanning = false;
+        return;
+      }
+    }
+
+    // ─── وضع التسلسل (الافتراضي) ─────────────────────────────────────────────
+    for (const task of matchingTasks) {
+      processedTaskIds.add(task.id);
+      const log: TriggerLog = {
+        id: generateId(), taskId: task.id, taskName: task.name,
+        status: "running", result: "", toolsUsed: [],
+        startedAt: Date.now(), completedAt: null, error: null,
+      };
+      await runOne(task, log);
     }
   } catch (err: any) {
     console.error("[AutoTrigger] Scan error:", err.message);
@@ -593,13 +670,22 @@ async function scanAndProcess() {
   isScanning = false;
 }
 
-export function startAutoTrigger(userId: number, intervalMinutes?: number, robotId?: string, watchStatuses?: string[], doneStatus?: string, roomId?: string) {
-  config.watchUserId = userId;
-  if (intervalMinutes) config.intervalMinutes = intervalMinutes;
-  if (robotId) config.robotId = robotId;
-  if (watchStatuses) config.watchStatuses = watchStatuses;
-  if (doneStatus) config.doneStatus = doneStatus;
-  if (roomId) triggerRoomId = roomId;
+export function startAutoTrigger(
+  userId: number,
+  intervalMinutes?: number,
+  robotId?: string,
+  watchStatuses?: string[],
+  doneStatus?: string,
+  roomId?: string,
+  parallelMode?: boolean,
+) {
+  config.watchUserId   = userId;
+  if (intervalMinutes !== undefined) config.intervalMinutes = intervalMinutes;
+  if (robotId)          config.robotId        = robotId;
+  if (watchStatuses)    config.watchStatuses  = watchStatuses;
+  if (doneStatus)       config.doneStatus     = doneStatus;
+  if (roomId)           triggerRoomId         = roomId;
+  if (parallelMode !== undefined) config.parallelMode = parallelMode;
   config.enabled = true;
 
   if (intervalHandle) {
@@ -643,4 +729,12 @@ export function triggerScanNow() {
   }
   scanAndProcess();
   return { success: true, message: "Scan triggered" };
+}
+
+// إرجاع موديلات الخزنة التي لديها API Key (للـ UI)
+export async function getAvailableVaultModels(roomId?: string): Promise<{ id: string; name: string; provider: string }[]> {
+  const models = await getModels(roomId || triggerRoomId);
+  return models
+    .filter(m => m.apiKey.trim())
+    .map(m => ({ id: m.id, name: m.name, provider: detectProvider(m) }));
 }
