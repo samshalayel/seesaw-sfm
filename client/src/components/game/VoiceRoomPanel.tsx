@@ -115,9 +115,13 @@ export function VoiceRoomPanel({ onClose }: Props) {
   }, []);
 
   // ── تشغيل صوت مشارك آخر (PCM 16kHz) ─────────────────────────────────────
+  // مهم: نستخدم playbackCtxRef (مستقل عن Agora) لتجنّب AEC يحذف الصوت
   const playPeerAudio = useCallback((participantId: string, base64: string) => {
-    const ctx = audioCtxRef.current;
-    if (!ctx || ctx.state === "closed") return;
+    let ctx = playbackCtxRef.current;
+    if (!ctx || ctx.state === "closed") {
+      try { ctx = new AudioContext(); playbackCtxRef.current = ctx; }
+      catch { return; }
+    }
     if (ctx.state === "suspended") ctx.resume();
     const bytes   = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
     const pcm16   = new Int16Array(bytes.buffer);
