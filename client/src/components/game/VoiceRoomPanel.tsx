@@ -66,17 +66,26 @@ export function VoiceRoomPanel({ onClose }: Props) {
   }, [fetchRooms]);
 
   // ── تشغيل صوت Gemini ──────────────────────────────────────────────────────
-  const playAudio = useCallback((base64: string) => {
+  const playAudio = useCallback(async (base64: string) => {
     const ctx = audioCtxRef.current;
-    if (!ctx) return;
-    if (ctx.state === "suspended") ctx.resume();
+    if (!ctx || ctx.state === "closed") return;
+
+    // انتظر فعلياً حتى يرجع AudioContext للـ running state
+    if (ctx.state === "suspended") {
+      try { await ctx.resume(); } catch { return; }
+    }
+
     const bytes   = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
     const pcm16   = new Int16Array(bytes.buffer);
     const float32 = Float32Array.from(pcm16, v => v / 32768);
+
+    // Gemini يرسل PCM 24kHz — نحدد sample rate الصحيح للـ buffer
     const buf = ctx.createBuffer(1, float32.length, 24000);
     buf.copyToChannel(float32, 0);
+
     const now = ctx.currentTime;
     if (nextPlayTimeRef.current < now) nextPlayTimeRef.current = now;
+
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(ctx.destination);
@@ -212,7 +221,16 @@ export function VoiceRoomPanel({ onClose }: Props) {
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current   = stream;
-      audioCtxRef.current = new AudioContext({ sampleRate: 16000 });
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      audioCtxRef.current = ctx;
+
+      // keepalive: oscillator صامت يمنع المتصفح من تعليق AudioContext بين الرسائل
+      const keepAliveOsc = ctx.createOscillator();
+      const keepAliveGain = ctx.createGain();
+      keepAliveGain.gain.value = 0;
+      keepAliveOsc.connect(keepAliveGain);
+      keepAliveGain.connect(ctx.destination);
+      keepAliveOsc.start();
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const url   = `${proto}://${location.host}/ws/voice-room` +
@@ -271,7 +289,7 @@ export function VoiceRoomPanel({ onClose }: Props) {
             setStatus("listening");
           }
 
-          if (msg.type === "audio")          playAudio(msg.data);
+          if (msg.type === "audio")          { playAudio(msg.data); }
           if (msg.type === "participant_audio") playPeerAudio(msg.participantId, msg.data);
           if (msg.type === "turn_complete")  setStatus("listening");
 
