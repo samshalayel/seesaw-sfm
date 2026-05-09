@@ -33,7 +33,8 @@ export function VoiceRoomPanel({ onClose }: Props) {
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const wsRef            = useRef<WebSocket | null>(null);
-  const audioCtxRef      = useRef<AudioContext | null>(null);
+  const audioCtxRef      = useRef<AudioContext | null>(null);   // 16kHz — للميكروفون فقط
+  const playbackCtxRef   = useRef<AudioContext | null>(null);   // للتشغيل فقط (سامبل ريت النظام)
   const processorRef     = useRef<ScriptProcessorNode | null>(null);
   const streamRef        = useRef<MediaStream | null>(null);
   const nextPlayTimeRef  = useRef(0);
@@ -65,33 +66,52 @@ export function VoiceRoomPanel({ onClose }: Props) {
     return () => clearInterval(id);
   }, [fetchRooms]);
 
-  // ── تشغيل صوت Gemini ──────────────────────────────────────────────────────
+  // ── تشغيل صوت Gemini (PCM 24kHz) ────────────────────────────────────────
   const playAudio = useCallback(async (base64: string) => {
-    const ctx = audioCtxRef.current;
-    if (!ctx || ctx.state === "closed") return;
+    // استخدم playbackCtx المخصص للتشغيل (سامبل ريت النظام، بدون تعارض مع الميكروفون)
+    let ctx = playbackCtxRef.current;
+    if (!ctx || ctx.state === "closed") {
+      // أعد إنشاء الـ context إذا لم يكن موجوداً
+      try {
+        ctx = new AudioContext();
+        playbackCtxRef.current = ctx;
+        nextPlayTimeRef.current = 0;
+      } catch (e) {
+        console.error("[VoiceRoom] Failed to create playback AudioContext:", e);
+        return;
+      }
+    }
 
     // انتظر فعلياً حتى يرجع AudioContext للـ running state
     if (ctx.state === "suspended") {
-      try { await ctx.resume(); } catch { return; }
+      try { await ctx.resume(); } catch (e) {
+        console.error("[VoiceRoom] Failed to resume playback ctx:", e);
+        return;
+      }
     }
 
-    const bytes   = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-    const pcm16   = new Int16Array(bytes.buffer);
-    const float32 = Float32Array.from(pcm16, v => v / 32768);
+    try {
+      const bytes   = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const pcm16   = new Int16Array(bytes.buffer);
+      const float32 = Float32Array.from(pcm16, v => v / 32768);
 
-    // Gemini يرسل PCM 24kHz — نحدد sample rate الصحيح للـ buffer
-    const buf = ctx.createBuffer(1, float32.length, 24000);
-    buf.copyToChannel(float32, 0);
+      // Gemini يرسل PCM 24kHz — نحدد sample rate الصحيح للـ buffer
+      const buf = ctx.createBuffer(1, float32.length, 24000);
+      buf.copyToChannel(float32, 0);
 
-    const now = ctx.currentTime;
-    if (nextPlayTimeRef.current < now) nextPlayTimeRef.current = now;
+      const now = ctx.currentTime;
+      if (nextPlayTimeRef.current < now) nextPlayTimeRef.current = now;
 
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-    src.start(nextPlayTimeRef.current);
-    nextPlayTimeRef.current += buf.duration;
-    setStatus("speaking");
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(nextPlayTimeRef.current);
+      nextPlayTimeRef.current += buf.duration;
+      console.log(`[VoiceRoom] Playing audio chunk: ${float32.length} samples, scheduled at ${nextPlayTimeRef.current.toFixed(3)}s`);
+      setStatus("speaking");
+    } catch (e) {
+      console.error("[VoiceRoom] playAudio error:", e);
+    }
   }, []);
 
   // ── تشغيل صوت مشارك آخر (PCM 16kHz) ─────────────────────────────────────
@@ -135,6 +155,8 @@ export function VoiceRoomPanel({ onClose }: Props) {
     wsRef.current = null;
     audioCtxRef.current?.close();
     audioCtxRef.current = null;
+    playbackCtxRef.current?.close();
+    playbackCtxRef.current = null;
     nextPlayTimeRef.current = 0;
     micLevelRef.current     = 0;
     myParticipantId.current = "";
@@ -221,15 +243,23 @@ export function VoiceRoomPanel({ onClose }: Props) {
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current   = stream;
+
+      // AudioContext للميكروفون فقط (16kHz)
       const ctx = new AudioContext({ sampleRate: 16000 });
       audioCtxRef.current = ctx;
 
-      // keepalive: oscillator صامت يمنع المتصفح من تعليق AudioContext بين الرسائل
-      const keepAliveOsc = ctx.createOscillator();
-      const keepAliveGain = ctx.createGain();
+      // AudioContext منفصل للتشغيل (سامبل ريت النظام — بدون تعارض مع الميك)
+      const playbackCtx = new AudioContext();
+      playbackCtxRef.current = playbackCtx;
+      nextPlayTimeRef.current = 0;
+      console.log(`[VoiceRoom] Playback AudioContext created: sampleRate=${playbackCtx.sampleRate}`);
+
+      // keepalive على playbackCtx: oscillator صامت يمنع المتصفح من تعليق الـ context
+      const keepAliveOsc = playbackCtx.createOscillator();
+      const keepAliveGain = playbackCtx.createGain();
       keepAliveGain.gain.value = 0;
       keepAliveOsc.connect(keepAliveGain);
-      keepAliveGain.connect(ctx.destination);
+      keepAliveGain.connect(playbackCtx.destination);
       keepAliveOsc.start();
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -289,7 +319,7 @@ export function VoiceRoomPanel({ onClose }: Props) {
             setStatus("listening");
           }
 
-          if (msg.type === "audio")          { playAudio(msg.data); }
+          if (msg.type === "audio")          { console.log(`[VoiceRoom] Received audio chunk: ${msg.data?.length ?? 0} chars`); playAudio(msg.data); }
           if (msg.type === "participant_audio") playPeerAudio(msg.participantId, msg.data);
           if (msg.type === "turn_complete")  setStatus("listening");
 
