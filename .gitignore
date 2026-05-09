@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+data/settings.json
+data/google-tokens.json
+data/uploads/
+*.log
+.DS_Store
+.claude/

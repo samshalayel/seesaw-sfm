@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>المكتب الذكي</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
+    canvas { display: block; }
+
+    /* ── تلميح تحكم ─────────────────────────── */
+    #ui {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.18);
+      font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+      pointer-events: none; transition: opacity 0.4s;
+    }
+
+    /* ── لوحة المحادثة ──────────────────────── */
+    #chat-panel {
+      position: fixed; top: 0; right: -420px;
+      width: 400px; height: 100vh;
+      background: #0f0f18;
+      border-left: 1px solid rgba(34,68,221,0.3);
+      display: flex; flex-direction: column;
+      transition: right 0.35s cubic-bezier(.4,0,.2,1);
+      z-index: 100;
+      box-shadow: -8px 0 40px rgba(0,0,0,0.7);
+    }
+    #chat-panel.open { right: 0; }
+
+    /* header */
+    #chat-header {
+      padding: 16px 18px;
+      background: linear-gradient(135deg, #0d1a3a 0%, #111128 100%);
+      border-bottom: 1px solid rgba(34,68,221,0.25);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .robot-avatar {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg,#1a2a6c,#2244dd);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-left: 10px;
+      box-shadow: 0 0 12px rgba(34,102,255,0.4);
+    }
+    .header-info h3 { color: #e0e8ff; font-size: 14px; font-weight: 700; }
+    .header-info span { font-size: 11px; }
+    .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 5px; }
+    #close-btn {
+      background: none; border: none; color: rgba(255,255,255,0.4);
+      cursor: pointer; font-size: 22px; line-height: 1;
+      padding: 4px; border-radius: 6px; transition: color 0.2s;
+    }
+    #close-btn:hover { color: #fff; }
+
+    /* messages */
+    #messages {
+      flex: 1; overflow-y: auto; padding: 16px 14px;
+      display: flex; flex-direction: column; gap: 10px;
+      scrollbar-width: thin; scrollbar-color: #2244dd33 transparent;
+    }
+    .msg {
+      max-width: 84%; padding: 10px 14px; border-radius: 16px;
+      font-size: 13.5px; line-height: 1.65; white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user {
+      align-self: flex-start;
+      background: #1a2a6c; color: #d0dcff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.bot {
+      align-self: flex-end;
+      background: #141420; color: #c8d0e8;
+      border: 1px solid rgba(34,68,221,0.2);
+      border-bottom-left-radius: 4px;
+    }
+    .typing-dots { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+    .typing-dots span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #2244dd; animation: bounce 1.1s ease-in-out infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: 0.22s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.44s; }
+    @keyframes bounce { 0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)} }
+    .empty-hint {
+      text-align: center; color: rgba(150,160,200,0.4);
+      font-size: 13px; margin-top: 50px;
+    }
+
+    /* voice transcript */
+    #transcript {
+      min-height: 26px; padding: 6px 14px;
+      color: rgba(34,120,255,0.7); font-size: 12px; font-style: italic;
+      background: rgba(34,68,221,0.06);
+      border-top: 1px solid rgba(34,68,221,0.1);
+      flex-shrink: 0;
+    }
+
+    /* input bar */
+    #input-bar {
+      padding: 12px 12px;
+      border-top: 1px solid rgba(34,68,221,0.2);
+      background: #0c0c18;
+      display: flex; gap: 8px; align-items: center;
+      flex-shrink: 0;
+    }
+    #voice-btn {
+      width: 40px; height: 40px; border-radius: 10px; border: none; cursor: pointer;
+      background: rgba(34,68,221,0.15); color: #4477ff;
+      font-size: 18px; display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; flex-shrink: 0;
+    }
+    #voice-btn:hover { background: rgba(34,68,221,0.28); }
+    #voice-btn.recording { background: rgba(239,68,68,0.2); color: #ef4444;
+      animation: pulse-btn 1s ease-in-out infinite; }
+    #voice-btn.speaking  { background: rgba(168,85,247,0.2); color: #a855f7;
+      animation: pulse-btn 0.7s ease-in-out infinite; }
+    @keyframes pulse-btn { 0%,100%{transform:scale(1)}50%{transform:scale(1.1)} }
+
+    #text-input {
+      flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(34,68,221,0.25);
+      border-radius: 20px; padding: 9px 16px; color: #d0d8f0;
+      font-size: 13.5px; outline: none; transition: border-color 0.2s;
+    }
+    #text-input:focus { border-color: rgba(34,68,221,0.55); }
+    #text-input::placeholder { color: rgba(150,160,200,0.35); }
+    #send-btn {
+      width: 40px; height: 40px; border-radius: 10px; border: none; cursor: pointer;
+      background: #1a3acc; color: #fff;
+      font-size: 18px; display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s; flex-shrink: 0;
+    }
+    #send-btn:hover { background: #2244ee; }
+    #send-btn:disabled { background: rgba(34,68,221,0.2); color: rgba(255,255,255,0.3); cursor: default; }
+
+    /* ── زر فتح المحادثة (دائم) ──────────────── */
+    #open-btn {
+      position: fixed; bottom: 32px; left: 32px;
+      width: 54px; height: 54px; border-radius: 16px;
+      background: linear-gradient(135deg,#1a2a6c,#2244dd);
+      border: none; cursor: pointer; color: #fff;
+      font-size: 24px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 24px rgba(34,68,221,0.45);
+      transition: transform 0.2s, box-shadow 0.2s; z-index: 50;
+    }
+    #open-btn:hover { transform: scale(1.08); box-shadow: 0 6px 32px rgba(34,68,221,0.6); }
+
+    /* ── زر الإضاءة ─────────────────────────── */
+    #light-btn {
+      position: fixed; top: 18px; left: 18px;
+      width: 46px; height: 46px; border-radius: 13px;
+      border: 1.5px solid rgba(255,255,255,0.15);
+      background: rgba(10,10,25,0.75);
+      color: #ffe080; cursor: pointer;
+      font-size: 22px; display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 14px rgba(0,0,0,0.5);
+      transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+      z-index: 50;
+    }
+    #light-btn:hover { background: rgba(30,30,60,0.9); border-color: rgba(255,220,80,0.4); }
+    #light-btn.dark  { color: #88aaff; border-color: rgba(80,120,255,0.35);
+                       box-shadow: 0 0 18px rgba(50,80,255,0.25); }
+
+    /* ── زر فتح نافذة الصوت ────────────────── */
+    #voice-open-btn {
+      position: fixed; bottom: 32px; left: 96px;
+      width: 54px; height: 54px; border-radius: 16px;
+      background: linear-gradient(135deg,#1a0a40,#6622aa);
+      border: none; cursor: pointer; color: #fff;
+      font-size: 24px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 24px rgba(102,34,170,0.45);
+      transition: transform 0.2s, box-shadow 0.2s; z-index: 50;
+    }
+    #voice-open-btn:hover { transform: scale(1.08); box-shadow: 0 6px 32px rgba(102,34,170,0.6); }
+    #voice-open-btn.active {
+      background: linear-gradient(135deg,#3b0764,#a855f7);
+      box-shadow: 0 0 0 3px rgba(168,85,247,0.35), 0 6px 28px rgba(168,85,247,0.5);
+      animation: pulse-vob 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse-vob {
+      0%,100%{ box-shadow:0 0 0 3px rgba(168,85,247,0.35),0 6px 28px rgba(168,85,247,0.5); }
+      50%    { box-shadow:0 0 0 8px rgba(168,85,247,0.08),0 6px 28px rgba(168,85,247,0.5); }
+    }
+
+    /* ── نافذة المحادثة الصوتية (رنا) ────────── */
+    #voice-modal {
+      position: fixed; bottom: 102px; left: 32px;
+      width: 290px;
+      background: #0a0a18;
+      border: 1px solid rgba(168,85,247,0.3);
+      border-radius: 20px; overflow: hidden;
+      box-shadow: 0 8px 48px rgba(0,0,0,0.85), 0 0 0 1px rgba(168,85,247,0.08);
+      z-index: 55;
+      display: none; flex-direction: column;
+    }
+    #voice-modal.open {
+      display: flex;
+      animation: modal-in 0.25s cubic-bezier(.4,0,.2,1);
+    }
+    @keyframes modal-in {
+      from { opacity:0; transform:translateY(16px) scale(0.96); }
+      to   { opacity:1; transform:none; }
+    }
+    .vm-header {
+      padding: 11px 14px;
+      background: linear-gradient(135deg,#120a2a,#1e0a40);
+      border-bottom: 1px solid rgba(168,85,247,0.2);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .vm-header h4 { color: #e0c8ff; font-size: 13px; font-weight: 700; margin: 0; }
+    #vm-close {
+      background: none; border: none; color: rgba(255,255,255,0.4);
+      cursor: pointer; font-size: 20px; line-height: 1; padding: 2px 7px;
+      border-radius: 6px; transition: color 0.2s;
+    }
+    #vm-close:hover { color: #fff; }
+    .vm-rana {
+      width: 100%; height: 168px; object-fit: cover; object-position: center top;
+      display: block;
+    }
+    .vm-rana-ph {
+      width: 100%; height: 168px;
+      background: linear-gradient(160deg,#1a0a3a,#0d1a3a);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 60px;
+    }
+    .vm-status {
+      padding: 7px 14px 3px; text-align: center;
+      font-size: 12px; font-style: italic; min-height: 24px;
+      color: rgba(200,160,255,0.65);
+    }
+    /* موجات الصوت */
+    .vm-waves {
+      display: flex; align-items: center; justify-content: center;
+      gap: 3px; padding: 6px 16px 8px; height: 48px;
+    }
+    .wave-bar {
+      width: 4px; border-radius: 2px;
+      background: linear-gradient(to top,#6622aa,#a855f7);
+      height: 5px; flex-shrink: 0;
+    }
+    .vm-waves.active .wave-bar {
+      animation: wave-dance 0.9s ease-in-out infinite;
+    }
+    .vm-waves.active .wave-bar:nth-child(1)  { animation-delay:0.00s; }
+    .vm-waves.active .wave-bar:nth-child(2)  { animation-delay:0.08s; }
+    .vm-waves.active .wave-bar:nth-child(3)  { animation-delay:0.16s; }
+    .vm-waves.active .wave-bar:nth-child(4)  { animation-delay:0.24s; }
+    .vm-waves.active .wave-bar:nth-child(5)  { animation-delay:0.32s; }
+    .vm-waves.active .wave-bar:nth-child(6)  { animation-delay:0.40s; }
+    .vm-waves.active .wave-bar:nth-child(7)  { animation-delay:0.32s; }
+    .vm-waves.active .wave-bar:nth-child(8)  { animation-delay:0.24s; }
+    .vm-waves.active .wave-bar:nth-child(9)  { animation-delay:0.16s; }
+    .vm-waves.active .wave-bar:nth-child(10) { animation-delay:0.08s; }
+    .vm-waves.active .wave-bar:nth-child(11) { animation-delay:0.00s; }
+    .vm-waves.active .wave-bar:nth-child(12) { animation-delay:0.08s; }
+    @keyframes wave-dance { 0%,100%{height:5px} 50%{height:28px} }
+    .vm-waves.speaking .wave-bar {
+      animation: wave-fast 0.55s ease-in-out infinite !important;
+    }
+    @keyframes wave-fast  { 0%,100%{height:4px} 50%{height:34px} }
+    .vm-controls {
+      display: flex; gap: 9px; padding: 8px 14px 13px; justify-content: center;
+    }
+    .mute-btn {
+      flex: 1; height: 38px; border-radius: 10px;
+      border: 1px solid rgba(168,85,247,0.3);
+      background: rgba(168,85,247,0.1); color: #c084fc;
+      font-size: 12.5px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      transition: all 0.2s; font-family: system-ui;
+    }
+    .mute-btn:hover { background: rgba(168,85,247,0.22); }
+    .mute-btn.muted {
+      background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.35);
+      color: #f87171;
+    }
+
+    /* ── زر الغرفة الجماعية ─────────────────── */
+    #room-btn {
+      position: fixed; bottom: 32px; left: 162px;
+      width: 54px; height: 54px; border-radius: 16px;
+      background: linear-gradient(135deg,#0a2a1a,#16a34a);
+      border: none; cursor: pointer; color: #fff;
+      font-size: 22px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 24px rgba(22,163,74,0.4);
+      transition: transform 0.2s, box-shadow 0.2s; z-index: 50;
+    }
+    #room-btn:hover  { transform:scale(1.08); box-shadow:0 6px 32px rgba(22,163,74,0.6); }
+    #room-btn.active { background:linear-gradient(135deg,#14532d,#22c55e);
+      box-shadow:0 0 0 3px rgba(34,197,94,0.35),0 6px 28px rgba(34,197,94,0.5);
+      animation: pulse-gbtn 1.6s ease-in-out infinite; }
+    @keyframes pulse-gbtn {
+      0%,100%{ box-shadow:0 0 0 3px rgba(34,197,94,0.35),0 6px 28px rgba(34,197,94,0.5); }
+      50%    { box-shadow:0 0 0 9px rgba(34,197,94,0.05),0 6px 28px rgba(34,197,94,0.4); }
+    }
+
+    /* ── مودال الغرف ─────────────────────────── */
+    #room-modal {
+      position: fixed; bottom: 102px; left: 32px;
+      width: 310px;
+      background: #090f12;
+      border: 1px solid rgba(34,197,94,0.28);
+      border-radius: 20px; overflow: hidden;
+      box-shadow: 0 8px 48px rgba(0,0,0,0.85);
+      z-index: 55; display: none; flex-direction: column;
+    }
+    #room-modal.open { display:flex; animation:modal-in 0.25s cubic-bezier(.4,0,.2,1); }
+
+    .rm-header {
+      padding: 12px 15px;
+      background: linear-gradient(135deg,#0a1a0f,#0f2a18);
+      border-bottom: 1px solid rgba(34,197,94,0.2);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .rm-header h4 { color: #bbf7d0; font-size: 13px; font-weight: 700; margin: 0; }
+    #rm-close {
+      background:none; border:none; color:rgba(255,255,255,0.35);
+      cursor:pointer; font-size:20px; line-height:1; padding:2px 7px;
+      border-radius:6px; transition:color 0.2s;
+    }
+    #rm-close:hover { color:#fff; }
+
+    /* setup view */
+    .rm-setup { padding: 14px; display:flex; flex-direction:column; gap:10px; }
+    .rm-setup input {
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(34,197,94,0.22);
+      border-radius: 10px; padding: 9px 13px; color: #d0f0d8;
+      font-size: 13px; outline: none; transition: border-color 0.2s;
+      font-family: system-ui;
+    }
+    .rm-setup input:focus { border-color: rgba(34,197,94,0.5); }
+    .rm-setup input::placeholder { color: rgba(100,180,120,0.35); }
+    .rm-row { display:flex; gap:8px; }
+    .rm-btn {
+      flex:1; height:38px; border-radius:10px; border:none; cursor:pointer;
+      font-size:12.5px; font-weight:700; font-family:system-ui;
+      transition: all 0.2s;
+    }
+    .rm-btn.green { background:#16a34a; color:#fff; }
+    .rm-btn.green:hover { background:#22c55e; }
+    .rm-btn.outline {
+      background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); color:#4ade80;
+    }
+    .rm-btn.outline:hover { background:rgba(34,197,94,0.2); }
+
+    /* active room view */
+    .rm-active { padding:12px 14px; display:none; flex-direction:column; gap:10px; }
+    .rm-active.show { display:flex; }
+    .rm-code-box {
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.2);
+      border-radius: 10px; padding: 8px 12px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .rm-code-box span { color:#4ade80; font-size:18px; font-weight:700; letter-spacing:3px; }
+    .rm-copy-btn {
+      background:none; border:none; color:rgba(74,222,128,0.6);
+      cursor:pointer; font-size:16px; padding:2px 6px; border-radius:6px;
+      transition:color 0.2s;
+    }
+    .rm-copy-btn:hover { color:#4ade80; }
+
+    /* participants list */
+    .rm-participants {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(34,197,94,0.15);
+      border-radius: 10px; padding: 10px 12px;
+      display: flex; flex-direction:column; gap:7px;
+      max-height: 150px; overflow-y:auto;
+      scrollbar-width:thin; scrollbar-color:#16a34a33 transparent;
+    }
+    .rm-p-row {
+      display:flex; align-items:center; gap:8px;
+      font-size:12.5px; color:#a7f3d0;
+    }
+    .rm-p-dot {
+      width:8px; height:8px; border-radius:50%;
+      background:#22c55e; flex-shrink:0;
+      box-shadow:0 0 6px rgba(34,197,94,0.7);
+    }
+    .rm-p-row.me .rm-p-dot { background:#60a5fa; box-shadow:0 0 6px rgba(96,165,250,0.7); }
+    .rm-p-robot .rm-p-dot { background:#a855f7; box-shadow:0 0 6px rgba(168,85,247,0.7); }
+
+    /* gemini status in room */
+    .rm-status {
+      text-align:center; font-size:12px; padding:4px 0 2px;
+      color:rgba(100,220,130,0.6);
+    }
+    /* voice waves for group room */
+    .rm-waves {
+      display:flex; align-items:center; justify-content:center;
+      gap:3px; height:36px;
+    }
+    .rm-waves .wave-bar {
+      width:3px; border-radius:2px;
+      background:linear-gradient(to top,#16a34a,#4ade80);
+      height:4px;
+    }
+    .rm-waves.active .wave-bar { animation:wave-dance 0.9s ease-in-out infinite; }
+    .rm-waves.active .wave-bar:nth-child(1)  { animation-delay:0.00s; }
+    .rm-waves.active .wave-bar:nth-child(2)  { animation-delay:0.07s; }
+    .rm-waves.active .wave-bar:nth-child(3)  { animation-delay:0.14s; }
+    .rm-waves.active .wave-bar:nth-child(4)  { animation-delay:0.21s; }
+    .rm-waves.active .wave-bar:nth-child(5)  { animation-delay:0.28s; }
+    .rm-waves.active .wave-bar:nth-child(6)  { animation-delay:0.35s; }
+    .rm-waves.active .wave-bar:nth-child(7)  { animation-delay:0.28s; }
+    .rm-waves.active .wave-bar:nth-child(8)  { animation-delay:0.21s; }
+    .rm-waves.active .wave-bar:nth-child(9)  { animation-delay:0.14s; }
+    .rm-waves.active .wave-bar:nth-child(10) { animation-delay:0.07s; }
+    .rm-waves.speaking .wave-bar { animation:wave-fast 0.55s ease-in-out infinite !important; }
+
+    .rm-leave-btn {
+      width:100%; height:36px; border-radius:10px; border:none; cursor:pointer;
+      background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3);
+      color:#f87171; font-size:12.5px; font-weight:700; font-family:system-ui;
+      transition:all 0.2s;
+    }
+    .rm-leave-btn:hover { background:rgba(239,68,68,0.25); }
+
+    /* ── تلميح نقرة الروبوت ─────────────────── */
+    #robot-hint {
+      position: fixed; bottom: 100px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10,10,30,0.88);
+      color: rgba(150,180,255,0.85);
+      border: 1px solid rgba(34,68,221,0.25);
+      padding: 8px 18px; border-radius: 20px;
+      font-size: 12px; pointer-events: none;
+      opacity: 0; transition: opacity 0.5s;
+    }
+  </style>
+</head>
+<body>
+<div id="ui">scroll to zoom</div>
+<div id="robot-hint">🤖 انقر على الروبوت للمحادثة</div>
+
+<!-- زر الإضاءة -->
+<button id="light-btn" title="تبديل الإضاءة">💡</button>
+
+<!-- زر فتح دائم -->
+<button id="open-btn" title="فتح المحادثة">💬</button>
+
+<!-- زر نافذة رنا الصوتية -->
+<button id="voice-open-btn" title="محادثة صوتية مع رنا">🎙️</button>
+
+<!-- زر الغرفة الجماعية -->
+<button id="room-btn" title="غرفة صوتية جماعية">👥</button>
+
+<!-- مودال الغرف الجماعية -->
+<div id="room-modal">
+  <div class="rm-header">
+    <h4>👥 غرفة صوتية جماعية</h4>
+    <button id="rm-close">×</button>
+  </div>
+
+  <!-- setup: إنشاء أو انضمام -->
+  <div class="rm-setup" id="rm-setup">
+    <input id="rm-my-name" type="text" placeholder="اسمك (مثال: أشرف)" maxlength="30" />
+    <button class="rm-btn green" id="rm-create-btn">✨ أنشئ غرفة جديدة</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;height:1px;background:rgba(34,197,94,0.15)"></div>
+      <span style="color:rgba(100,180,120,0.4);font-size:11px">أو</span>
+      <div style="flex:1;height:1px;background:rgba(34,197,94,0.15)"></div>
+    </div>
+    <div class="rm-row">
+      <input id="rm-join-code" type="text" placeholder="كود الغرفة (مثال: AB12CD)"
+             style="text-transform:uppercase;letter-spacing:2px" maxlength="6" />
+      <button class="rm-btn outline" id="rm-join-btn" style="flex:0 0 auto;padding:0 14px">انضم</button>
+    </div>
+    <div id="rm-setup-err" style="color:#f87171;font-size:11.5px;display:none"></div>
+  </div>
+
+  <!-- active room -->
+  <div class="rm-active" id="rm-active">
+    <div class="rm-code-box">
+      <div>
+        <div style="font-size:10px;color:rgba(100,200,120,0.5);margin-bottom:2px">كود الغرفة</div>
+        <span id="rm-code-display">------</span>
+      </div>
+      <button class="rm-copy-btn" id="rm-copy-btn" title="نسخ الكود">📋</button>
+    </div>
+
+    <div class="rm-participants" id="rm-participants">
+      <!-- تُملأ ديناميكياً -->
+    </div>
+
+    <div class="rm-status" id="rm-gemini-status">⏳ جارٍ الاتصال بـ Gemini...</div>
+
+    <div class="rm-waves" id="rm-waves">
+      <div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div>
+    </div>
+
+    <button class="rm-leave-btn" id="rm-leave-btn">🚪 مغادرة الغرفة</button>
+  </div>
+</div>
+
+<!-- نافذة رنا الصوتية -->
+<div id="voice-modal">
+  <div class="vm-header">
+    <h4>🎙️ محادثة صوتية — رنا</h4>
+    <button id="vm-close">×</button>
+  </div>
+  <img class="vm-rana" src="/rana.jpg" alt="رنا"
+       onerror="this.style.display='none';document.getElementById('vm-ph').style.display='flex'">
+  <div class="vm-rana-ph" id="vm-ph" style="display:none">👩‍💻</div>
+  <div class="vm-status" id="vm-status">اضغط للبدء</div>
+  <div class="vm-waves" id="vm-waves">
+    <div class="wave-bar"></div><div class="wave-bar"></div>
+    <div class="wave-bar"></div><div class="wave-bar"></div>
+    <div class="wave-bar"></div><div class="wave-bar"></div>
+    <div class="wave-bar"></div><div class="wave-bar"></div>
+    <div class="wave-bar"></div><div class="wave-bar"></div>
+    <div class="wave-bar"></div><div class="wave-bar"></div>
+  </div>
+  <div class="vm-controls">
+    <button class="mute-btn" id="mute-mic-btn">🎤 الميكروفون</button>
+    <button class="mute-btn" id="mute-spk-btn">🔊 السماعة</button>
+  </div>
+</div>
+
+<!-- لوحة المحادثة -->
+<div id="chat-panel">
+  <div id="chat-header">
+    <div style="display:flex;align-items:center">
+      <div class="robot-avatar">🤖</div>
+      <div class="header-info">
+        <h3>المساعد الذكي</h3>
+        <span><span class="status-dot" id="status-dot" style="background:#22cc88"></span>
+              <span id="status-label" style="color:#22cc88">جاهز</span></span>
+      </div>
+    </div>
+    <button id="close-btn">×</button>
+  </div>
+
+  <div id="messages"><div class="empty-hint">انقر على الروبوت أو اكتب رسالتك للبدء 🚀</div></div>
+
+  <div id="transcript"></div>
+
+  <div id="input-bar">
+    <button id="voice-btn" title="محادثة صوتية">🎤</button>
+    <input id="text-input" type="text" placeholder="اكتب رسالتك..." autocomplete="off" />
+    <button id="send-btn">➤</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  THREE.JS SCENE
+// ═══════════════════════════════════════════════════════════════════
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.88;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x08080f);
+scene.fog = new THREE.Fog(0x08080f, 10, 22);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 50);
+camera.position.set(3.6, 2.3, 3.8);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.1, -1.4);
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.06;
+controls.minDistance    = 1.2;
+controls.maxDistance    = 5.8;          // لا يخرج بعيداً عن الغرفة
+controls.minPolarAngle  = Math.PI * 0.10; // لا ينظر من أسفل الأرضية
+controls.maxPolarAngle  = Math.PI * 0.46; // لا ينظر من فوق السقف
+controls.minAzimuthAngle = -Math.PI * 0.70; // حد دوران أفقي يسار
+controls.maxAzimuthAngle =  Math.PI * 0.70; // حد دوران أفقي يمين
+
+// ── MATERIALS ────────────────────────────────────────────────────────────────
+const mat = (opts) => new THREE.MeshStandardMaterial(opts);
+const M = {
+  floor:   mat({ color: 0x14141e, roughness: 0.12, metalness: 0.45 }),
+  wall:    mat({ color: 0xd6d6e6, roughness: 0.95 }),
+  ceil:    mat({ color: 0xfafafa, roughness: 1 }),
+  wood:    mat({ color: 0x5a3b1c, roughness: 0.5, metalness: 0.05 }),
+  metal:   mat({ color: 0x8a9098, roughness: 0.22, metalness: 0.88 }),
+  dkMet:   mat({ color: 0x363644, roughness: 0.3,  metalness: 0.82 }),
+  chair:   mat({ color: 0x191926, roughness: 0.78 }),
+  body:    mat({ color: 0x26263a, roughness: 0.22, metalness: 0.78 }),
+  bodyDk:  mat({ color: 0x12121c, roughness: 0.28, metalness: 0.82 }),
+  accent:  mat({ color: 0x2244dd, roughness: 0.18, metalness: 0.92,
+                 emissive: new THREE.Color(0x0a1a55), emissiveIntensity: 1 }),
+  eye:     mat({ color: 0x33eeff, roughness: 0.05,
+                 emissive: new THREE.Color(0x0077bb), emissiveIntensity: 5 }),
+  screen:  mat({ color: 0x081428, roughness: 0.04,
+                 emissive: new THREE.Color(0x0d2055), emissiveIntensity: 1.2 }),
+  panel:   mat({ color: 0xffffff, emissive: new THREE.Color(0xffffff), emissiveIntensity: 2.5 }),
+  glass:   mat({ color: 0x88aacc, transparent: true, opacity: 0.22, roughness: 0, metalness: 0.1 }),
+  white:   mat({ color: 0xffffff, roughness: 0.6 }),
+  paper:   mat({ color: 0xffffee, roughness: 0.88 }),
+  kb:      mat({ color: 0x22222e, roughness: 0.6 }),
+  green:   mat({ color: 0x1e5c1e, roughness: 0.88 }),
+  pot:     mat({ color: 0x3e2a10, roughness: 0.8 }),
+};
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function add(m) { m.castShadow = true; m.receiveShadow = true; scene.add(m); return m; }
+function box(w,h,d, m, x=0,y=0,z=0, rx=0,ry=0,rz=0) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+  mesh.position.set(x,y,z); mesh.rotation.set(rx,ry,rz);
+  return add(mesh);
+}
+function cyl(rt,rb,h, m, x=0,y=0,z=0, rx=0,ry=0,rz=0, seg=16) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), m);
+  mesh.position.set(x,y,z); mesh.rotation.set(rx,ry,rz);
+  return add(mesh);
+}
+function sph(r, m, x=0,y=0,z=0) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(r,16,12), m);
+  mesh.position.set(x,y,z); return add(mesh);
+}
+
+// ── ROOM ──────────────────────────────────────────────────────────────────────
+const W=10, H=3.2, D=9;
+box(W, 0.12, D, M.floor,  0, -0.06, 0);
+box(W, 0.08, D, M.ceil,   0,  H,    0);
+box(W, H, 0.12, M.wall,   0,  H/2, -D/2);
+box(0.12, H, D, M.wall,  -W/2, H/2, 0);
+box(0.12, H, D, M.wall,   W/2, H/2, 0);
+box(W,    0.08, 0.04, M.dkMet,  0,      0.04, -D/2+0.07);
+box(0.04, 0.08, D,    M.dkMet, -W/2+0.08, 0.04, 0);
+box(0.04, 0.08, D,    M.dkMet,  W/2-0.08, 0.04, 0);
+box(0.1, 1.5, 2.2, M.glass,  W/2-0.01, H/2+0.15, -1.2);
+box(0.12, 1.56, 0.05, M.dkMet, W/2, H/2+0.15, -1.2+1.12);
+box(0.12, 1.56, 0.05, M.dkMet, W/2, H/2+0.15, -1.2-1.12);
+box(0.12, 0.05, 2.24, M.dkMet, W/2, H/2+0.15+0.79, -1.2);
+box(0.12, 0.05, 2.24, M.dkMet, W/2, H/2+0.15-0.79, -1.2);
+
+// ── CEILING LIGHTS ────────────────────────────────────────────────────────────
+const ceilLights = [];
+function ceilPanel(x, z) {
+  box(0.16, 0.014, 0.88, M.panel, x, H-0.04, z);
+  const l = new THREE.PointLight(0xfff6e0, 16, 6.5);
+  l.position.set(x, H-0.2, z); l.castShadow = true;
+  l.shadow.mapSize.set(512, 512); scene.add(l);
+  ceilLights.push(l);
+}
+ceilPanel(-1.8, -0.9); ceilPanel(1.8, -0.9);
+ceilPanel(-1.8, -3.2); ceilPanel(1.8, -3.2);
+
+// ── DESK ──────────────────────────────────────────────────────────────────────
+box(2.2, 0.06, 1.05, M.wood, 0, 0.78, -2.08);
+box(2.2, 0.03, 0.03, M.dkMet, 0, 0.755, -1.555);
+const LH = 0.75;
+[[-1.02,-1.57],[1.02,-1.57],[-1.02,-2.58],[1.02,-2.58]].forEach(([x,z]) =>
+  box(0.06, LH, 0.06, M.metal, x, LH/2, z));
+box(2.0, 0.04, 0.04, M.metal, 0, 0.28, -2.08);
+box(2.0, 0.12, 0.04, M.dkMet, 0, 0.72, -2.60);
+box(0.34, 0.02, 0.28, M.metal, -0.3, 0.82, -2.5);
+cyl(0.044, 0.044, 0.31, M.metal, -0.3, 0.985, -2.5);
+box(0.90, 0.54, 0.04, M.bodyDk, -0.3, 1.35, -2.47);
+box(0.84, 0.48, 0.025, M.screen, -0.3, 1.35, -2.445);
+box(0.44, 0.018, 0.17, M.kb, 0.06, 0.815, -1.82);
+box(0.15, 0.012, 0.11, mat({color:0x18181f,roughness:0.28}), 0.44, 0.813, -1.82);
+cyl(0.048, 0.044, 0.10, M.white, 0.66, 0.862, -1.8);
+cyl(0.040, 0.040, 0.085, mat({color:0x1a0a08}), 0.66, 0.866, -1.8);
+box(0.26, 0.01, 0.2, M.paper, -0.82, 0.815, -1.86);
+cyl(0.007, 0.007, 0.19, M.accent, -0.695, 0.815, -1.86, 0, 0, Math.PI/2);
+cyl(0.06, 0.08, 0.10, M.pot, 0.92, 0.865, -2.45);
+sph(0.13, M.green, 0.92, 1.02, -2.45);
+sph(0.09, mat({color:0x257825,roughness:0.9}), 0.83, 1.0, -2.40);
+sph(0.08, mat({color:0x1b5a1b,roughness:0.9}), 1.02, 0.99, -2.40);
+cyl(0.065, 0.09, 0.02, M.metal, 0.74, 0.822, -1.75);
+box(0.025, 0.36, 0.025, M.metal, 0.74, 1.01, -1.75);
+box(0.24, 0.065, 0.18, M.metal, 0.74, 1.22, -1.66, -0.38, 0, 0);
+box(0.20, 0.04, 0.14, M.panel, 0.74, 1.20, -1.63, -0.38, 0, 0);
+const lampSpot = new THREE.SpotLight(0xffe8a0, 12, 2.8, Math.PI/5.5, 0.55);
+lampSpot.position.set(0.74, 1.18, -1.62);
+lampSpot.target.position.set(0.3, 0.81, -2.0);
+lampSpot.castShadow = true; lampSpot.shadow.mapSize.set(1024, 1024);
+scene.add(lampSpot); scene.add(lampSpot.target);
+
+// ── BOOKSHELF ─────────────────────────────────────────────────────────────────
+const BX = -3.8, BZ = -4.4;
+box(1.0, 2.0, 0.35, M.wood, BX, 1.0, BZ);
+[0.08, 0.55, 1.02, 1.5].forEach(y => box(0.96, 0.03, 0.33, M.dkMet, BX, y, BZ));
+const bkColors = [0x882222, 0x224488, 0x228844, 0x886622, 0x552288, 0xaa6622, 0x336688];
+let bOff = -0.42;
+bkColors.forEach(c => {
+  const bw = 0.048 + Math.random()*0.038;
+  const bh = 0.3 + Math.random()*0.14;
+  box(bw, bh, 0.24, mat({color:c,roughness:0.8}), BX+bOff+bw/2, 0.11+bh/2, BZ);
+  bOff += bw + 0.008;
+});
+
+// ── OFFICE CHAIR ──────────────────────────────────────────────────────────────
+const CX = 0, CZ = -0.9;
+for (let i=0; i<5; i++) {
+  const a = (i/5)*Math.PI*2;
+  box(0.44, 0.025, 0.055, M.metal, CX+Math.cos(a)*0.22, 0.06, CZ+Math.sin(a)*0.22, 0, -a, 0);
+  cyl(0.034, 0.034, 0.05, M.dkMet, CX+Math.cos(a)*0.43, 0.04, CZ+Math.sin(a)*0.43, Math.PI/2,0,0, 8);
+}
+cyl(0.04, 0.055, 0.36, M.metal, CX, 0.23, CZ);
+cyl(0.03, 0.03,  0.14, M.dkMet, CX, 0.42, CZ);
+box(0.60, 0.10, 0.56, M.chair, CX, 0.535, CZ);
+box(0.58, 0.64, 0.08, M.chair, CX, 0.99, CZ+0.23);
+box(0.50, 0.32, 0.02, mat({color:0x222232,roughness:0.8}), CX, 0.98, CZ+0.19);
+box(0.04, 0.52, 0.04, M.metal, CX-0.26, 0.82, CZ+0.18);
+box(0.04, 0.52, 0.04, M.metal, CX+0.26, 0.82, CZ+0.18);
+box(0.07, 0.04, 0.40, M.chair,  CX-0.35, 0.79, CZ-0.06);
+box(0.07, 0.04, 0.40, M.chair,  CX+0.35, 0.79, CZ-0.06);
+box(0.04, 0.25, 0.04, M.metal, CX-0.35, 0.665, CZ-0.06);
+box(0.04, 0.25, 0.04, M.metal, CX+0.35, 0.665, CZ-0.06);
+
+// ── ROBOT ─────────────────────────────────────────────────────────────────────
+const RX = 0, RZ = -0.9;
+const robotMeshes = [];          // كل أجزاء الروبوت للـ raycasting
+function robotAdd(m) { m.castShadow=true; m.receiveShadow=true; scene.add(m); robotMeshes.push(m); return m; }
+function rbox(w,h,d, m, x=0,y=0,z=0, rx=0,ry=0,rz=0) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+  mesh.position.set(x,y,z); mesh.rotation.set(rx,ry,rz);
+  return robotAdd(mesh);
+}
+function rcyl(rt,rb,h, m, x=0,y=0,z=0, rx=0,ry=0,rz=0, seg=16) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), m);
+  mesh.position.set(x,y,z); mesh.rotation.set(rx,ry,rz);
+  return robotAdd(mesh);
+}
+function rsph(r, m, x=0,y=0,z=0) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(r,16,12), m);
+  mesh.position.set(x,y,z); return robotAdd(mesh);
+}
+
+rbox(0.34, 0.16, 0.28, M.body,  RX, 0.665, RZ);
+rbox(0.12, 0.08, 0.10, M.bodyDk, RX, 0.755, RZ);
+rbox(0.38, 0.50, 0.26, M.body,  RX, 0.995, RZ);
+rbox(0.24, 0.36, 0.022, M.accent,  RX, 1.00, RZ-0.132);
+rbox(0.052, 0.30, 0.022, M.eye, RX, 1.00, RZ-0.134);
+rbox(0.022, 0.22, 0.14, M.bodyDk, RX-0.20, 0.98, RZ);
+rbox(0.022, 0.22, 0.14, M.bodyDk, RX+0.20, 0.98, RZ);
+rcyl(0.07, 0.088, 0.14, M.bodyDk, RX, 1.285, RZ, 0,0,0, 12);
+rbox(0.17, 0.025, 0.17, M.accent, RX, 1.235, RZ);
+rbox(0.17, 0.025, 0.17, M.accent, RX, 1.335, RZ);
+rbox(0.30, 0.27, 0.28, M.body, RX, 1.478, RZ);
+rbox(0.28, 0.04, 0.26, M.bodyDk, RX, 1.625, RZ);
+rbox(0.018, 0.10, 0.018, M.metal,  RX-0.09, 1.695, RZ);
+rsph(0.026, M.accent, RX-0.09, 1.752, RZ);
+rbox(0.018, 0.075, 0.018, M.metal, RX+0.09, 1.684, RZ);
+rsph(0.020, M.eye,    RX+0.09, 1.730, RZ);
+rsph(0.044, M.eye, RX-0.090, 1.482, RZ-0.142);
+rsph(0.044, M.eye, RX+0.090, 1.482, RZ-0.142);
+rcyl(0.062,0.062,0.02, M.bodyDk, RX-0.09,1.482,RZ-0.136, Math.PI/2,0,0, 12);
+rcyl(0.062,0.062,0.02, M.bodyDk, RX+0.09,1.482,RZ-0.136, Math.PI/2,0,0, 12);
+rbox(0.180, 0.026, 0.020, M.accent,  RX,      1.385, RZ-0.141);
+rbox(0.040, 0.026, 0.020, M.bodyDk,  RX-0.06, 1.385, RZ-0.141);
+rbox(0.040, 0.026, 0.020, M.bodyDk,  RX+0.06, 1.385, RZ-0.141);
+rbox(0.032, 0.16, 0.14, M.dkMet, RX-0.168, 1.478, RZ);
+rbox(0.032, 0.16, 0.14, M.dkMet, RX+0.168, 1.478, RZ);
+rbox(0.15, 0.19, 0.24, M.bodyDk, RX-0.28, 1.15, RZ);
+rbox(0.15, 0.19, 0.24, M.bodyDk, RX+0.28, 1.15, RZ);
+[-1,1].forEach(side => {
+  const sx = side * 0.28;
+  rbox(0.12, 0.50, 0.12, M.body,  sx, 1.015, RZ-0.20, -0.87, 0, 0);
+  rsph(0.072, M.bodyDk, sx, 0.835, RZ-0.41);
+  rbox(0.10,  0.38, 0.10, M.body,  sx, 0.826, RZ-0.61, -1.48, 0, 0);
+  rbox(0.12,  0.06, 0.15, M.bodyDk, sx, 0.862, RZ-0.82);
+  for (let f=-1; f<=1; f++) rbox(0.022, 0.04, 0.04, M.bodyDk, sx+f*0.036, 0.862, RZ-0.897);
+});
+[-1,1].forEach(side => {
+  const lx = side * 0.14;
+  rbox(0.13, 0.12, 0.44, M.body,  lx, 0.595, RZ-0.25);
+  rsph(0.072, M.bodyDk, lx, 0.590, RZ-0.48);
+  rbox(0.12,  0.50, 0.12, M.body,  lx, 0.315, RZ-0.48);
+  rsph(0.058, M.bodyDk, lx, 0.076, RZ-0.48);
+  rbox(0.14,  0.07, 0.24, M.bodyDk, lx, 0.052, RZ-0.50);
+});
+
+// ── ROBOT LIGHTS ──────────────────────────────────────────────────────────────
+const eyeGlow   = new THREE.PointLight(0x22ccff, 3.0, 0.9);
+eyeGlow.position.set(RX, 1.482, RZ-0.25); scene.add(eyeGlow);
+const chestGlow = new THREE.PointLight(0x2244dd, 1.8, 0.7);
+chestGlow.position.set(RX, 1.0, RZ-0.2);  scene.add(chestGlow);
+
+// ── SCENE LIGHTING ────────────────────────────────────────────────────────────
+const ambLight = new THREE.AmbientLight(0x2a3350, 0.7);
+scene.add(ambLight);
+const sun = new THREE.DirectionalLight(0xfff2cc, 2.2);
+sun.position.set(7, 5, 1.5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { near:0.5, far:30, left:-9, right:9, top:9, bottom:-9 });
+scene.add(sun);
+const monGlow = new THREE.PointLight(0x1a3aaa, 3.0, 1.6);
+monGlow.position.set(-0.3, 1.35, -2.30); scene.add(monGlow);
+
+// ── RAYCASTING (نقرة الروبوت) ─────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const pointer   = new THREE.Vector2();
+
+renderer.domElement.addEventListener('click', (e) => {
+  pointer.x =  (e.clientX / innerWidth)  * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(robotMeshes, false);
+  if (hits.length > 0) openChat();
+});
+
+// hover cursor
+renderer.domElement.addEventListener('mousemove', (e) => {
+  pointer.x =  (e.clientX / innerWidth)  * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(robotMeshes, false);
+  renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default';
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  ROBOT STATE
+// ═══════════════════════════════════════════════════════════════════
+
+// "idle" | "thinking" | "talking"
+let robotState = 'idle';
+
+function setRobotState(state) {
+  robotState = state;
+  if (state === 'thinking') {
+    M.eye.color.set(0xffcc00);
+    M.eye.emissive.set(0x554400);
+    eyeGlow.color.set(0xffcc00);
+  } else if (state === 'talking') {
+    M.eye.color.set(0x33eeff);
+    M.eye.emissive.set(0x0077bb);
+    eyeGlow.color.set(0x22ccff);
+    chestGlow.color.set(0x00aaff);
+  } else {
+    M.eye.color.set(0x33eeff);
+    M.eye.emissive.set(0x0077bb);
+    eyeGlow.color.set(0x22ccff);
+    chestGlow.color.set(0x2244dd);
+  }
+}
+
+// ── ANIMATION ─────────────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  const t = clock.getElapsedTime();
+
+  if (robotState === 'idle') {
+    const breath = 0.5 + 0.5 * Math.sin(t * 0.85);
+    M.eye.emissiveIntensity = 3.5 + breath * 2.5;
+    eyeGlow.intensity  = 2.0 + breath * 1.8;
+    chestGlow.intensity = 1.2 + breath * 0.8;
+  } else if (robotState === 'thinking') {
+    const flicker = 0.5 + 0.5 * Math.sin(t * 4.5 + Math.sin(t*11)*2);
+    M.eye.emissiveIntensity = 3.0 + flicker * 3.0;
+    eyeGlow.intensity = 2.5 + flicker * 2.5;
+    chestGlow.intensity = 1.0 + flicker * 0.6;
+  } else if (robotState === 'talking') {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 8.0);
+    M.eye.emissiveIntensity = 5.0 + pulse * 3.5;
+    eyeGlow.intensity  = 4.0 + pulse * 3.0;
+    chestGlow.intensity = 2.0 + pulse * 1.2;
+  }
+
+  M.screen.emissiveIntensity = 1.1 + Math.sin(t * 0.22) * 0.06;
+
+  controls.update();
+
+  // ── إبقاء الكاميرا داخل الغرفة دائماً ──────────────────────────────────────
+  const M2 = 0.35; // margin عن الجدران
+  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -W/2 + M2, W/2 - M2);
+  camera.position.y = THREE.MathUtils.clamp(camera.position.y, 0.35, H - 0.25);
+  camera.position.z = THREE.MathUtils.clamp(camera.position.z, -D/2 + M2, D/2 - 0.6);
+
+  renderer.render(scene, camera);
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  LIGHTING TOGGLE
+// ═══════════════════════════════════════════════════════════════════
+
+let lightMode = 'bright'; // 'bright' | 'dark'
+const lightBtn = document.getElementById('light-btn');
+
+lightBtn.addEventListener('click', () => {
+  lightMode = lightMode === 'bright' ? 'dark' : 'bright';
+  const dark = lightMode === 'dark';
+
+  // سقف
+  ceilLights.forEach(l => { l.intensity = dark ? 0 : 16; });
+  M.panel.emissiveIntensity = dark ? 0.05 : 2.5;
+
+  // ضوء طبيعي (نافذة)
+  sun.intensity    = dark ? 0.05 : 2.2;
+  ambLight.color.set(dark ? 0x08101e : 0x2a3350);
+  ambLight.intensity = dark ? 0.25 : 0.7;
+
+  // مصباح المكتب
+  lampSpot.intensity = dark ? 6 : 12;
+
+  // شاشة + مصباح مراقب أكثر وضوحاً في الظلام
+  monGlow.intensity  = dark ? 6.0 : 3.0;
+
+  // زر الواجهة
+  lightBtn.textContent = dark ? '🌙' : '💡';
+  lightBtn.classList.toggle('dark', dark);
+  lightBtn.title = dark ? 'تشغيل الأضواء' : 'إطفاء الأضواء';
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  CHAT PANEL — UI
+// ═══════════════════════════════════════════════════════════════════
+
+const chatPanel  = document.getElementById('chat-panel');
+const messagesEl = document.getElementById('messages');
+const textInput  = document.getElementById('text-input');
+const sendBtn    = document.getElementById('send-btn');
+const voiceBtn   = document.getElementById('voice-btn');
+const transcriptEl = document.getElementById('transcript');
+const statusDot  = document.getElementById('status-dot');
+const statusLabel= document.getElementById('status-label');
+
+function openChat() {
+  chatPanel.classList.add('open');
+  document.getElementById('robot-hint').style.opacity = '0';
+  textInput.focus();
+}
+function closeChat() {
+  chatPanel.classList.remove('open');
+  stopVoice();
+}
+
+document.getElementById('close-btn').addEventListener('click', closeChat);
+document.getElementById('open-btn').addEventListener('click', openChat);
+
+// تلميح الروبوت عند التحميل
+setTimeout(() => {
+  const hint = document.getElementById('robot-hint');
+  hint.style.opacity = '1';
+  setTimeout(() => hint.style.opacity = '0', 4000);
+}, 1500);
+
+// ── حالة الوضع ────────────────────────────────────────────────────
+function setStatus(state) {
+  const map = {
+    ready:      { label: 'جاهز',            color: '#22cc88', dot: '#22cc88' },
+    thinking:   { label: 'يفكر...',          color: '#f59e0b', dot: '#f59e0b' },
+    talking:    { label: 'يتكلم...',         color: '#a855f7', dot: '#a855f7' },
+    listening:  { label: 'يسمعك — تكلم',     color: '#3b82f6', dot: '#3b82f6' },
+    connecting: { label: 'جارٍ الاتصال...',  color: '#94a3b8', dot: '#94a3b8' },
+    error:      { label: 'خطأ',              color: '#ef4444', dot: '#ef4444' },
+  };
+  const s = map[state] || map.ready;
+  statusLabel.textContent = s.label;
+  statusLabel.style.color = s.color;
+  statusDot.style.background = s.dot;
+  setRobotState(state === 'thinking' ? 'thinking' : state === 'talking' || state === 'listening' ? 'talking' : 'idle');
+}
+
+// ── رسائل ────────────────────────────────────────────────────────
+const chatHistory = [];
+
+function addMessage(role, content) {
+  const el = document.querySelector('.empty-hint');
+  if (el) el.remove();
+
+  const div = document.createElement('div');
+  div.className = `msg ${role === 'user' ? 'user' : 'bot'}`;
+  div.textContent = content;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+function addTyping() {
+  const el = document.querySelector('.empty-hint');
+  if (el) el.remove();
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  TEXT CHAT  (POST /api/chat — SSE streaming)
+// ═══════════════════════════════════════════════════════════════════
+
+let isLoading = false;
+
+async function sendText(text) {
+  if (!text.trim() || isLoading) return;
+  isLoading = true;
+  sendBtn.disabled = true;
+
+  addMessage('user', text);
+  chatHistory.push({ role: 'user', content: text });
+
+  const typingEl = addTyping();
+  setStatus('thinking');
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        history: chatHistory.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      typingEl.textContent = err.error || 'حدث خطأ';
+      typingEl.style.color = '#ef4444';
+      setStatus('error');
+      isLoading = false; sendBtn.disabled = false; return;
+    }
+
+    // Streaming SSE
+    typingEl.textContent = '';
+    setStatus('talking');
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let botText   = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data: '));
+      for (const line of lines) {
+        const data = line.slice(6);
+        if (data === '[DONE]') break;
+        try {
+          const { content } = JSON.parse(data);
+          if (content) {
+            botText += content;
+            typingEl.textContent = botText;
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          }
+        } catch {}
+      }
+    }
+
+    chatHistory.push({ role: 'assistant', content: botText });
+    setStatus('ready');
+
+  } catch (e) {
+    typingEl.textContent = 'تعذّر الاتصال بالسيرفر';
+    typingEl.style.color = '#ef4444';
+    setStatus('error');
+  }
+
+  isLoading = false;
+  sendBtn.disabled = false;
+}
+
+sendBtn.addEventListener('click', () => {
+  const t = textInput.value.trim();
+  textInput.value = '';
+  sendText(t);
+});
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  VOICE CHAT  (WebSocket /ws/gemini-live — نفس بروتوكول VoiceChat.tsx)
+// ═══════════════════════════════════════════════════════════════════
+
+let voiceStatus = 'idle';  // idle | connecting | listening | speaking | error
+let ws = null, audioCtx = null, processor = null, micStream = null;
+let nextPlayTime = 0;
+let micMuted = false, speakerMuted = false, masterGain = null;
+
+function setVoiceStatus(s) {
+  voiceStatus = s;
+  const icon = { idle:'🎤', connecting:'⏳', listening:'🎤', speaking:'🔊', error:'⚠️' }[s] || '🎤';
+  voiceBtn.textContent = icon;
+  voiceBtn.className   = 'voice-btn';
+  if (s === 'listening') { voiceBtn.className += ' recording'; voiceBtn.title = 'إيقاف'; }
+  if (s === 'speaking')  { voiceBtn.className += ' speaking';  voiceBtn.title = 'إيقاف'; }
+  if (s === 'idle')      { voiceBtn.title = 'محادثة صوتية'; }
+  transcriptEl.textContent = s === 'idle' ? '' : transcriptEl.textContent;
+
+  const stMap = { listening:'listening', speaking:'talking', connecting:'connecting', error:'error' };
+  if (stMap[s] && !isLoading) setStatus(stMap[s]);
+  if (s === 'idle' && !isLoading) setStatus('ready');
+  updateVoiceModal(s);
+}
+
+function playAudioChunk(base64) {
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const bytes  = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  const pcm16  = new Int16Array(bytes.buffer);
+  const f32    = new Float32Array(pcm16.length);
+  for (let i = 0; i < pcm16.length; i++) f32[i] = pcm16[i] / 32768;
+  const buf = audioCtx.createBuffer(1, f32.length, 24000);
+  buf.copyToChannel(f32, 0);
+  const now = audioCtx.currentTime;
+  if (nextPlayTime < now) nextPlayTime = now;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(masterGain || audioCtx.destination);
+  src.start(nextPlayTime);
+  nextPlayTime += buf.duration;
+  setVoiceStatus('speaking');
+}
+
+function stopVoice() {
+  if (processor) { processor.disconnect(); processor = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (ws)        { ws.close(); ws = null; }
+  if (audioCtx)  { audioCtx.close(); audioCtx = null; }
+  masterGain   = null;
+  nextPlayTime = 0;
+  transcriptEl.textContent = '';
+  setVoiceStatus('idle');
+}
+
+async function startVoice() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert('الميكروفون يتطلب اتصالاً آمناً (localhost أو https)');
+    return;
+  }
+  setVoiceStatus('connecting');
+  try {
+    micStream  = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx   = new AudioContext({ sampleRate: 16000 });
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = speakerMuted ? 0 : 1;
+    masterGain.connect(audioCtx.destination);
+
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws/gemini-live`);
+
+    ws.onopen = () => {
+      // أرسل init مع تاريخ المحادثة الحالي
+      ws.send(JSON.stringify({
+        type: 'init',
+        systemPrompt: '',
+        messages: chatHistory.map(m => ({ role: m.role, content: m.content })),
+      }));
+    };
+
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+
+      if (msg.type === 'ready') {
+        // ابدأ بث الميكروفون
+        const source = audioCtx.createMediaStreamSource(micStream);
+        processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = (e) => {
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          if (micMuted) return;
+          const f32  = e.inputBuffer.getChannelData(0);
+          const p16  = new Int16Array(f32.length);
+          for (let i = 0; i < f32.length; i++)
+            p16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
+          const bytes = new Uint8Array(p16.buffer);
+          let bin = '';
+          for (let j = 0; j < bytes.length; j++) bin += String.fromCharCode(bytes[j]);
+          ws.send(JSON.stringify({ type: 'audio', data: btoa(bin) }));
+        };
+        const silent = audioCtx.createGain();
+        silent.gain.value = 0;
+        source.connect(processor);
+        processor.connect(silent);
+        silent.connect(audioCtx.destination);
+        setVoiceStatus('listening');
+      }
+
+      if (msg.type === 'audio')        playAudioChunk(msg.data);
+      if (msg.type === 'text' && msg.text) {
+        transcriptEl.textContent += msg.text;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+      if (msg.type === 'turn_complete') {
+        // أضف رد الروبوت كرسالة إذا في نص
+        if (transcriptEl.textContent.trim()) {
+          chatHistory.push({ role: 'assistant', content: transcriptEl.textContent.trim() });
+          addMessage('assistant', transcriptEl.textContent.trim());
+          transcriptEl.textContent = '';
+        }
+        setVoiceStatus('listening');
+      }
+      if (msg.type === 'closed') stopVoice();
+      if (msg.type === 'error') {
+        console.error('[Voice]', msg.message);
+        transcriptEl.textContent = '⚠️ ' + (msg.message || 'خطأ في الصوت');
+        setVoiceStatus('error');
+        setTimeout(stopVoice, 2500);
+      }
+    };
+
+    ws.onerror = () => {
+      transcriptEl.textContent = '⚠️ فشل الاتصال بالسيرفر';
+      setVoiceStatus('error');
+      setTimeout(stopVoice, 2000);
+    };
+    ws.onclose = () => { if (voiceStatus !== 'idle') stopVoice(); };
+
+  } catch (err) {
+    console.error(err);
+    transcriptEl.textContent = '⚠️ ' + (err.message || 'خطأ في الميكروفون');
+    setVoiceStatus('error');
+    setTimeout(stopVoice, 2500);
+  }
+}
+
+voiceBtn.addEventListener('click', () => {
+  if (voiceStatus === 'idle' || voiceStatus === 'error') startVoice();
+  else stopVoice();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  VOICE MODAL — نافذة رنا الصوتية
+// ═══════════════════════════════════════════════════════════════════
+
+const voiceOpenBtn = document.getElementById('voice-open-btn');
+const voiceModal   = document.getElementById('voice-modal');
+const vmCloseBtn   = document.getElementById('vm-close');
+const vmStatusEl   = document.getElementById('vm-status');
+const vmWavesEl    = document.getElementById('vm-waves');
+const muteMicBtn   = document.getElementById('mute-mic-btn');
+const muteSpkBtn   = document.getElementById('mute-spk-btn');
+
+function updateVoiceModal(status) {
+  vmWavesEl.className = 'vm-waves';
+  switch (status) {
+    case 'listening':
+      vmWavesEl.classList.add('active');
+      vmStatusEl.textContent = '🎤 تحدّث الآن...';
+      vmStatusEl.style.color = 'rgba(96,165,250,0.9)';
+      break;
+    case 'speaking':
+      vmWavesEl.classList.add('active', 'speaking');
+      vmStatusEl.textContent = '🔊 رنا تتكلم...';
+      vmStatusEl.style.color = 'rgba(192,132,252,0.9)';
+      break;
+    case 'connecting':
+      vmStatusEl.textContent = '⏳ جارٍ الاتصال...';
+      vmStatusEl.style.color = 'rgba(200,160,255,0.65)';
+      break;
+    case 'error':
+      vmStatusEl.textContent = '⚠️ خطأ — أعد المحاولة';
+      vmStatusEl.style.color = 'rgba(248,113,113,0.9)';
+      break;
+    default:
+      vmStatusEl.textContent = 'اضغط للبدء';
+      vmStatusEl.style.color = 'rgba(200,160,255,0.65)';
+  }
+}
+
+function openVoiceModal() {
+  voiceModal.classList.add('open');
+  voiceOpenBtn.classList.add('active');
+  if (voiceStatus === 'idle' || voiceStatus === 'error') startVoice();
+}
+
+function closeVoiceModal() {
+  voiceModal.classList.remove('open');
+  voiceOpenBtn.classList.remove('active');
+  stopVoice();
+}
+
+voiceOpenBtn.addEventListener('click', () => {
+  if (voiceModal.classList.contains('open')) closeVoiceModal();
+  else openVoiceModal();
+});
+
+vmCloseBtn.addEventListener('click', closeVoiceModal);
+
+// كتم الميكروفون
+muteMicBtn.addEventListener('click', () => {
+  micMuted = !micMuted;
+  muteMicBtn.classList.toggle('muted', micMuted);
+  muteMicBtn.innerHTML = micMuted ? '🔇 الميكروفون' : '🎤 الميكروفون';
+});
+
+// كتم السماعة
+muteSpkBtn.addEventListener('click', () => {
+  speakerMuted = !speakerMuted;
+  muteSpkBtn.classList.toggle('muted', speakerMuted);
+  muteSpkBtn.innerHTML = speakerMuted ? '🔇 السماعة' : '🔊 السماعة';
+  if (masterGain) masterGain.gain.value = speakerMuted ? 0 : 1;
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  GROUP VOICE ROOMS — الغرف الصوتية الجماعية
+// ═══════════════════════════════════════════════════════════════════
+
+const roomBtn        = document.getElementById('room-btn');
+const roomModal      = document.getElementById('room-modal');
+const rmCloseBtn     = document.getElementById('rm-close');
+const rmSetupEl      = document.getElementById('rm-setup');
+const rmActiveEl     = document.getElementById('rm-active');
+const rmMyName       = document.getElementById('rm-my-name');
+const rmCreateBtn    = document.getElementById('rm-create-btn');
+const rmJoinCode     = document.getElementById('rm-join-code');
+const rmJoinBtn      = document.getElementById('rm-join-btn');
+const rmSetupErr     = document.getElementById('rm-setup-err');
+const rmCodeDisplay  = document.getElementById('rm-code-display');
+const rmCopyBtn      = document.getElementById('rm-copy-btn');
+const rmParticipants = document.getElementById('rm-participants');
+const rmGeminiStatus = document.getElementById('rm-gemini-status');
+const rmWavesEl      = document.getElementById('rm-waves');
+const rmLeaveBtn     = document.getElementById('rm-leave-btn');
+
+let groomWs        = null;   // WebSocket للغرفة الجماعية
+let groomAudioCtx  = null;
+let groomProcessor = null;
+let groomStream    = null;
+let groomGain      = null;
+let groomPlayTime  = 0;
+let groomPId       = null;   // participantId الخاص بي
+let groomRoomId    = null;
+
+// ── تشغيل صوت Gemini للغرفة ──────────────────────────────────────
+function groomPlayAudio(base64) {
+  if (!groomAudioCtx) return;
+  if (groomAudioCtx.state === 'suspended') groomAudioCtx.resume();
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  const pcm   = new Int16Array(bytes.buffer);
+  const f32   = new Float32Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 32768;
+  const buf = groomAudioCtx.createBuffer(1, f32.length, 24000);
+  buf.copyToChannel(f32, 0);
+  const now = groomAudioCtx.currentTime;
+  if (groomPlayTime < now) groomPlayTime = now;
+  const src = groomAudioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(groomGain || groomAudioCtx.destination);
+  src.start(groomPlayTime);
+  groomPlayTime += buf.duration;
+  setRoomWaves('speaking');
+}
+
+// ── إيقاف الميكروفون ─────────────────────────────────────────────
+function groomStopMic() {
+  if (groomProcessor) { groomProcessor.disconnect(); groomProcessor = null; }
+  if (groomStream)    { groomStream.getTracks().forEach(t => t.stop()); groomStream = null; }
+  if (groomAudioCtx)  { groomAudioCtx.close(); groomAudioCtx = null; }
+  groomGain     = null;
+  groomPlayTime = 0;
+}
+
+// ── بدء بث الميكروفون بعد ready ──────────────────────────────────
+async function groomStartMic() {
+  if (!navigator.mediaDevices?.getUserMedia) return;
+  try {
+    groomStream   = await navigator.mediaDevices.getUserMedia({ audio: true });
+    groomAudioCtx = new AudioContext({ sampleRate: 16000 });
+    groomGain     = groomAudioCtx.createGain();
+    groomGain.gain.value = 1;
+    groomGain.connect(groomAudioCtx.destination);
+
+    const source = groomAudioCtx.createMediaStreamSource(groomStream);
+    groomProcessor = groomAudioCtx.createScriptProcessor(4096, 1, 1);
+    groomProcessor.onaudioprocess = (e) => {
+      if (!groomWs || groomWs.readyState !== WebSocket.OPEN) return;
+      const f32  = e.inputBuffer.getChannelData(0);
+      const p16  = new Int16Array(f32.length);
+      for (let i = 0; i < f32.length; i++)
+        p16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
+      const bytes = new Uint8Array(p16.buffer);
+      let bin = '';
+      for (let j = 0; j < bytes.length; j++) bin += String.fromCharCode(bytes[j]);
+      groomWs.send(JSON.stringify({ type: 'audio', data: btoa(bin) }));
+    };
+    const silent = groomAudioCtx.createGain();
+    silent.gain.value = 0;
+    source.connect(groomProcessor);
+    groomProcessor.connect(silent);
+    silent.connect(groomAudioCtx.destination);
+  } catch (e) {
+    console.error('[GRoom] mic error:', e);
+  }
+}
+
+// ── موجات الصوت للغرفة ───────────────────────────────────────────
+function setRoomWaves(state) {  // 'idle' | 'active' | 'speaking'
+  rmWavesEl.className = 'rm-waves';
+  if (state === 'active')   rmWavesEl.classList.add('active');
+  if (state === 'speaking') { rmWavesEl.classList.add('active', 'speaking'); }
+}
+
+// ── تحديث قائمة المشاركين ───────────────────────────────────────
+function renderParticipants(list) {
+  rmParticipants.innerHTML = '';
+  // روبوت Gemini دائماً أول
+  rmParticipants.innerHTML += `
+    <div class="rm-p-row rm-p-robot">
+      <div class="rm-p-dot"></div>
+      <span>🤖 رنا (Gemini)</span>
+    </div>`;
+  for (const p of list) {
+    const isMe = p.id === groomPId;
+    rmParticipants.innerHTML += `
+      <div class="rm-p-row${isMe ? ' me' : ''}">
+        <div class="rm-p-dot"></div>
+        <span>${p.name}${isMe ? ' (أنت)' : ''}</span>
+      </div>`;
+  }
+}
+
+// ── الاتصال بغرفة ────────────────────────────────────────────────
+function joinRoom(roomId, myName) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const name  = encodeURIComponent(myName);
+  groomWs     = new WebSocket(`${proto}://${location.host}/ws/voice-room?room=${roomId}&name=${name}`);
+
+  groomWs.onopen = () => {
+    console.log('[GRoom] WS connected to room', roomId);
+  };
+
+  groomWs.onmessage = async (ev) => {
+    const msg = JSON.parse(ev.data);
+
+    if (msg.type === 'joined') {
+      groomPId    = msg.participantId;
+      groomRoomId = msg.roomId;          // ✅ يُضبط بعد التأكيد فقط
+      rmCodeDisplay.textContent = msg.roomId;
+      renderParticipants(msg.participants);
+      showActiveView();
+    }
+
+    if (msg.type === 'ready') {
+      rmGeminiStatus.textContent = '✅ Gemini جاهز — تكلّم!';
+      rmGeminiStatus.style.color = 'rgba(74,222,128,0.85)';
+      setRoomWaves('active');
+      await groomStartMic();
+    }
+
+    if (msg.type === 'participant_joined' || msg.type === 'participant_left') {
+      renderParticipants(msg.participants);
+    }
+
+    if (msg.type === 'audio') {
+      groomPlayAudio(msg.data);
+    }
+
+    if (msg.type === 'turn_complete') {
+      setRoomWaves('active');
+    }
+
+    if (msg.type === 'error') {
+      rmGeminiStatus.textContent = '⚠️ ' + msg.message;
+      rmGeminiStatus.style.color = 'rgba(248,113,113,0.85)';
+    }
+  };
+
+  groomWs.onerror = () => {
+    groomRoomId = null;                   // ✅ امسح الـ ID عند الفشل
+    roomBtn.classList.remove('active');
+    showSetupView();
+    rmSetupErr.textContent = '⚠️ فشل الاتصال — تأكد أن السيرفر يعمل';
+    rmSetupErr.style.display = 'block';
+  };
+
+  groomWs.onclose = () => {
+    groomStopMic();
+    setRoomWaves('idle');
+  };
+}
+
+// ── مغادرة الغرفة ────────────────────────────────────────────────
+function leaveRoom() {
+  groomStopMic();
+  if (groomWs) { groomWs.close(); groomWs = null; }
+  groomPId    = null;
+  groomRoomId = null;
+  showSetupView();
+  roomModal.classList.remove('open');
+  roomBtn.classList.remove('active');
+  setRoomWaves('idle');
+}
+
+// ── تبديل views داخل المودال ──────────────────────────────────────
+function showSetupView() {
+  rmSetupEl.style.display = 'flex';
+  rmActiveEl.classList.remove('show');
+}
+function showActiveView() {
+  rmSetupEl.style.display = 'none';
+  rmActiveEl.classList.add('show');
+}
+
+// ── Event Listeners ───────────────────────────────────────────────
+roomBtn.addEventListener('click', () => {
+  if (roomModal.classList.contains('open')) {
+    roomModal.classList.remove('open');
+  } else {
+    roomModal.classList.add('open');
+    if (groomRoomId) showActiveView(); else showSetupView();
+  }
+});
+
+rmCloseBtn.addEventListener('click', () => {
+  roomModal.classList.remove('open');
+});
+
+rmCreateBtn.addEventListener('click', async () => {
+  const name = rmMyName.value.trim();
+  if (!name) { rmSetupErr.textContent = 'أدخل اسمك أولاً'; rmSetupErr.style.display='block'; return; }
+  rmSetupErr.style.display = 'none';
+  rmCreateBtn.disabled = true;
+  rmCreateBtn.textContent = '⏳ جارٍ الإنشاء...';
+  try {
+    const res  = await fetch('/api/voice-rooms', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: `غرفة ${name}` }),
+    });
+    const data = await res.json();
+    if (data.id) {
+      roomBtn.classList.add('active');
+      joinRoom(data.id, name);
+    } else {
+      rmSetupErr.textContent = 'فشل الإنشاء'; rmSetupErr.style.display = 'block';
+    }
+  } catch (e) {
+    rmSetupErr.textContent = 'خطأ في الاتصال بالسيرفر'; rmSetupErr.style.display = 'block';
+  }
+  rmCreateBtn.disabled = false;
+  rmCreateBtn.textContent = '✨ أنشئ غرفة جديدة';
+});
+
+rmJoinBtn.addEventListener('click', async () => {
+  const name = rmMyName.value.trim();
+  const code = rmJoinCode.value.trim().toUpperCase();
+  if (!name) { rmSetupErr.textContent = 'أدخل اسمك أولاً'; rmSetupErr.style.display='block'; return; }
+  if (!code || code.length < 4) { rmSetupErr.textContent = 'أدخل كود الغرفة'; rmSetupErr.style.display='block'; return; }
+  rmSetupErr.style.display = 'none';
+  rmJoinBtn.disabled = true;
+  try {
+    const res  = await fetch(`/api/voice-rooms/${code}`);
+    if (!res.ok) { rmSetupErr.textContent = 'الغرفة غير موجودة'; rmSetupErr.style.display='block'; rmJoinBtn.disabled=false; return; }
+    roomBtn.classList.add('active');
+    joinRoom(code, name);
+  } catch {
+    rmSetupErr.textContent = 'خطأ في الاتصال'; rmSetupErr.style.display = 'block';
+  }
+  rmJoinBtn.disabled = false;
+});
+
+rmJoinCode.addEventListener('input', () => {
+  rmJoinCode.value = rmJoinCode.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+});
+
+rmCopyBtn.addEventListener('click', () => {
+  if (!groomRoomId) return;
+  navigator.clipboard.writeText(groomRoomId).then(() => {
+    rmCopyBtn.textContent = '✅';
+    setTimeout(() => { rmCopyBtn.textContent = '📋'; }, 1500);
+  });
+});
+
+rmLeaveBtn.addEventListener('click', leaveRoom);
+
+</script>
+</body>
+</html>
