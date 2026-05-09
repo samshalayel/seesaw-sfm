@@ -152,7 +152,14 @@ function connectGemini(room: VoiceRoom, apiKey: string, systemPrompt: string) {
 
       if (msg.setupComplete !== undefined) {
         room.geminiReady = true;
+        const robotId = `robot-${room.id}`;
         sendAll(room, { type: "ready" });
+        const robotParticipant = { id: robotId, name: "🤖 Gemini" };
+        sendAll(room, {
+          type: "participant_joined",
+          participant: robotParticipant,
+          participants: [...toList(room), robotParticipant],
+        });
         for (const raw of room.pendingAudio) {
           if (geminiWs.readyState === WebSocket.OPEN) geminiWs.send(raw);
         }
@@ -166,7 +173,7 @@ function connectGemini(room: VoiceRoom, apiKey: string, systemPrompt: string) {
           (p: any) => p.inlineData?.mimeType?.startsWith("audio/")
         ) || [];
       for (const part of audioParts) {
-        sendAll(room, { type: "audio", data: part.inlineData.data });
+        sendAll(room, { type: "participant_audio", participantId: `robot-${room.id}`, data: part.inlineData.data });
       }
 
       const textParts =
