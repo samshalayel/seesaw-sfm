@@ -257,12 +257,8 @@ export function AgoraMeeting() {
     setLoading(true);
     setError("");
 
-    // الكاميرا/الميكروفون تحتاج HTTPS على الموبايل
-    if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
-      setError("الكاميرا والميكروفون يحتاجان اتصالاً آمناً (HTTPS). يرجى فتح التطبيق عبر HTTPS للانضمام بالفيديو.");
-      setLoading(false);
-      return;
-    }
+    // تحذير HTTPS (لكن لا نمنع الدخول)
+    const isSecure = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
     try {
       // 1. اطلب token من السيرفر
       const uid = Math.floor(Math.random() * 100000);
@@ -313,22 +309,34 @@ export function AgoraMeeting() {
       // 4. الدخول للـ channel
       await client.join(data.appId, channelName, data.token, uid);
 
-      // 5. أنشئ tracks وانشر — مع fallback لـ audio-only إذا فشلت الكاميرا
-      let mic: IMicrophoneAudioTrack;
+      // 5. أنشئ tracks وانشر — مع fallback تدريجي
+      let mic: IMicrophoneAudioTrack | null = null;
       let cam: ICameraVideoTrack | null = null;
-      try {
-        const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
-        mic = tracks[0];
-        cam = tracks[1];
-      } catch {
-        // الكاميرا غير متاحة — جرب صوت فقط
-        mic = await AgoraRTC.createMicrophoneAudioTrack();
+      if (isSecure) {
+        try {
+          const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+          mic = tracks[0];
+          cam = tracks[1];
+        } catch {
+          // الكاميرا غير متاحة — جرب صوت فقط
+          try {
+            mic = await AgoraRTC.createMicrophoneAudioTrack();
+          } catch {
+            // الميكروفون أيضاً مرفوض — وضع المراقب
+          }
+          setVideoMuted(true);
+        }
+      } else {
+        // HTTP — وضع المراقب (بدون كاميرا/ميكروفون)
         setVideoMuted(true);
+        setAudioMuted(true);
       }
       audioTrack.current = mic;
       videoTrack.current = cam;
-      const tracksToPublish = cam ? [mic, cam] : [mic];
-      await client.publish(tracksToPublish);
+      const tracksToPublish = [mic, cam].filter(Boolean) as any[];
+      if (tracksToPublish.length > 0) {
+        await client.publish(tracksToPublish);
+      }
 
       setJoined(true);
     } catch (e: any) {
@@ -678,6 +686,18 @@ export function AgoraMeeting() {
                 <span style={{ fontSize: "10px", display: "block", color: "#ff6666" }}>إنهاء</span>
               </button>
             </div>
+
+            {/* ── Observer mode notice ── */}
+            {!audioTrack.current && !videoTrack.current && (
+              <div style={{
+                marginTop: "8px", textAlign: "center",
+                fontSize: "11px", color: "#ffaa44",
+                padding: "4px 12px", borderRadius: "8px",
+                background: "rgba(255,170,0,0.08)", border: "1px solid rgba(255,170,0,0.2)",
+              }}>
+                👁️ وضع المراقب — الكاميرا والميكروفون غير متاحين. يمكنك مشاهدة وسماع المشاركين وتفعيل AI.
+              </div>
+            )}
 
             {/* ── AI status ── */}
             {aiActive && (
