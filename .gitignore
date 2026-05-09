@@ -18,4 +18,4 @@ vite.config.ts.*
 attached_assets/
 
 # Claude memory
-.claude/
+.claude/client/public/images/
