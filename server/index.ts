@@ -5,6 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startAtalWorker } from "./atalWorker";
 import { setupGeminiLiveProxy } from "./geminiLive";
+import { setupVoiceRooms } from "./voiceRooms";
 
 const app = express();
 const httpServer = createServer(app);
@@ -61,6 +62,7 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
   setupGeminiLiveProxy(httpServer);
+  setupVoiceRooms(httpServer, app);
   startAtalWorker(30_000); // العتال يشتغل كل 30 ثانية
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
