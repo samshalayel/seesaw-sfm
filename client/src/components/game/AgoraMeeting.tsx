@@ -401,6 +401,7 @@ export function AgoraMeeting() {
       // playback AudioContext at 24 kHz (Gemini output)
       const playCtx = new AudioContext({ sampleRate: 24000 });
       aiPlaybackCtxRef.current = playCtx;
+      await playCtx.resume();
       const dest = playCtx.createMediaStreamDestination();
       aiDestinationRef.current = dest;
 
@@ -464,6 +465,7 @@ export function AgoraMeeting() {
             const pCtx = aiPlaybackCtxRef.current;
             const pDest = aiDestinationRef.current;
             if (!pCtx || !pDest) return;
+            if (pCtx.state === "suspended") await pCtx.resume();
 
             const raw = atob(msg.data);
             const u8 = new Uint8Array(raw.length);
