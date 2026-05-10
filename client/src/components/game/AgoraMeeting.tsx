@@ -406,14 +406,7 @@ export function AgoraMeeting() {
       const dest = playCtx.createMediaStreamDestination();
       aiDestinationRef.current = dest;
 
-      // publish Gemini voice as a custom Agora track
-      const geminiTrack = AgoraRTC.createCustomAudioTrack({
-        mediaStreamTrack: dest.stream.getAudioTracks()[0],
-      });
-      aiCustomTrackRef.current = geminiTrack;
-      await clientRef.current!.publish(geminiTrack);
-
-      // open WebSocket to Gemini Live proxy
+      // open WebSocket to Gemini Live proxy FIRST (before publish)
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const qs = new URLSearchParams();
       if (roomId) qs.set("roomId", roomId);
@@ -499,6 +492,18 @@ export function AgoraMeeting() {
 
       ws.onerror = () => { setAiError("فشل الاتصال بـ Gemini"); setAiStatus("error"); };
       ws.onclose = () => { setAiActive(false); setAiStatus("idle"); };
+
+      // publish Gemini voice as a custom Agora track (best-effort — may fail in observer mode)
+      try {
+        const geminiTrack = AgoraRTC.createCustomAudioTrack({
+          mediaStreamTrack: dest.stream.getAudioTracks()[0],
+        });
+        aiCustomTrackRef.current = geminiTrack;
+        await clientRef.current!.publish(geminiTrack);
+      } catch {
+        // observer mode — can't publish, but AI still works (audio plays locally only)
+      }
+
     } catch (err: any) {
       setAiError(err.message || "خطأ في تفعيل AI");
       setAiStatus("error");
