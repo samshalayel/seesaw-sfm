@@ -371,6 +371,7 @@ export function AgoraMeeting() {
       // capture AudioContext at 16 kHz (Gemini input)
       const capCtx = new AudioContext({ sampleRate: 16000 });
       aiAudioCtxRef.current = capCtx;
+      await capCtx.resume();
 
       const mixer = capCtx.createGain();
       mixer.gain.value = 1.0;
