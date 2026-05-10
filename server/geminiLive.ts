@@ -446,7 +446,7 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
 
       try {
         const geminiModel = await getModelByName("Gemini", roomId);
-        apiKey      = geminiModel?.apiKey || process.env.GEMINI_API_KEY || "";
+        apiKey      = geminiModel?.apiKey || "";
         vaultPrompt = geminiModel?.systemPrompt || "";
 
         const [owner, repo, listId, vps] = await Promise.all([
@@ -459,10 +459,17 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
         githubRepoName = repo   || "";
         clickupListId  = listId || "";
         if (vps?.host) vpsConfig = vps;
-      } catch (_) {}
+      } catch (dbErr: any) {
+        console.warn("[GeminiLive] DB error (will fallback to env):", dbErr?.message);
+      }
+
+      // always fall back to env var even if DB query failed
+      if (!apiKey) apiKey = process.env.GEMINI_API_KEY || "";
+
+      console.log(`[GeminiLive] apiKey=${apiKey ? "✅ found (" + apiKey.slice(0,8) + "...)" : "❌ MISSING"} room:${roomId}`);
 
       if (!apiKey) {
-        clientWs.send(JSON.stringify({ type: "error", message: "Gemini API key غير مُعدّ" }));
+        clientWs.send(JSON.stringify({ type: "error", message: "Gemini API key غير مُعدّ — أضف مفتاح Gemini في إعدادات الخزنة" }));
         clientWs.close();
         return;
       }
