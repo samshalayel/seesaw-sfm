@@ -433,7 +433,13 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
     // البراوزر يرسل init في ws.onopen مباشرة، لازم نكون جاهزين
     let initResolve!: (data: Buffer) => void;
     const initPromise = new Promise<Buffer>(resolve => { initResolve = resolve; });
-    clientWs.once("message", (data: Buffer) => initResolve(data));
+    clientWs.once("message", (data: Buffer) => {
+      console.log(`[GeminiLive] ✉️ init message arrived (${data.length} bytes)`);
+      initResolve(data);
+    });
+    clientWs.once("close", (code: number) => {
+      console.warn(`[GeminiLive] ⚠️ WS closed BEFORE init — code:${code}`);
+    });
 
     // ── الآن نحمّل إعدادات الخزنة بشكل async ────────────────────────────
     (async () => {
