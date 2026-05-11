@@ -271,10 +271,12 @@ function connectToGemini(
 ) {
   const hasTools = !!(githubOwner && githubRepoName) || !!clickupListId || !!vpsConfig?.host;
 
+  console.log(`[GeminiLive] connecting to Gemini API...`);
   const geminiWs = new WebSocket(`${GEMINI_LIVE_URL}?key=${apiKey}`);
 
   const connectTimeout = setTimeout(() => {
     if (geminiWs.readyState !== WebSocket.OPEN) {
+      console.error(`[GeminiLive] Gemini connection TIMEOUT (10s)`);
       clientWs.send(JSON.stringify({ type: "error", message: "انتهت مهلة الاتصال بـ Gemini" }));
       geminiWs.terminate();
       clientWs.close();
@@ -282,6 +284,8 @@ function connectToGemini(
   }, 10000);
 
   geminiWs.on("open", () => {
+    console.log(`[GeminiLive] Gemini WS OPEN — sending setup`);
+
     clearTimeout(connectTimeout);
     const setup: any = {
       setup: {
@@ -445,9 +449,11 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
       let vpsConfig: { host: string; port: number; user: string; password: string; webRoot: string } | undefined;
 
       try {
+        console.log(`[GeminiLive] loading vault for room:${roomId}...`);
         const geminiModel = await getModelByName("Gemini", roomId);
         apiKey      = geminiModel?.apiKey || process.env.GEMINI_API_KEY || "";
         vaultPrompt = geminiModel?.systemPrompt || "";
+        console.log(`[GeminiLive] apiKey found: ${apiKey ? "yes (" + apiKey.slice(0,10) + "...)" : "NO"}`);
 
         const [owner, repo, listId, vps] = await Promise.all([
           getGitHubOwner(roomId),
@@ -459,7 +465,10 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
         githubRepoName = repo   || "";
         clickupListId  = listId || "";
         if (vps?.host) vpsConfig = vps;
-      } catch (_) {}
+        console.log(`[GeminiLive] vault loaded — github:${githubOwner}/${githubRepoName} clickup:${clickupListId ? "yes" : "no"} vps:${vpsConfig?.host || "no"}`);
+      } catch (e: any) {
+        console.error(`[GeminiLive] vault error: ${e.message}`);
+      }
 
       if (!apiKey) {
         clientWs.send(JSON.stringify({ type: "error", message: "Gemini API key غير مُعدّ" }));
