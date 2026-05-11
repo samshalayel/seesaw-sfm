@@ -129,7 +129,7 @@ function connectGemini(room: VoiceRoom, apiKey: string, systemPrompt: string) {
 
     geminiWs.send(JSON.stringify({
       setup: {
-        model: "models/gemini-2.0-flash-exp",
+        model: "models/gemini-3.1-flash-live-preview",
         generation_config: {
           response_modalities: ["AUDIO"],
           speech_config: {
