@@ -15,7 +15,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
 import { Server as HttpServer } from "http";
 import { Client as SshClient } from "ssh2";
-import { getModelByName, getGitHubOwner, getGitHubRepo, getClickUpListId, getVpsConfig } from "./vaultStore";
+import { getModelByName, getGitHubOwner, getGitHubRepo, getClickUpListId, getVpsConfig, getWhatsAppConfig } from "./vaultStore";
 import { getRepoContents, createOrUpdateFile, getRepos } from "./github";
 import { getTasks, getTask, updateTask, searchTasksByName } from "./clickup";
 
@@ -153,6 +153,18 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name: "send_whatsapp",
+    description: "أرسل رسالة واتساب عبر UltraMsg — استخدمها لإشعار الفريق عند إنجاز مهمة أو حدوث خطأ",
+    parameters: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "نص الرسالة (يدعم السطور الجديدة)" },
+        to: { type: "string", description: "رقم المستلم مع رمز الدولة مثال +9705XXXXXXXX — اتركه فارغاً لاستخدام الرقم الافتراضي" },
+      },
+      required: ["message"],
+    },
+  },
 ];
 
 // ── تنفيذ الأدوات ─────────────────────────────────────────────────────────────
@@ -249,6 +261,24 @@ async function executeTool(
         ].join(" && ");
         return await sshExec(host, port, user, password, cmd);
       }
+    }
+
+    if (name === "send_whatsapp") {
+      const waCfg = await getWhatsAppConfig(roomId);
+      if (!waCfg.instanceId || !waCfg.token) return "❌ WhatsApp غير مُعدّ — أضف إعدادات UltraMsg في الخزنة";
+      const phone = args.to || waCfg.phone;
+      if (!phone) return "❌ لا يوجد رقم هاتف — أضف رقم المستلم أو اضبط الرقم الافتراضي في الخزنة";
+      const resp = await fetch(`https://api.ultramsg.com/${waCfg.instanceId}/messages/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: waCfg.token, to: phone, body: args.message, priority: "10" }).toString(),
+      });
+      const data: any = await resp.json();
+      if (data?.sent === "true" || data?.sent === true) {
+        console.log(`[GeminiLive] 📱 WhatsApp sent to ${phone}`);
+        return `✅ تم إرسال رسالة واتساب إلى ${phone}`;
+      }
+      return `❌ فشل إرسال واتساب: ${JSON.stringify(data)}`;
     }
 
     return `خطأ: الأداة "${name}" غير معروفة`;
