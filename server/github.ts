@@ -88,6 +88,17 @@ export async function getRepoContents(owner: string, repo: string, path: string 
     }
     return data;
   } catch (err: any) {
+    // 404 = file/dir not found (not a permission issue — the repo exists but the path doesn't)
+    if (err.status === 404 || err.message?.includes("Not Found")) {
+      return {
+        error: "NOT_FOUND",
+        message: `Path "${path || "/"}" does not exist in ${owner}/${repo}. The file has not been created yet — use create_or_update_file to create it.`,
+      };
+    }
+    // 403/401 = actual permission / auth issues
+    if (err.status === 403 || err.status === 401) {
+      throw new Error(`GitHub permission denied for ${owner}/${repo}: ${err.message}. Check your GitHub token in the vault.`);
+    }
     throw new Error(`GitHub content error: ${err.message}`);
   }
 }
