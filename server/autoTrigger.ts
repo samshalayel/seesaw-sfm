@@ -6,7 +6,7 @@ import path from "path";
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToTask } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
-import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig, getModels } from "./vaultStore";
+import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig, getModels, getWhatsAppConfig } from "./vaultStore";
 import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
 
@@ -121,6 +121,14 @@ const toolDefinitions = [
       timeout_seconds: { type: "integer", description: "Max wait time in seconds (default 60, max 300)" },
     }, required: ["command"] },
   },
+  {
+    name: "send_whatsapp",
+    description: "Send a WhatsApp message via UltraMsg API. Use to notify the team when a task is completed, failed, or needs attention.",
+    parameters: { type: "object" as const, properties: {
+      to:      { type: "string", description: "Recipient phone with country code, e.g. +9705XXXXXXXX, or leave empty to use default room phone" },
+      message: { type: "string", description: "Message text to send (supports newlines)" },
+    }, required: ["message"] },
+  },
 ];
 
 const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = toolDefinitions.map(t => ({
@@ -163,6 +171,21 @@ async function executeToolCall(name: string, args: any): Promise<string> {
         if (!vpsCfg.host) return "Error: VPS not configured. Add VPS settings in the vault.";
         const result = await runOnVps(args.command, timeoutMs, vpsCfg);
         return result;
+      }
+      case "send_whatsapp": {
+        const waCfg = await getWhatsAppConfig(triggerRoomId);
+        if (!waCfg.instanceId || !waCfg.token) return "Error: WhatsApp not configured. Add UltraMsg settings in the vault.";
+        const phone = args.to || waCfg.phone;
+        if (!phone) return "Error: No recipient phone number. Provide 'to' or set default phone in vault.";
+        const url = `https://api.ultramsg.com/${waCfg.instanceId}/messages/chat`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ token: waCfg.token, to: phone, body: args.message, priority: "10" }).toString(),
+        });
+        const data: any = await resp.json();
+        if (data?.sent === "true" || data?.sent === true) return `WhatsApp sent to ${phone} ✅`;
+        return `WhatsApp response: ${JSON.stringify(data)}`;
       }
       default: return `Unknown tool: ${name}`;
     }

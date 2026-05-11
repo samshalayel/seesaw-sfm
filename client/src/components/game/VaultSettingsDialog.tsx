@@ -88,7 +88,7 @@ export function VaultSettingsDialog() {
   const fetchHumans = useGame((s) => s.fetchHumans);
   const setCompanyInfo = useGame((s) => s.setCompanyInfo);
   const setEntranceBg  = useGame((s) => s.setEntranceBg);
-  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "vps" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans">("company");
+  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "vps" | "whatsapp" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans">("company");
   const [pdfIndexLog, setPdfIndexLog] = useState<string[]>([]);
   const [pdfIndexing, setPdfIndexing] = useState(false);
   const [pdfIndexes, setPdfIndexes] = useState<{name:string,chunkCount:number,createdAt:string}[]>([]);
@@ -125,6 +125,11 @@ export function VaultSettingsDialog() {
   const [vpsUser, setVpsUser] = useState("root");
   const [vpsPassword, setVpsPassword] = useState("");
   const [vpsWebRoot, setVpsWebRoot] = useState("/var/www");
+
+  const [waInstanceId, setWaInstanceId] = useState("");
+  const [waToken, setWaToken] = useState("");
+  const [waPhone, setWaPhone] = useState("");
+  const [waHasToken, setWaHasToken] = useState(false);
 
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [hallWorkers, setHallWorkers] = useState<ModelEntry[]>([]);
@@ -328,6 +333,12 @@ export function VaultSettingsDialog() {
             setVpsPassword(data.vps.password || "");
             setVpsWebRoot(data.vps.webRoot || "/var/www");
           }
+          if (data.whatsapp) {
+            setWaInstanceId(data.whatsapp.instanceId || "");
+            setWaToken(data.whatsapp.token || "");
+            setWaPhone(data.whatsapp.phone || "");
+            setWaHasToken(data.whatsapp.hasToken || false);
+          }
           if (data.models && Array.isArray(data.models)) {
             setModels(data.models);
           }
@@ -396,6 +407,7 @@ export function VaultSettingsDialog() {
           apidog: { token: apidogToken },
           figma:  { token: figmaToken },
           vps: { host: vpsHost, port: vpsPort, user: vpsUser, password: vpsPassword, webRoot: vpsWebRoot },
+          whatsapp: { instanceId: waInstanceId, token: waToken, phone: waPhone },
           models: models.filter(m => m.name.trim() || m.apiKey.trim()),
           hallWorkers: hallWorkers.filter(m => m.name.trim() || m.apiKey.trim()),
           humans,
@@ -534,12 +546,13 @@ export function VaultSettingsDialog() {
     display: "block",
   };
 
-  const tabs = ["company", "github", "clickup", "vps", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
+  const tabs = ["company", "github", "clickup", "vps", "whatsapp", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
   const tabLabels: Record<string, { icon: string; label: string }> = {
     company:      { icon: "🏢", label: "الشركة"       },
     github:       { icon: "🐙", label: "GitHub"       },
     clickup:      { icon: "✅", label: "ClickUp"      },
     vps:          { icon: "🖥️", label: "VPS"          },
+    whatsapp:     { icon: "💬", label: "واتساب"       },
     sfm:          { icon: "🌐", label: "Sillar"       },
     models:       { icon: "🤖", label: "Models"       },
     "ai-worker":  { icon: "⚡", label: "AI Workers"   },
@@ -1167,6 +1180,118 @@ export function VaultSettingsDialog() {
             {/* تحذير */}
             <div style={{ color: "#64748b", fontSize: 11, marginTop: 8, direction: "rtl" }}>
               ⚠️ بيانات SSH محفوظة في قاعدة البيانات ولا تُشارك مع أحد.
+            </div>
+          </>
+
+        ) : activeTab === "whatsapp" ? (
+          <>
+            {/* شرح */}
+            <div style={{ background: "rgba(37,211,102,0.07)", border: "1px solid rgba(37,211,102,0.25)", borderRadius: 8, padding: "12px 14px", marginBottom: 4 }}>
+              <div style={{ color: "#25d366", fontWeight: "bold", marginBottom: 6, fontSize: 13 }}>💬 واتساب عبر UltraMsg</div>
+              <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.7, direction: "rtl" }}>
+                اربط حساب واتساب عبر <strong style={{ color: "#e2e8f0" }}>UltraMsg</strong> حتى يستطيع الروبوت إرسال إشعارات واتساب عند إتمام المهام.
+                ادخل على <a href="https://app.ultramsg.com" target="_blank" rel="noopener" style={{ color: "#25d366" }}>app.ultramsg.com</a> واحصل على الـ Instance ID والـ Token.
+              </div>
+            </div>
+
+            {/* Instance ID */}
+            <div>
+              <label style={labelStyle}>🔢 Instance ID</label>
+              <input
+                type="text"
+                value={waInstanceId}
+                onChange={(e) => setWaInstanceId(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="instance174562"
+                style={inputStyle}
+              />
+            </div>
+
+            {/* Token */}
+            <div>
+              <label style={labelStyle}>🔑 Token</label>
+              <input
+                type="password"
+                value={waToken}
+                onChange={(e) => { setWaToken(e.target.value); setWaHasToken(false); }}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="••••••••••••••••"
+                style={inputStyle}
+              />
+              {waHasToken && waToken === "••••••••" && (
+                <div style={{ color: "#4ade80", fontSize: 11, marginTop: 4 }}>✓ Token محفوظ — اتركه كما هو للإبقاء عليه</div>
+              )}
+            </div>
+
+            {/* رقم الإشعارات الافتراضي */}
+            <div>
+              <label style={labelStyle}>📱 رقم الإشعارات الافتراضي (مع رمز الدولة)</label>
+              <input
+                type="text"
+                value={waPhone}
+                onChange={(e) => setWaPhone(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="+970599628319"
+                style={inputStyle}
+              />
+              <div style={{ color: "#64748b", fontSize: 11, marginTop: 3, direction: "rtl" }}>
+                الروبوت سيرسل الإشعارات لهذا الرقم تلقائياً ما لم يُحدَّد رقم آخر.
+              </div>
+            </div>
+
+            {/* أزرار الاختبار */}
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button
+                onClick={async () => {
+                  const roomId = localStorage.getItem("roomId") || "default";
+                  try {
+                    const res = await apiFetch("/api/vault-settings/test-whatsapp", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", "x-room-id": roomId },
+                    });
+                    const data = await res.json();
+                    if (data.connected) {
+                      alert(`✅ متصل! حالة الواتساب: ${data.status}`);
+                    } else {
+                      alert(`❌ غير متصل\n${data.error || "تحقق من Instance ID والـ Token"}`);
+                    }
+                  } catch (e: any) {
+                    alert(`❌ خطأ: ${e.message}`);
+                  }
+                }}
+                style={{ background: "rgba(37,211,102,0.15)", border: "1px solid rgba(37,211,102,0.4)", color: "#25d366", padding: "7px 16px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
+              >
+                🔌 اختبار الاتصال
+              </button>
+              <button
+                onClick={async () => {
+                  const phone = waPhone.trim();
+                  if (!phone) { alert("أدخل رقم الإشعارات أولاً"); return; }
+                  const roomId = localStorage.getItem("roomId") || "default";
+                  try {
+                    const res = await apiFetch("/api/whatsapp/send", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", "x-room-id": roomId },
+                      body: JSON.stringify({ to: phone, message: "✅ Seesaw — اختبار إرسال واتساب ناجح!" }),
+                    });
+                    const data = await res.json();
+                    if (data.sent) {
+                      alert(`✅ رسالة اختبار أُرسلت إلى ${phone}`);
+                    } else {
+                      alert(`❌ فشل الإرسال\n${data.error || JSON.stringify(data.data)}`);
+                    }
+                  } catch (e: any) {
+                    alert(`❌ خطأ: ${e.message}`);
+                  }
+                }}
+                style={{ background: "rgba(37,211,102,0.1)", border: "1px solid rgba(37,211,102,0.3)", color: "#86efac", padding: "7px 16px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
+              >
+                📤 إرسال رسالة اختبار
+              </button>
+            </div>
+
+            <div style={{ color: "#64748b", fontSize: 11, marginTop: 8, direction: "rtl" }}>
+              ⚠️ يمكن للروبوت استخدام الأداة <code style={{ color: "#94a3b8" }}>send_whatsapp</code> لإرسال تقارير المهام.
             </div>
           </>
 

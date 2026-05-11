@@ -59,6 +59,11 @@ export const rooms = pgTable("rooms", {
   vpsPassword: text("vps_password").notNull().default(""),
   vpsWebRoot:  text("vps_web_root").notNull().default("/var/www"),
 
+  // WhatsApp — UltraMsg
+  ultramsguInstanceId: text("ultramsg_instance_id").notNull().default(""),
+  ultramsgunToken:     text("ultramsg_token").notNull().default(""),
+  ultramsguPhone:      text("ultramsg_phone").notNull().default(""),
+
   // AI
   defaultModel:    text("default_model").notNull().default(""),
   systemPrompt:    text("system_prompt").notNull().default(""),

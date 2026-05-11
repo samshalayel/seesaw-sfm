@@ -24,7 +24,7 @@ try {
   }
 }
 import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs";
-import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY } from "./vaultStore";
+import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY, getWhatsAppConfig } from "./vaultStore";
 import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
 import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
@@ -2697,6 +2697,12 @@ export async function registerRoutes(
         password: settings.vps?.password ? "••••••••" : "",
         webRoot: settings.vps?.webRoot || "/var/www",
       },
+      whatsapp: {
+        instanceId: settings.whatsapp?.instanceId || "",
+        token:      settings.whatsapp?.token ? "••••••••" : "",
+        phone:      settings.whatsapp?.phone || "",
+        hasToken:   !!(settings.whatsapp?.token),
+      },
       humans: settings.humans || [],
     });
   });
@@ -2845,8 +2851,8 @@ export async function registerRoutes(
 
   app.post("/api/vault-settings", async (req, res) => {
     const roomId = getRoomId(req);
-    const { company, loginBg, doors, github, clickup, sfm, huggingface, apidog, figma, vps, models, hallWorkers, humans, systemPrompt } = req.body;
-    if (!github && !clickup && !sfm && !huggingface && !apidog && !figma && !vps && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
+    const { company, loginBg, doors, github, clickup, sfm, huggingface, apidog, figma, vps, whatsapp, models, hallWorkers, humans, systemPrompt } = req.body;
+    if (!github && !clickup && !sfm && !huggingface && !apidog && !figma && !vps && !whatsapp && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
       return res.status(400).json({ error: "Invalid payload" });
     }
     const current = await getVaultSettings(roomId);
@@ -2914,6 +2920,13 @@ export async function registerRoutes(
         user:     vps.user     ?? current.vps?.user     ?? "root",
         password: vps.password === "••••••••" ? current.vps?.password : (vps.password ?? ""),
         webRoot:  vps.webRoot  ?? current.vps?.webRoot  ?? "/var/www",
+      };
+    }
+    if (whatsapp) {
+      updatePayload.whatsapp = {
+        instanceId: whatsapp.instanceId ?? current.whatsapp?.instanceId ?? "",
+        token:      whatsapp.token === "••••••••" ? current.whatsapp?.token : (whatsapp.token ?? ""),
+        phone:      whatsapp.phone ?? current.whatsapp?.phone ?? "",
       };
     }
     if (models && Array.isArray(models)) {
@@ -3010,6 +3023,45 @@ export async function registerRoutes(
     }
 
     res.json(results);
+  });
+
+  // ── WhatsApp (UltraMsg) — send message ───────────────────────────────────────
+  app.post("/api/whatsapp/send", async (req, res) => {
+    const roomId = getRoomId(req);
+    try {
+      const { to, message } = req.body;
+      if (!to || !message) return res.status(400).json({ error: "to and message are required" });
+      const cfg = await getWhatsAppConfig(roomId);
+      if (!cfg.instanceId || !cfg.token) return res.status(400).json({ error: "WhatsApp not configured in vault" });
+      const url = `https://api.ultramsg.com/${cfg.instanceId}/messages/chat`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: cfg.token, to, body: message, priority: "10" }).toString(),
+      });
+      const data = await response.json();
+      res.json({ sent: true, data });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── WhatsApp test ─────────────────────────────────────────────────────────────
+  app.post("/api/vault-settings/test-whatsapp", async (req, res) => {
+    const roomId = getRoomId(req);
+    try {
+      const cfg = await getWhatsAppConfig(roomId);
+      if (!cfg.instanceId || !cfg.token) return res.json({ connected: false, error: "Instance ID أو Token غير مضبوط" });
+      // جلب حالة الـ instance
+      const url = `https://api.ultramsg.com/${cfg.instanceId}/instance/status?token=${cfg.token}`;
+      const response = await fetch(url);
+      if (!response.ok) return res.json({ connected: false, error: `HTTP ${response.status}` });
+      const data: any = await response.json();
+      const connected = data?.status?.accountStatus?.substatus === "connected" || data?.status?.accountStatus?.substatus === "active";
+      res.json({ connected, status: data?.status?.accountStatus?.substatus || "unknown", data });
+    } catch (err: any) {
+      res.json({ connected: false, error: err.message });
+    }
   });
 
   // ── VPS connection test ───────────────────────────

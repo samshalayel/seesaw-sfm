@@ -44,6 +44,7 @@ export interface VaultSettings {
   apidog?:      { token: string };
   figma?:       { token: string };
   vps?: { host: string; port: string; user: string; password: string; webRoot: string };
+  whatsapp?: { instanceId: string; token: string; phone: string };
   humans:       HumanMember[];
   models:       ModelConfig[];
   hallWorkers:  ModelConfig[];
@@ -95,6 +96,11 @@ function roomToVault(room: Room, models: ModelConfig[]): VaultSettings {
       user:     (room as any).vpsUser     || "root",
       password: (room as any).vpsPassword || "",
       webRoot:  (room as any).vpsWebRoot  || "/var/www",
+    },
+    whatsapp: {
+      instanceId: (room as any).ultramsguInstanceId || "",
+      token:      (room as any).ultramsgunToken     || "",
+      phone:      (room as any).ultramsguPhone      || "",
     },
     humans:      (() => { try { return JSON.parse((room as any).humansJson || "[]"); } catch { return []; } })(),
     models:  models.length > 0
@@ -236,6 +242,13 @@ export async function setVaultSettings(
       (update as any).vpsPassword = settings.vps.password;
     }
   }
+  if (settings.whatsapp) {
+    if (settings.whatsapp.instanceId !== undefined) (update as any).ultramsguInstanceId = settings.whatsapp.instanceId;
+    if (settings.whatsapp.phone      !== undefined) (update as any).ultramsguPhone      = settings.whatsapp.phone;
+    if (settings.whatsapp.token && settings.whatsapp.token !== "••••••••") {
+      (update as any).ultramsgunToken = settings.whatsapp.token;
+    }
+  }
   if (settings.systemPrompt !== undefined) {
     update.systemPrompt = settings.systemPrompt;
   }
@@ -313,6 +326,15 @@ export async function getVpsConfig(roomId?: string): Promise<{ host: string; por
     user:     (room as any)?.vpsUser     || process.env.VPS_USER     || "root",
     password: (room as any)?.vpsPassword || process.env.VPS_PASSWORD || "",
     webRoot:  (room as any)?.vpsWebRoot  || process.env.VPS_WEB_ROOT || "/var/www",
+  };
+}
+
+export async function getWhatsAppConfig(roomId?: string): Promise<{ instanceId: string; token: string; phone: string }> {
+  const room = await storage.getRoom(roomId || "default");
+  return {
+    instanceId: (room as any)?.ultramsguInstanceId || "",
+    token:      (room as any)?.ultramsgunToken     || "",
+    phone:      (room as any)?.ultramsguPhone      || "",
   };
 }
 
