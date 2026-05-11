@@ -312,22 +312,41 @@ export function AgoraMeeting() {
       // 5. أنشئ tracks وانشر — مع fallback تدريجي
       let mic: IMicrophoneAudioTrack | null = null;
       let cam: ICameraVideoTrack | null = null;
-      if (isSecure) {
+
+      // تحقق من حالة الإذنات قبل محاولة إنشاء tracks
+      let micPermission: PermissionState | "unknown" = "unknown";
+      let camPermission: PermissionState | "unknown" = "unknown";
+      try {
+        const micStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        micPermission = micStatus.state;
+      } catch { /* المتصفح لا يدعم permissions API */ }
+      try {
+        const camStatus = await navigator.permissions.query({ name: "camera" as PermissionName });
+        camPermission = camStatus.state;
+      } catch { /* المتصفح لا يدعم permissions API */ }
+
+      const bothDenied = micPermission === "denied" && camPermission === "denied";
+      const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+
+      if (isSecure && !bothDenied) {
         try {
-          const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+          const tracks = await withTimeout(AgoraRTC.createMicrophoneAndCameraTracks(), 8000);
           mic = tracks[0];
           cam = tracks[1];
         } catch {
           // الكاميرا غير متاحة — جرب صوت فقط
-          try {
-            mic = await AgoraRTC.createMicrophoneAudioTrack();
-          } catch {
-            // الميكروفون أيضاً مرفوض — وضع المراقب
+          if (micPermission !== "denied") {
+            try {
+              mic = await withTimeout(AgoraRTC.createMicrophoneAudioTrack(), 5000);
+            } catch {
+              // الميكروفون أيضاً مرفوض — وضع المراقب
+            }
           }
           setVideoMuted(true);
         }
       } else {
-        // HTTP — وضع المراقب (بدون كاميرا/ميكروفون)
+        // HTTP أو إذنات مرفوضة — وضع المراقب (بدون كاميرا/ميكروفون)
         setVideoMuted(true);
         setAudioMuted(true);
       }
