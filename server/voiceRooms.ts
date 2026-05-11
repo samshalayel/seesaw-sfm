@@ -129,7 +129,7 @@ function connectGemini(room: VoiceRoom, apiKey: string, systemPrompt: string) {
 
     geminiWs.send(JSON.stringify({
       setup: {
-        model: "models/gemini-3.1-flash-live-preview",
+        model: "models/gemini-2.0-flash-live-001",
         generation_config: {
           response_modalities: ["AUDIO"],
           speech_config: {
@@ -245,8 +245,16 @@ export function setupVoiceRooms(httpServer: HttpServer, app: Express, externalWs
     res.json(list);
   });
 
-  // WebSocket
-  const wss = externalWss ?? new WebSocketServer({ server: httpServer, path: "/ws/voice-room" });
+  // WebSocket — noServer: true لتجنّب تعارض upgrade events مع geminiLive WSS
+  const wss = externalWss ?? new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", (req: IncomingMessage, socket: any, head: Buffer) => {
+    const url = new URL(req.url || "/", "http://localhost");
+    if (url.pathname !== "/ws/voice-room") return;
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
+    });
+  });
 
   wss.on("connection", (clientWs: WebSocket, req: IncomingMessage) => {
     const url   = new URL(req.url || "", "http://x");
