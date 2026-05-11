@@ -243,8 +243,9 @@ export async function setVaultSettings(
     }
   }
   if (settings.whatsapp) {
-    if (settings.whatsapp.instanceId !== undefined) (update as any).ultramsguInstanceId = settings.whatsapp.instanceId;
-    if (settings.whatsapp.phone      !== undefined) (update as any).ultramsguPhone      = settings.whatsapp.phone;
+    // Only overwrite with non-empty values to prevent accidental erasure
+    if (settings.whatsapp.instanceId) (update as any).ultramsguInstanceId = settings.whatsapp.instanceId;
+    if (settings.whatsapp.phone)      (update as any).ultramsguPhone      = settings.whatsapp.phone;
     if (settings.whatsapp.token && settings.whatsapp.token !== "••••••••") {
       (update as any).ultramsgunToken = settings.whatsapp.token;
     }
