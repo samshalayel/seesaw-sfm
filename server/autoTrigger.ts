@@ -448,6 +448,12 @@ Use BOTH for full CI/CD tasks:
   2. create_or_update_file → push code/config to GitHub repo
   3. update_clickup_task → mark done
 
+━━━ WHATSAPP NOTIFICATIONS ━━━
+Tool: send_whatsapp(message) — sends WhatsApp via UltraMsg (already configured).
+• Use AFTER completing each task to notify the team in Arabic.
+• Example: send_whatsapp("✅ تم إنجاز مهمة: ${task.name}")
+• Do NOT skip this step — always notify when a task is done or failed.
+
 RULES:
 - NEVER use get_github_repos — target repo is already given above.
 - For GitHub: always owner="${vaultOwner}", repo="${vaultRepo}".
@@ -752,10 +758,12 @@ export function clearProcessedTasks() {
   console.log("[AutoTrigger] Cleared processed tasks cache");
 }
 
-export function triggerScanNow() {
+export function triggerScanNow(roomId?: string) {
   if (!config.enabled || !config.watchUserId) {
     return { error: "Auto-trigger is not enabled or no user configured" };
   }
+  // Update triggerRoomId if provided (important after server restart)
+  if (roomId) triggerRoomId = roomId;
   scanAndProcess();
   return { success: true, message: "Scan triggered" };
 }

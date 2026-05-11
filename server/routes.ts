@@ -2557,9 +2557,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auto-trigger/scan", async (_req, res) => {
+  app.post("/api/auto-trigger/scan", async (req, res) => {
     try {
-      const result = triggerScanNow();
+      const roomId = getRoomId(req);
+      const result = triggerScanNow(roomId);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
