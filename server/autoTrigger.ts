@@ -11,9 +11,15 @@ import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
 
 // clients مؤقتة — يتم إعادة إنشاؤها من الخزنة عند كل مهمة
-let openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "placeholder" });
-let gemini    = new OpenAI({ apiKey: "placeholder", baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" });
-let anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || "placeholder" });
+// NOTE: OpenAI/Anthropic constructors throw if apiKey is empty/undefined.
+// We initialize with env vars but fall back to a safe dummy key.
+// refreshClients() replaces these with real keys from the vault before each task.
+function _safeKey(envVal: string | undefined, fallback: string): string {
+  return (typeof envVal === "string" && envVal.length > 0) ? envVal : fallback;
+}
+let openai    = new OpenAI({ apiKey: _safeKey(process.env.OPENAI_API_KEY,    "sk-placeholder-init") });
+let gemini    = new OpenAI({ apiKey: "sk-gemini-placeholder-init", baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" });
+let anthropic = new Anthropic({ apiKey: _safeKey(process.env.ANTHROPIC_API_KEY, "sk-ant-placeholder-init") });
 
 async function refreshClients() {
   const gptModel     = await getModelByName("GPT",    triggerRoomId).catch(() => undefined);
@@ -737,4 +743,17 @@ export async function getAvailableVaultModels(roomId?: string): Promise<{ id: st
   return models
     .filter(m => m.apiKey.trim())
     .map(m => ({ id: m.id, name: m.name, provider: detectProvider(m) }));
+}
+
+export async function testVpsConnection(roomId?: string): Promise<{ connected: boolean; output?: string; error?: string }> {
+  try {
+    const vpsCfg = await getVpsConfig(roomId);
+    if (!vpsCfg.host) return { connected: false, error: "VPS host not configured" };
+    const result = await runOnVps("echo OK && hostname", 10000, vpsCfg);
+    if (result.startsWith("SSH connection error:")) return { connected: false, error: result };
+    if (result.startsWith("[timeout")) return { connected: false, error: result };
+    return { connected: true, output: result.trim() };
+  } catch (err: any) {
+    return { connected: false, error: err.message };
+  }
 }

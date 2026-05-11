@@ -25,7 +25,7 @@ try {
 }
 import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs";
 import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY } from "./vaultStore";
-import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels } from "./autoTrigger";
+import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
 import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
 import { validateStage, type ValidationResult, type ValidationFailure } from "./sfmQualityValidator";
@@ -3012,6 +3012,17 @@ export async function registerRoutes(
     res.json(results);
   });
 
+  // ── VPS connection test ───────────────────────────
+  app.post("/api/vault-settings/test-vps", async (req, res) => {
+    const roomId = getRoomId(req);
+    try {
+      const result = await testVpsConnection(roomId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ connected: false, error: err.message });
+    }
+  });
+
   // ══════════════════════════════════════════════════
   //  ADMIN STATS — كم يوزر دخل وكم موديل لكل يوزر
   // ══════════════════════════════════════════════════
@@ -3286,6 +3297,33 @@ export async function registerRoutes(
   // ── Agora: App ID فقط (للـ client) ───────────────────────────────────────
   app.get("/api/agora/app-id", (_req, res) => {
     res.json({ appId: process.env.AGORA_APP_ID || "" });
+  });
+
+  // ── Meeting AI state — per room ───────────────────────────────────────────
+  // { roomId → { active, sessionId, ts } }
+  const meetingAiState = new Map<string, { active: boolean; sessionId: string; ts: number }>();
+
+  app.post("/api/meeting/ai-status", (req, res) => {
+    const { roomId, active, sessionId } = req.body as { roomId: string; active: boolean; sessionId: string };
+    if (!roomId || !sessionId) return res.status(400).json({ error: "missing fields" });
+    if (active) {
+      meetingAiState.set(roomId, { active: true, sessionId, ts: Date.now() });
+    } else {
+      const cur = meetingAiState.get(roomId);
+      // فقط من فعّله يقدر يوقفه
+      if (cur?.sessionId === sessionId) meetingAiState.delete(roomId);
+    }
+    res.json({ ok: true });
+  });
+
+  app.get("/api/meeting/ai-status/:roomId", (req, res) => {
+    const state = meetingAiState.get(req.params.roomId);
+    // تنظيف تلقائي بعد 5 دقائق بدون تحديث
+    if (state && Date.now() - state.ts > 5 * 60 * 1000) {
+      meetingAiState.delete(req.params.roomId);
+      return res.json({ active: false });
+    }
+    res.json({ active: state?.active ?? false, sessionId: state?.sessionId ?? null });
   });
 
   // ── Lite Office: محادثة مباشرة بدون DB ────────────────────────────────────

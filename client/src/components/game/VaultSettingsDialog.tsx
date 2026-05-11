@@ -202,7 +202,7 @@ export function VaultSettingsDialog() {
 
   // Drag & Resize state
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [size, setSize] = useState({ w: 480, h: 560 });
+  const [size, setSize] = useState({ w: 780, h: 620 });
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
 
@@ -535,17 +535,17 @@ export function VaultSettingsDialog() {
   };
 
   const tabs = ["company", "github", "clickup", "vps", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
-  const tabLabels: Record<string, string> = {
-    company: "الشركة",
-    github: "GitHub",
-    clickup: "ClickUp",
-    vps: "🖥️ VPS",
-    sfm: "🌐 Sillar",
-    models: "Models",
-    "ai-worker": "🤖 AI Workers",
-    instructions: "📋 تعليمات",
-    humans: "👥 الفريق",
-    stats: "📊 إحصائيات",
+  const tabLabels: Record<string, { icon: string; label: string }> = {
+    company:      { icon: "🏢", label: "الشركة"       },
+    github:       { icon: "🐙", label: "GitHub"       },
+    clickup:      { icon: "✅", label: "ClickUp"      },
+    vps:          { icon: "🖥️", label: "VPS"          },
+    sfm:          { icon: "🌐", label: "Sillar"       },
+    models:       { icon: "🤖", label: "Models"       },
+    "ai-worker":  { icon: "⚡", label: "AI Workers"   },
+    instructions: { icon: "📋", label: "تعليمات"      },
+    humans:       { icon: "👥", label: "الفريق"       },
+    stats:        { icon: "📊", label: "إحصائيات"     },
   };
 
   const loadStats = async () => {
@@ -587,59 +587,123 @@ export function VaultSettingsDialog() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "14px 18px",
+          padding: "8px 14px",
           borderBottom: `1px solid ${accentColor}40`,
           cursor: "grab",
           flexShrink: 0,
+          gap: "10px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ fontSize: "20px" }}>🔐</div>
-          <span style={{ color: "white", fontSize: "17px", fontWeight: "bold", direction: "rtl" }}>
+        {/* Title */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          <div style={{ fontSize: "16px" }}>🔐</div>
+          <span style={{ color: "white", fontSize: "14px", fontWeight: "bold", direction: "rtl" }}>
             اعدادات الخزنة
           </span>
-          <span style={{ color: "#444", fontSize: "11px", marginRight: "4px" }}>⠿</span>
+          <span style={{ color: "#444", fontSize: "10px" }}>⠿</span>
         </div>
-        <button
-          onClick={closeVault}
-          onMouseDown={(e) => e.stopPropagation()}
-          style={{
-            background: "none",
-            border: "none",
-            color: "#888",
-            fontSize: "20px",
-            cursor: "pointer",
-            padding: "0 4px",
-          }}
-        >
-          X
-        </button>
-      </div>
 
-      <div style={{ display: "flex", borderBottom: `1px solid ${accentColor}20`, flexShrink: 0 }}>
-        {tabs.map((tab) => (
+        {/* Buttons row */}
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{ display: "flex", alignItems: "center", gap: "6px", marginRight: "auto" }}
+        >
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={handleTest}
+            disabled={testing}
             style={{
-              flex: 1,
-              padding: "12px",
-              background: activeTab === tab ? `${accentColor}20` : "transparent",
-              border: "none",
-              borderBottom: activeTab === tab ? `2px solid ${accentColor}` : "2px solid transparent",
-              color: activeTab === tab ? accentColor : "#888",
-              fontSize: "14px",
-              fontWeight: "bold",
-              cursor: "pointer",
-              transition: "all 0.2s",
+              background: "#1e3a5f",
+              border: "none", borderRadius: "6px",
+              padding: "5px 12px",
+              color: "#7ab8f5", fontSize: "12px",
+              cursor: testing ? "not-allowed" : "pointer",
+              opacity: testing ? 0.6 : 1,
             }}
           >
-            {tabLabels[tab]}
+            {testing ? "..." : "اختبار"}
           </button>
-        ))}
+          <button
+            onClick={closeVault}
+            style={{
+              background: "#2a2a2a",
+              border: "none", borderRadius: "6px",
+              padding: "5px 12px",
+              color: "#aaa", fontSize: "12px",
+              cursor: "pointer",
+            }}
+          >
+            اغلاق
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              background: accentColor,
+              border: "none", borderRadius: "6px",
+              padding: "5px 14px",
+              color: "#1a1a2e", fontSize: "12px",
+              fontWeight: "bold",
+              cursor: saving ? "not-allowed" : "pointer",
+              opacity: saving ? 0.6 : 1,
+            }}
+          >
+            {saving ? "..." : "حفظ"}
+          </button>
+          <button
+            onClick={closeVault}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              background: "none", border: "none",
+              color: "#555", fontSize: "16px",
+              cursor: "pointer", padding: "0 2px",
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      <div style={{ padding: "20px 18px", display: "flex", flexDirection: "column", gap: "14px", overflowY: "auto", flex: 1 }}>
+      {/* ── BODY: sidebar + content ── */}
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+
+        {/* Sidebar */}
+        <div style={{
+          width: "120px", flexShrink: 0,
+          borderLeft: `1px solid ${accentColor}20`,
+          display: "flex", flexDirection: "column",
+          overflowY: "auto", padding: "8px 0",
+          background: "rgba(0,0,0,0.2)",
+        }}>
+          {tabs.map((tab) => {
+            const { icon, label } = tabLabels[tab];
+            const active = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  gap: "3px", padding: "10px 6px",
+                  background: active ? `${accentColor}18` : "transparent",
+                  border: "none",
+                  borderRight: active ? `3px solid ${accentColor}` : "3px solid transparent",
+                  color: active ? accentColor : "#666",
+                  fontSize: "11px", fontWeight: active ? 700 : 400,
+                  cursor: "pointer", transition: "all 0.15s",
+                  textAlign: "center", lineHeight: 1.2,
+                  direction: "rtl",
+                }}
+              >
+                <span style={{ fontSize: "18px", lineHeight: 1 }}>{icon}</span>
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: "14px", overflowY: "auto" }}>
         {activeTab === "company" ? (
           <>
             {/* ── اسم الشركة ── */}
@@ -1076,9 +1140,33 @@ export function VaultSettingsDialog() {
               />
             </div>
 
+            {/* زر اختبار VPS */}
+            <button
+              onClick={async () => {
+                const roomId = localStorage.getItem("roomId") || "default";
+                try {
+                  const res = await apiFetch("/api/vault-settings/test-vps", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-room-id": roomId },
+                  });
+                  const data = await res.json();
+                  if (data.connected) {
+                    alert(`✅ اتصال ناجح!\n${data.output || ""}`);
+                  } else {
+                    alert(`❌ فشل الاتصال\n${data.error || "خطأ غير معروف"}`);
+                  }
+                } catch (e: any) {
+                  alert(`❌ خطأ: ${e.message}`);
+                }
+              }}
+              style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.4)", color: "#4ade80", padding: "7px 16px", borderRadius: 6, cursor: "pointer", fontSize: 12, marginTop: 8 }}
+            >
+              🔌 اختبار الاتصال بـ VPS
+            </button>
+
             {/* تحذير */}
-            <div style={{ color: "#64748b", fontSize: 11, marginTop: 4, direction: "rtl" }}>
-              ⚠️ بيانات SSH محفوظة بشكل مشفر في قاعدة البيانات ولا تُشارك مع أحد.
+            <div style={{ color: "#64748b", fontSize: 11, marginTop: 8, direction: "rtl" }}>
+              ⚠️ بيانات SSH محفوظة في قاعدة البيانات ولا تُشارك مع أحد.
             </div>
           </>
 
@@ -2450,89 +2538,35 @@ export function VaultSettingsDialog() {
         ) : null}
       </div>
 
-      <div
-        style={{
-          padding: "14px 18px",
+      </div>{/* end body wrapper */}
+
+      {/* ── STATUS BAR (رسائل فقط، بدون أزرار) ── */}
+      {(saveError || saved || testResult) && (
+        <div style={{
+          padding: "6px 14px",
           borderTop: `1px solid ${accentColor}20`,
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: "10px",
-        }}
-      >
-        {saveError && (
-          <span style={{ color: "#f44336", fontSize: "14px", direction: "rtl", alignSelf: "center" }}>
-            {saveError}
-          </span>
-        )}
-        {saved && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
-            <span style={{ color: "#4caf50", fontSize: "14px", direction: "rtl" }}>✓ تم الحفظ</span>
-            {savedHint && (
-              <span style={{ color: "#a0cfff", fontSize: "11px", direction: "rtl", fontFamily: "monospace" }}>
-                📍 {savedHint}
+          display: "flex", alignItems: "center", gap: "12px",
+          flexShrink: 0, direction: "rtl", fontSize: "12px",
+        }}>
+          {saveError && <span style={{ color: "#f44336" }}>{saveError}</span>}
+          {saved && (
+            <>
+              <span style={{ color: "#4caf50" }}>✓ تم الحفظ</span>
+              {savedHint && <span style={{ color: "#a0cfff", fontFamily: "monospace" }}>📍 {savedHint}</span>}
+            </>
+          )}
+          {testResult && (
+            <>
+              <span style={{ color: testResult.github?.connected ? "#4caf50" : "#f44336" }}>
+                GitHub: {testResult.github?.connected ? `✓ ${testResult.github.user}` : "✗"}
               </span>
-            )}
-          </div>
-        )}
-        {testResult && (
-          <div style={{ display: "flex", gap: "8px", alignSelf: "center", direction: "rtl", fontSize: "12px" }}>
-            <span style={{ color: testResult.github?.connected ? "#4caf50" : "#f44336" }}>
-              GitHub: {testResult.github?.connected ? `متصل (${testResult.github.user})` : "غير متصل"}
-            </span>
-            <span style={{ color: testResult.clickup?.connected ? "#4caf50" : "#f44336" }}>
-              ClickUp: {testResult.clickup?.connected ? `متصل (${testResult.clickup.workspace})` : `غير متصل${testResult.clickup?.error ? ` — ${testResult.clickup.error}` : ""}`}
-            </span>
-          </div>
-        )}
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={handleTest}
-          disabled={testing}
-          style={{
-            background: "#2a4a6e",
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 16px",
-            color: "white",
-            fontSize: "13px",
-            cursor: testing ? "not-allowed" : "pointer",
-            opacity: testing ? 0.6 : 1,
-          }}
-        >
-          {testing ? "..." : "اختبار"}
-        </button>
-        <button
-          onClick={closeVault}
-          style={{
-            background: "#333",
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 20px",
-            color: "white",
-            fontSize: "14px",
-            cursor: "pointer",
-          }}
-        >
-          اغلاق
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            background: accentColor,
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 24px",
-            color: "#1a1a2e",
-            fontSize: "14px",
-            fontWeight: "bold",
-            cursor: saving ? "not-allowed" : "pointer",
-            opacity: saving ? 0.6 : 1,
-          }}
-        >
-          {saving ? "..." : "حفظ"}
-        </button>
-      </div>
+              <span style={{ color: testResult.clickup?.connected ? "#4caf50" : "#f44336" }}>
+                ClickUp: {testResult.clickup?.connected ? `✓ ${testResult.clickup.workspace}` : "✗"}
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── RESIZE HANDLE (bottom-right corner) ── */}
       <div
