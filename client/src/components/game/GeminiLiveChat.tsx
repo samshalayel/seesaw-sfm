@@ -164,6 +164,14 @@ export function GeminiLiveChat({ roomId, systemPrompt, robotName = "الروبو
         setStatus("error");
       };
 
+      ws.onclose = (ev) => {
+        // إذا كان الاتصال لا يزال في وضع الاتصال (لم يصل "ready" بعد)
+        if (status === "connecting" || status === "ready") {
+          setErrorMsg(`انقطع الاتصال — code: ${ev.code}`);
+          setStatus("error");
+        }
+      };
+
     } catch (err: any) {
       setErrorMsg(err.message || "خطأ غير معروف");
       setStatus("error");

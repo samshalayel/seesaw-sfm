@@ -285,7 +285,7 @@ function connectToGemini(
     clearTimeout(connectTimeout);
     const setup: any = {
       setup: {
-        model: "models/gemini-3.1-flash-live-preview",
+        model: "models/gemini-2.0-flash-live-001",
         generation_config: {
           response_modalities: ["AUDIO"],
           speech_config: {
@@ -421,27 +421,30 @@ function connectToGemini(
 
 // ── Proxy Setup ───────────────────────────────────────────────────────────────
 export function setupGeminiLiveProxy(httpServer: HttpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws/gemini-live" });
+  // noServer: true لمنع تعارض مع WebSocket servers أخرى (voice-room)
+  // كل WSS يستقبل upgrade event بشكل مستقل وترسل الـ 400 للبعض — يسبب RSV1 error
+  const wss = new WebSocketServer({
+    noServer: true,
+    perMessageDeflate: false,
+  });
+
+  // نوجّه الـ upgrade requests يدوياً بدل ربط الـ WSS بالـ HTTP server مباشرة
+  httpServer.on("upgrade", (req: IncomingMessage, socket: any, head: Buffer) => {
+    const url = new URL(req.url || "/", "http://localhost");
+    if (url.pathname !== "/ws/gemini-live") return;   // نتركها للـ WSS الأخرى
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
+    });
+  });
 
   wss.on("connection", (clientWs: WebSocket, req: IncomingMessage) => {
     const url    = new URL(req.url || "/", "http://localhost");
     const roomId = url.searchParams.get("roomId") || undefined;
 
-    console.log(`[GeminiLive] connected room:${roomId || "default"} — waiting for init...`);
+    console.log(`[GeminiLive] connected room:${roomId || "default"} — loading config...`);
 
-    // ── سجّل handler الـ init فوراً (قبل أي async) لتجنّب race condition ──
-    // البراوزر يرسل init في ws.onopen مباشرة، لازم نكون جاهزين
-    let initResolve!: (data: Buffer) => void;
-    const initPromise = new Promise<Buffer>(resolve => { initResolve = resolve; });
-    clientWs.once("message", (data: Buffer) => {
-      console.log(`[GeminiLive] ✉️ init message arrived (${data.length} bytes)`);
-      initResolve(data);
-    });
-    clientWs.once("close", (code: number) => {
-      console.warn(`[GeminiLive] ⚠️ WS closed BEFORE init — code:${code}`);
-    });
-
-    // ── الآن نحمّل إعدادات الخزنة بشكل async ────────────────────────────
+    // ── لا نحتاج رسالة init — نحمّل كل شيء من الـ DB مباشرة ────────────────
+    // هذا يتجنّب مشكلة race condition مع nginx proxy
     (async () => {
       let apiKey         = "";
       let vaultPrompt    = "";
@@ -474,28 +477,20 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
 
       console.log(`[GeminiLive] apiKey=${apiKey ? "✅ found (" + apiKey.slice(0,8) + "...)" : "❌ MISSING"} room:${roomId}`);
 
+      // تحقق أن الاتصال لا يزال مفتوحاً
+      if (clientWs.readyState !== WebSocket.OPEN) {
+        console.warn(`[GeminiLive] ⚠️ WS closed before config loaded — room:${roomId}`);
+        return;
+      }
+
       if (!apiKey) {
         clientWs.send(JSON.stringify({ type: "error", message: "Gemini API key غير مُعدّ — أضف مفتاح Gemini في إعدادات الخزنة" }));
         clientWs.close();
         return;
       }
 
-      // ── انتظر رسالة init (قد تكون وصلت مسبقاً أو ستصل لاحقاً) ──────────
-      const rawData = await initPromise;
-
-      let robotSystemPrompt = vaultPrompt;
-      let initMessages: { role: string; content: string }[] = [];
-
-      try {
-        const initMsg = JSON.parse(rawData.toString());
-        if (initMsg.type === "init") {
-          if (initMsg.systemPrompt) robotSystemPrompt = initMsg.systemPrompt;
-          initMessages = Array.isArray(initMsg.messages) ? initMsg.messages : [];
-        }
-      } catch (_) {}
-
-      // بنِ الـ system prompt النهائي
-      let systemPrompt = robotSystemPrompt
+      // بنِ الـ system prompt من الخزنة مباشرة
+      let systemPrompt = vaultPrompt
         || "أنت مساعد ذكي في مكتب Sillar الرقمي. أجب باختصار وبوضوح.";
 
       // أضف سياق GitHub / ClickUp / VPS
@@ -516,7 +511,7 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
 5. غيّر حالتها إلى "closed"
 6. أبلغ المستخدم بالنتيجة`;
 
-      console.log(`[GeminiLive] init — prompt:${systemPrompt.slice(0, 80)}... msgs:${initMessages.length}`);
+      console.log(`[GeminiLive] connecting to Gemini — prompt:${systemPrompt.slice(0, 80)}...`);
 
       connectToGemini(
         clientWs,
@@ -526,7 +521,7 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
         githubRepoName,
         clickupListId,
         roomId,
-        initMessages,
+        [],           // no message history for voice sessions
         vpsConfig,
       );
     })();
