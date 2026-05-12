@@ -722,15 +722,9 @@ async function scanAndProcess() {
           triggerLogs.unshift(log);
           if (triggerLogs.length > 50) triggerLogs.splice(50);
 
-          // شغّل بنسخة مؤقتة من config مع robotId هذا
-          const savedRobotId = config.robotId;
-          config.robotId = rId;
-          try {
-            await refreshClients();
-            await processTaskWithAI(task, log);
-          } finally {
-            config.robotId = savedRobotId;
-          }
+          // نمرر robotId مباشرة عبر opts — لا نمس config.robotId المشترك
+          await refreshClients();
+          await processTaskWithAI(task, log, { robotId: rId });
 
           // ارفق النتيجة
           if (log.result || log.error) {
