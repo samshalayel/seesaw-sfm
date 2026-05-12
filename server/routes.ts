@@ -478,6 +478,19 @@ const toolDefinitions = [
     description: "اقرأ سجل الـ 8 خانات (PD, S0-S6) للمشروع النشط. يُظهر اسم آخر ملف JSON تم رفعه على GitHub لكل مرحلة. استخدمه قبل بناء أي مرحلة جديدة لمعرفة ما تم إنجازه.",
     parameters: { type: "object", properties: {}, required: [] },
   },
+  // ── Communication tools ───────────────────────────────────────────────────
+  {
+    name: "send_whatsapp",
+    description: "إرسال رسالة واتساب عبر UltraMsg API. استخدم هذه الأداة عندما يطلب المستخدم إرسال رسالة واتساب لأي شخص أو رقم.",
+    parameters: {
+      type: "object",
+      properties: {
+        to:      { type: "string", description: "رقم المستقبل بكود الدولة مثل +9705XXXXXXXX، أو اتركه فارغاً لاستخدام الرقم الافتراضي من إعدادات الغرفة" },
+        message: { type: "string", description: "نص الرسالة المراد إرسالها (يدعم الأسطر الجديدة)" },
+      },
+      required: ["message"],
+    },
+  },
 ];
 
 const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = toolDefinitions.map(t => ({
@@ -895,6 +908,28 @@ async function executeToolCall(name: string, args: any, robotId: string = "robot
           slots: formatted,
           summary: PIPELINE_SLOTS.map(s => `${s}: ${formatted[s]}`).join("\n"),
         }, null, 2);
+      }
+      // ── WhatsApp ────────────────────────────────────────────────────────────
+      case "send_whatsapp": {
+        const waCfg = await getWhatsAppConfig(roomId);
+        if (!waCfg.instanceId || !waCfg.token) {
+          return "❌ WhatsApp غير مُعدّ. أضف بيانات UltraMsg في إعدادات الخزنة (تبويب WhatsApp): instanceId + token + رقم الهاتف.";
+        }
+        const phone = args.to || waCfg.phone;
+        if (!phone) {
+          return "❌ لا يوجد رقم مستقبل. أضف رقم الهاتف الافتراضي في إعدادات الخزنة أو مرر الرقم في الأمر.";
+        }
+        const waUrl = `https://api.ultramsg.com/${waCfg.instanceId}/messages/chat`;
+        const waRes = await fetch(waUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ token: waCfg.token, to: phone, body: args.message, priority: "10" }).toString(),
+        });
+        const waData: any = await waRes.json();
+        if (waData?.sent === "true" || waData?.sent === true) {
+          return `✅ تم إرسال الرسالة بنجاح إلى ${phone}`;
+        }
+        return `⚠️ استجابة UltraMsg: ${JSON.stringify(waData)}`;
       }
       default:
         return `Unknown tool: ${name}`;
