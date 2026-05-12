@@ -15,7 +15,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
 import { Server as HttpServer } from "http";
 import { Client as SshClient } from "ssh2";
-import { getModelByName, getGitHubOwner, getGitHubRepo, getClickUpListId, getVpsConfig, getWhatsAppConfig } from "./vaultStore";
+import { getModelByName, getVoiceModel, getGitHubOwner, getGitHubRepo, getClickUpListId, getVpsConfig, getWhatsAppConfig } from "./vaultStore";
 import { getRepoContents, createOrUpdateFile, getRepos } from "./github";
 import { getTasks, getTask, updateTask, searchTasksByName } from "./clickup";
 
@@ -484,9 +484,13 @@ export function setupGeminiLiveProxy(httpServer: HttpServer) {
       let vpsConfig: { host: string; port: number; user: string; password: string; webRoot: string } | undefined;
 
       try {
-        const geminiModel = await getModelByName("Gemini", roomId);
+        // أولوية: المودل الصوتي المحدد isVoice=true → ثم أي مودل اسمه "Gemini"
+        const voiceModel  = await getVoiceModel(roomId);
+        const geminiModel = voiceModel || await getModelByName("Gemini", roomId);
         apiKey      = geminiModel?.apiKey || "";
         vaultPrompt = geminiModel?.systemPrompt || "";
+        if (voiceModel) console.log(`[GeminiLive] using voice model: ${voiceModel.name} (${voiceModel.alias || ""})`);
+        else            console.log(`[GeminiLive] fallback to Gemini model by name`);
 
         const [owner, repo, listId, vps] = await Promise.all([
           getGitHubOwner(roomId),

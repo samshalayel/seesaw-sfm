@@ -26,6 +26,8 @@ export interface ModelConfig {
   modelId?: string;
   systemPrompt?: string;
   roomAssignment?: string;
+  isVoice?: boolean;
+  isHidden?: boolean;
 }
 
 export interface VaultSettings {
@@ -169,6 +171,8 @@ export async function getVaultSettings(roomId?: string): Promise<VaultSettings> 
     modelId:        m.modelId        || undefined,
     systemPrompt:   m.systemPrompt   || undefined,
     roomAssignment: m.roomAssignment || "main",
+    isVoice:        m.isVoice        ?? false,
+    isHidden:       m.isHidden       ?? false,
   }));
   return roomToVault(room, models);
 }
@@ -272,6 +276,8 @@ export async function setVaultSettings(
       modelId:        m.modelId,
       systemPrompt:   m.systemPrompt,
       roomAssignment: m.roomAssignment || "main",
+      isVoice:        m.isVoice  ?? false,
+      isHidden:       m.isHidden ?? false,
     })));
   }
 }
@@ -287,6 +293,11 @@ export async function getModels(roomId?: string): Promise<ModelConfig[]> {
 export async function getModelByName(name: string, roomId?: string): Promise<ModelConfig | undefined> {
   const models = await getModels(roomId);
   return models.find((m) => m.name.toLowerCase() === name.toLowerCase());
+}
+
+export async function getVoiceModel(roomId?: string): Promise<ModelConfig | undefined> {
+  const models = await getModels(roomId);
+  return models.find((m) => (m as any).isVoice === true);
 }
 
 export async function getGitHubToken(roomId?: string): Promise<string> {

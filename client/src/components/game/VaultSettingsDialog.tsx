@@ -5,11 +5,13 @@ import { apiFetch } from "@/lib/utils";
 interface ModelEntry {
   id?: string;
   name: string;
-  alias?: string; // اسم ظاهر مخصص (Funny Name)
+  alias?: string;       // اسم ظاهر مخصص (Funny Name)
   apiKey: string;
-  modelId?: string; // sub-model للـ OpenRouter (مثل anthropic/claude-3.5-sonnet)
-  systemPrompt?: string; // تعليمات خاصة بهذا الموديل
+  modelId?: string;     // sub-model للـ OpenRouter (مثل anthropic/claude-3.5-sonnet)
+  systemPrompt?: string;// تعليمات خاصة بهذا الموديل
   roomAssignment?: string; // الغرفة التي يظهر فيها الروبوت
+  isVoice?: boolean;    // مودل صوتي (Gemini Live)
+  isHidden?: boolean;   // مخفي في واجهة المستخدم
 }
 
 const ROOM_OPTIONS = [
@@ -497,6 +499,15 @@ export function VaultSettingsDialog() {
 
   const removeModel = (index: number) => {
     setModels(models.filter((_, i) => i !== index));
+  };
+
+  const setVoiceModel = (index: number) => {
+    // يُلغي voice من الكل ويضعه على هذا فقط
+    setModels(prev => prev.map((m, i) => ({ ...m, isVoice: i === index })));
+  };
+
+  const toggleHidden = (index: number) => {
+    setModels(prev => prev.map((m, i) => i === index ? { ...m, isHidden: !m.isHidden } : m));
   };
 
   const updateModel = (index: number, field: "name" | "alias" | "apiKey" | "modelId" | "systemPrompt" | "roomAssignment", value: string) => {
@@ -1582,71 +1593,131 @@ export function VaultSettingsDialog() {
             </div>
             {models.map((model, idx) => {
               const isDefault = model.name && model.name.toLowerCase() === defaultModel.toLowerCase();
-              const isFree = FREE_MODELS.some(f => model.name.toLowerCase() === f.toLowerCase());
+              const isFree    = FREE_MODELS.some(f => model.name.toLowerCase() === f.toLowerCase());
+              const isVoice   = !!model.isVoice;
+              const isHidden  = !!model.isHidden;
+
+              // حدود البطاقة: صوتي > افتراضي > عادي
+              const cardBorder = isVoice
+                ? "1px solid #3b82f6"
+                : isDefault
+                  ? `1px solid ${accentColor}`
+                  : "1px solid #333";
+              const cardShadow = isVoice
+                ? "0 0 14px #3b82f620"
+                : isDefault
+                  ? `0 0 10px ${accentColor}20`
+                  : "none";
+
               return (
               <div
                 key={idx}
                 style={{
-                  background: "#1a1a2e",
+                  background: isVoice ? "#0f1a2e" : "#1a1a2e",
                   borderRadius: "10px",
                   padding: "14px",
-                  border: isDefault ? `1px solid ${accentColor}` : "1px solid #333",
+                  border: cardBorder,
                   display: "flex",
                   flexDirection: "column",
                   gap: "10px",
                   position: "relative",
-                  boxShadow: isDefault ? `0 0 10px ${accentColor}20` : "none",
+                  boxShadow: cardShadow,
+                  opacity: isHidden ? 0.55 : 1,
+                  transition: "opacity 0.2s",
                 }}
               >
-                {/* Delete button */}
-                <button
-                  onClick={() => removeModel(idx)}
-                  style={{
-                    position: "absolute",
-                    top: "8px",
-                    left: "8px",
-                    background: "#f4433620",
-                    border: "1px solid #f4433640",
-                    borderRadius: "6px",
-                    color: "#f44336",
-                    fontSize: "14px",
-                    cursor: "pointer",
-                    width: "26px",
-                    height: "26px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 0,
-                  }}
-                >
-                  ✕
-                </button>
+                {/* ── شريط الأزرار العلوي ── */}
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:2 }}>
 
-                {/* Set as default button */}
-                <button
-                  onClick={() => setDefaultModelState(model.name || "")}
-                  title={isDefault ? "الموديل الافتراضي الحالي" : "تعيين كموديل افتراضي"}
-                  style={{
-                    position: "absolute",
-                    top: "8px",
-                    right: "8px",
-                    background: isDefault ? `${accentColor}30` : "transparent",
-                    border: isDefault ? `1px solid ${accentColor}` : "1px solid #444",
-                    borderRadius: "6px",
-                    color: isDefault ? accentColor : "#666",
-                    fontSize: "14px",
-                    cursor: isDefault ? "default" : "pointer",
-                    width: "26px",
-                    height: "26px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 0,
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {isDefault ? "⭐" : "☆"}
-                </button>
+                  {/* يسار: حذف */}
+                  <button
+                    onClick={() => removeModel(idx)}
+                    title="حذف الموديل"
+                    style={{
+                      background: "#f4433618", border: "1px solid #f4433640",
+                      borderRadius: "6px", color: "#f44336", fontSize: "13px",
+                      cursor: "pointer", width: "26px", height: "26px",
+                      display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
+                    }}
+                  >✕</button>
+
+                  {/* يمين: مجموعة أزرار */}
+                  <div style={{ display:"flex", gap:5, alignItems:"center" }}>
+
+                    {/* زر إخفاء/إظهار */}
+                    <button
+                      onClick={() => toggleHidden(idx)}
+                      title={isHidden ? "إظهار الموديل في الواجهة" : "إخفاء الموديل من الواجهة"}
+                      style={{
+                        background: isHidden ? "#78716c25" : "transparent",
+                        border: isHidden ? "1px solid #78716c80" : "1px solid #333",
+                        borderRadius: "6px", fontSize: "13px",
+                        color: isHidden ? "#a8a29e" : "#555",
+                        cursor: "pointer", padding: "3px 8px", height: "26px",
+                        display: "flex", alignItems: "center", gap: 4,
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      {isHidden ? "👁️‍🗨️ مخفي" : "👁️"}
+                    </button>
+
+                    {/* زر مودل صوتي */}
+                    <button
+                      onClick={() => setVoiceModel(idx)}
+                      title={isVoice ? "هذا هو المودل الصوتي" : "تعيين كمودل صوتي (Gemini Live)"}
+                      style={{
+                        background: isVoice ? "#1d4ed820" : "transparent",
+                        border: isVoice ? "1px solid #3b82f6" : "1px solid #333",
+                        borderRadius: "6px", fontSize: "13px",
+                        color: isVoice ? "#60a5fa" : "#555",
+                        cursor: "pointer", padding: "3px 8px", height: "26px",
+                        display: "flex", alignItems: "center", gap: 4,
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      🎙️ {isVoice ? "صوتي" : ""}
+                    </button>
+
+                    {/* زر افتراضي */}
+                    <button
+                      onClick={() => setDefaultModelState(model.name || "")}
+                      title={isDefault ? "الموديل الافتراضي الحالي" : "تعيين كموديل افتراضي"}
+                      style={{
+                        background: isDefault ? `${accentColor}30` : "transparent",
+                        border: isDefault ? `1px solid ${accentColor}` : "1px solid #444",
+                        borderRadius: "6px",
+                        color: isDefault ? accentColor : "#666",
+                        fontSize: "14px",
+                        cursor: isDefault ? "default" : "pointer",
+                        width: "26px", height: "26px",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        padding: 0, transition: "all 0.2s",
+                      }}
+                    >
+                      {isDefault ? "⭐" : "☆"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* بادجات الحالة */}
+                {(isVoice || isHidden) && (
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:-4 }}>
+                    {isVoice && (
+                      <span style={{
+                        background:"#1d4ed815", border:"1px solid #3b82f640",
+                        borderRadius:6, padding:"2px 8px",
+                        color:"#60a5fa", fontSize:11, fontWeight:700,
+                      }}>🎙️ مودل صوتي — يُستخدم في Gemini Live</span>
+                    )}
+                    {isHidden && (
+                      <span style={{
+                        background:"#78716c15", border:"1px solid #78716c40",
+                        borderRadius:6, padding:"2px 8px",
+                        color:"#a8a29e", fontSize:11, fontWeight:700,
+                      }}>👁️‍🗨️ مخفي من الواجهة</span>
+                    )}
+                  </div>
+                )}
 
                 <div style={{ marginTop: "4px" }}>
                   {/* Model name header with FREE badge */}
@@ -1938,7 +2009,10 @@ export function VaultSettingsDialog() {
                     value={model.systemPrompt || ""}
                     onChange={(e) => updateModel(idx, "systemPrompt", e.target.value)}
                     onKeyDown={(e) => e.stopPropagation()}
-                    placeholder={`أنت ${model.name || "مساعد"} متخصص في...\nأجب دائماً باللغة العربية...\nركز على...`}
+                    placeholder={isVoice
+                      ? `أنت مساعد صوتي ذكي في مكتب Sillar...\nتحدث بشكل طبيعي ومختصر...\nعند طلب مهمة: ابحث في ClickUp ونفّذها...`
+                      : `أنت ${model.name || "مساعد"} متخصص في...\nأجب دائماً باللغة العربية...\nركز على...`
+                    }
                     rows={3}
                     style={{
                       ...inputStyle,

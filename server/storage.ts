@@ -105,7 +105,7 @@ export class DrizzleStorage implements IStorage {
 
   async setRoomModels(
     roomId: string,
-    models: Array<{ name: string; alias?: string; apiKey: string; modelId?: string; systemPrompt?: string; roomAssignment?: string }>,
+    models: Array<{ name: string; alias?: string; apiKey: string; modelId?: string; systemPrompt?: string; roomAssignment?: string; isVoice?: boolean; isHidden?: boolean }>,
   ): Promise<void> {
     // UPDATE existing rows in-place to preserve IDs (avoids React key changes → no 3D remount)
     const existing = await db.select().from(roomModels)
@@ -114,7 +114,12 @@ export class DrizzleStorage implements IStorage {
 
     for (let i = 0; i < models.length; i++) {
       const m = models[i];
-      const row = { name: m.name, alias: m.alias || "", apiKey: m.apiKey, modelId: m.modelId || "", systemPrompt: m.systemPrompt || "", orderIndex: i, roomAssignment: m.roomAssignment || "main" };
+      const row = {
+        name: m.name, alias: m.alias || "", apiKey: m.apiKey,
+        modelId: m.modelId || "", systemPrompt: m.systemPrompt || "",
+        orderIndex: i, roomAssignment: m.roomAssignment || "main",
+        isVoice: m.isVoice ?? false, isHidden: m.isHidden ?? false,
+      };
       if (i < existing.length) {
         await db.update(roomModels).set(row).where(eq(roomModels.id, existing[i].id));
       } else {

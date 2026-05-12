@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, primaryKey } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -85,6 +85,8 @@ export const roomModels = pgTable("room_models", {
   systemPrompt:    text("system_prompt").notNull().default(""),
   orderIndex:      integer("order_index").notNull().default(0),
   roomAssignment:  text("room_assignment").notNull().default("main"),
+  isVoice:         boolean("is_voice").notNull().default(false),
+  isHidden:        boolean("is_hidden").notNull().default(false),
 });
 
 // ── room_playlist (YouTube, many per room) ────────────────────────────────────
