@@ -17,7 +17,8 @@ import { Server as HttpServer } from "http";
 import { Client as SshClient } from "ssh2";
 import { getModelByName, getVoiceModel, getGitHubOwner, getGitHubRepo, getClickUpListId, getVpsConfig, getWhatsAppConfig } from "./vaultStore";
 import { getRepoContents, createOrUpdateFile, getRepos } from "./github";
-import { getTasks, getTask, updateTask, searchTasksByName } from "./clickup";
+import { getTasks, getTask, updateTask, searchTasksByName, createTask, getWorkspaceMembers } from "./clickup";
+import { getAutoTriggerConfig } from "./autoTrigger";
 
 // ── SSH helper ────────────────────────────────────────────────────────────────
 function sshExec(
@@ -165,6 +166,28 @@ const TOOLS = [
       required: ["message"],
     },
   },
+  {
+    name: "list_team",
+    description: "اعرض أعضاء الفريق في ClickUp مع معرّفاتهم — استخدمها قبل delegate_task لمعرفة من تكلّفه بالمهمة",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "delegate_task",
+    description: `كلّف روبوت AI أو عضو فريق بمهمة كاملة عبر ClickUp.
+الروبوت المُراقب (AutoTrigger) سينفّذها تلقائياً بـ Claude أو GPT.
+استخدم list_team أولاً لمعرفة الـ assignee_id الصحيح.
+مثال: "اكتب API endpoint للمستخدمين وارفعه لـ GitHub"`,
+    parameters: {
+      type: "object",
+      properties: {
+        title:       { type: "string", description: "عنوان المهمة — وصف قصير وواضح" },
+        description: { type: "string", description: "تفاصيل المهمة الكاملة: ماذا تريد بالضبط، أين تكتب الكود، ما هو المتوقع" },
+        assignee_id: { type: "string", description: "رقم معرّف المُكلَّف من ClickUp (اختياري — إذا تركته فارغاً يُكلَّف الروبوت المُراقب تلقائياً)" },
+        priority:    { type: "string", description: "الأولوية: urgent | high | normal | low (افتراضي: normal)" },
+      },
+      required: ["title", "description"],
+    },
+  },
 ];
 
 // ── تنفيذ الأدوات ─────────────────────────────────────────────────────────────
@@ -279,6 +302,58 @@ async function executeTool(
         return `✅ تم إرسال رسالة واتساب إلى ${phone}`;
       }
       return `❌ فشل إرسال واتساب: ${JSON.stringify(data)}`;
+    }
+
+    // ── list_team ──────────────────────────────────────────────────────────────
+    if (name === "list_team") {
+      const members = await getWorkspaceMembers(roomId);
+      if (!members.length) return "❌ لا يوجد أعضاء أو ClickUp غير مُعدّ";
+      const atCfg = getAutoTriggerConfig();
+      return members.map((m: any) =>
+        `[${m.id}] ${m.username || m.name || m.email}${atCfg.watchUserId === m.id ? " ← الروبوت المُراقب 🤖" : ""}`
+      ).join("\n");
+    }
+
+    // ── delegate_task ──────────────────────────────────────────────────────────
+    if (name === "delegate_task") {
+      if (!listId) return "❌ ClickUp غير مُعدّ في الخزنة";
+
+      // حدد المُكلَّف: إما من الـ args أو الروبوت المُراقب تلقائياً
+      const atCfg = getAutoTriggerConfig();
+      let assigneeId: number | undefined;
+      if (args.assignee_id) {
+        assigneeId = parseInt(args.assignee_id, 10);
+      } else if (atCfg.watchUserId) {
+        assigneeId = atCfg.watchUserId;
+      }
+
+      // حوّل الأولوية لرقم ClickUp
+      const priorityMap: Record<string, number> = { urgent: 1, high: 2, normal: 3, low: 4 };
+      const priority = priorityMap[args.priority?.toLowerCase() || "normal"] || 3;
+
+      const task = await createTask(listId, {
+        name:        args.title,
+        description: args.description,
+        status:      "to do",
+        priority,
+        assignees:   assigneeId ? [assigneeId] : [],
+      }, roomId);
+
+      const assignedTo = assigneeId
+        ? (atCfg.watchUserId === assigneeId ? "الروبوت المُراقب 🤖" : `عضو #${assigneeId}`)
+        : "بدون تكليف";
+
+      console.log(`[GeminiLive] 📋 Task delegated: "${args.title}" → assignee: ${assigneeId} list: ${listId}`);
+
+      return [
+        `✅ تم إنشاء المهمة في ClickUp`,
+        `📋 العنوان: ${task.name}`,
+        `🆔 المعرّف: ${task.id}`,
+        `👤 مُكلَّف لـ: ${assignedTo}`,
+        assigneeId === atCfg.watchUserId
+          ? `⚡ AutoTrigger سيلتقطها خلال دقائق وينفّذها تلقائياً`
+          : `📬 المُكلَّف سيرى المهمة في ClickUp`,
+      ].join("\n");
     }
 
     return `خطأ: الأداة "${name}" غير معروفة`;
