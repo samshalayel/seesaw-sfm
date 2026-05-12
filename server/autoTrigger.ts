@@ -38,7 +38,8 @@ export interface AutoTriggerConfig {
   watchUserId: number | null;
   watchStatuses: string[];
   intervalMinutes: number;
-  robotId: string;
+  robotId: string;          // للتوافق مع القديم (أول عنصر في robotIds)
+  robotIds: string[];       // قائمة الموديلات المحددة — كل مهمة تُشغَّل على الكل بالتوازي
   doneStatus: string;
   parallelMode: boolean;   // تشغيل مهمة لكل موديل في الخزنة بالتوازي
 }
@@ -62,6 +63,7 @@ const config: AutoTriggerConfig = {
   watchStatuses: ["to do", "pending", "open"],
   intervalMinutes: 5,
   robotId: "robot-1",
+  robotIds: ["robot-1"],
   doneStatus: "complete",
   parallelMode: false,
 };
@@ -688,15 +690,67 @@ async function scanAndProcess() {
       }
     }
 
-    // ─── وضع التسلسل (الافتراضي) ─────────────────────────────────────────────
+    // ─── وضع التسلسل — كل مهمة تُشغَّل على جميع الـ robotIds بالتوازي ──────────
     for (const task of matchingTasks) {
       processedTaskIds.add(task.id);
-      const log: TriggerLog = {
-        id: generateId(), taskId: task.id, taskName: task.name,
-        status: "running", result: "", toolsUsed: [],
-        startedAt: Date.now(), completedAt: null, error: null,
-      };
-      await runOne(task, log);
+      const activeRobots = config.robotIds.length > 0 ? config.robotIds : [config.robotId];
+
+      if (activeRobots.length === 1) {
+        // مودل واحد — السلوك القديم
+        const log: TriggerLog = {
+          id: generateId(), taskId: task.id, taskName: task.name,
+          status: "running", result: "", toolsUsed: [],
+          startedAt: Date.now(), completedAt: null, error: null,
+          modelUsed: activeRobots[0],
+        };
+        const savedRobotId = config.robotId;
+        config.robotId = activeRobots[0];
+        await runOne(task, log);
+        config.robotId = savedRobotId;
+      } else {
+        // متعدد — شغّل كل المودلات بالتوازي على نفس المهمة
+        console.log(`[AutoTrigger] 🔀 Multi-model: task "${task.name}" → [${activeRobots.join(", ")}]`);
+        try { await updateTask(task.id, { status: "in progress" }, triggerRoomId); } catch {}
+
+        await Promise.all(activeRobots.map(async (rId) => {
+          const log: TriggerLog = {
+            id: generateId(), taskId: task.id, taskName: task.name,
+            status: "running", result: "", toolsUsed: [],
+            startedAt: Date.now(), completedAt: null, error: null,
+            modelUsed: rId,
+          };
+          triggerLogs.unshift(log);
+          if (triggerLogs.length > 50) triggerLogs.splice(50);
+
+          // شغّل بنسخة مؤقتة من config مع robotId هذا
+          const savedRobotId = config.robotId;
+          config.robotId = rId;
+          try {
+            await refreshClients();
+            await processTaskWithAI(task, log);
+          } finally {
+            config.robotId = savedRobotId;
+          }
+
+          // ارفق النتيجة
+          if (log.result || log.error) {
+            try {
+              const ts = new Date(log.startedAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+              const robotLabel = rId === "robot-1" ? "GPT" : rId === "robot-2" ? "Claude" : rId === "robot-3" ? "ClaudeCLI" : "Gemini";
+              const content = [
+                `المهمة: ${task.name}`, `الروبوت: ${robotLabel}`,
+                `الحالة: ${log.status}`, `الوقت: ${new Date(log.startedAt).toLocaleString("ar-SA")}`,
+                `الأدوات: ${log.toolsUsed.join(", ") || "—"}`, "",
+                log.result || "", log.error ? `\nخطأ: ${log.error}` : "",
+              ].join("\n");
+              await attachFileToTask(task.id, `result-${robotLabel}-${ts}.txt`, content, triggerRoomId);
+            } catch {}
+          }
+        }));
+
+        // أغلق المهمة بعد انتهاء الكل
+        try { await updateTask(task.id, { status: config.doneStatus }, triggerRoomId); } catch {}
+      }
     }
   } catch (err: any) {
     console.error("[AutoTrigger] Scan error:", err.message);
@@ -713,10 +767,17 @@ export function startAutoTrigger(
   doneStatus?: string,
   roomId?: string,
   parallelMode?: boolean,
+  robotIds?: string[],
 ) {
   config.watchUserId   = userId;
   if (intervalMinutes !== undefined) config.intervalMinutes = intervalMinutes;
-  if (robotId)          config.robotId        = robotId;
+  if (robotIds && robotIds.length > 0) {
+    config.robotIds = robotIds;
+    config.robotId  = robotIds[0]; // للتوافق مع القديم
+  } else if (robotId) {
+    config.robotId  = robotId;
+    config.robotIds = [robotId];
+  }
   if (watchStatuses)    config.watchStatuses  = watchStatuses;
   if (doneStatus)       config.doneStatus     = doneStatus;
   if (roomId)           triggerRoomId         = roomId;

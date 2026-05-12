@@ -133,6 +133,7 @@ export function TopRightPanel() {
   const meetingMode        = useGame(s => s.meetingMode);
   const openMeetingMinutes = useGame(s => s.openMeetingMinutes);
   const openAgoraMeeting   = useGame(s => s.openAgoraMeeting);
+  const openMeetingLobby   = useGame(s => s.openMeetingLobby);
   const models             = useGame(s => s.models);
   const hallWorkers        = useGame(s => s.hallWorkers);
   const isBroadcast        = useChat(s => s.isBroadcast);
@@ -204,7 +205,7 @@ export function TopRightPanel() {
   const [members, setMembers] = useState<Member[]>([]);
   const [selUser, setSelUser] = useState<number | null>(null);
   const [trigInterval, setTrigInterval] = useState(5);
-  const [selRobot, setSelRobot] = useState("robot-1");
+  const [selRobots, setSelRobots] = useState<string[]>(["robot-1"]);
   const [expLog, setExpLog]       = useState<string | null>(null);
   const [fullLog, setFullLog]     = useState<TriggerLog | null>(null);
   const [copied, setCopied]       = useState(false);
@@ -218,7 +219,8 @@ export function TopRightPanel() {
       if (isInit) {
         if (d.watchUserId)     setSelUser(d.watchUserId);
         if (d.intervalMinutes) setTrigInterval(d.intervalMinutes);
-        if (d.robotId)         setSelRobot(d.robotId);
+        if (d.robotIds?.length) setSelRobots(d.robotIds);
+        else if (d.robotId)    setSelRobots([d.robotId]);
       }
     }).catch(() => {});
     apiFetch("/api/auto-trigger/logs").then(r => r.json()).then(setLogs).catch(() => {});
@@ -242,7 +244,7 @@ export function TopRightPanel() {
     try {
       await apiFetch("/api/auto-trigger/start", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: selUser, intervalMinutes: trigInterval, robotId: selRobot }),
+        body: JSON.stringify({ userId: selUser, intervalMinutes: trigInterval, robotId: selRobots[0], robotIds: selRobots }),
       });
       fetchTriggerData(false); // لا تمسح الاختيار بعد الإطلاق
     } catch (_e) {} finally { setTrigLoading(false); }
@@ -418,96 +420,30 @@ export function TopRightPanel() {
         />
       )}
 
-      {/* ── 🏢 مكتب ─────────────────────────────────────────────── */}
+      {/* ── 📹 غرفة الاجتماعات ──────────────────────────────────── */}
       <div style={{ position: "relative" }}>
         {panel === "office" && (
-          <PopPanel width={220}>
+          <PopPanel width={210}>
             <div style={{
               fontSize: "11px", color: "#4488aa", fontWeight: 700,
               borderBottom: "1px solid #00334d", paddingBottom: "8px", marginBottom: "8px",
             }}>
-              🏢 أدوات المكتب{totalRobots > 0 ? ` · ${totalRobots} روبوت` : ""}
+              📹 غرفة الاجتماعات
             </div>
             <PBtn icon="💬" label="محادثة جماعية" color="99,102,241"
               onClick={() => { setMeetingMode(true); setPanel(null); }} />
-            {meetingMode && (
-              <PBtn icon="📹" label="اجتماع مرئي" color="0,150,255"
-                onClick={() => { openAgoraMeeting(); setPanel(null); }} />
-            )}
+            <PBtn icon="📹" label="اجتماع مرئي" color="0,150,255"
+              onClick={() => { openMeetingLobby(); setPanel(null); }} />
             {meetingMode && (
               <PBtn icon="📋" label="محضر الاجتماع" color="0,210,140" tag="M"
                 onClick={() => { openMeetingMinutes(); setPanel(null); }} />
             )}
-            <PBtn
-              icon={meetingLoading ? "⏳" : "🎥"}
-              label={meetingLoading ? "جارٍ الإنشاء..." : "اجتماع Webex"}
-              color="0,132,200"
-              onClick={handleWebex}
-              disabled={meetingLoading}
-            />
           </PopPanel>
         )}
         <IBtn
-          icon="🏢" label="مكتب"
+          icon="📹" label="اجتماعات"
           active={panel === "office"}
           onClick={() => toggle("office")}
-        />
-      </div>
-
-      {/* ── 🏭 عتال ─────────────────────────────────────────────── */}
-      <div style={{ position: "relative" }}>
-        {panel === "atal" && (
-          <PopPanel width={340}>
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              borderBottom: "1px solid rgba(251,191,36,0.2)", paddingBottom: "8px", marginBottom: "8px",
-            }}>
-              <span style={{ color: "#fbbf24", fontWeight: "bold", fontSize: "13px" }}>🏭 مراقب العتال</span>
-              <div style={{ display: "flex", gap: 5 }}>
-                {atalErr > 0 && (
-                  <button onClick={retryErrorsAtal} style={{
-                    background: "none", border: "1px solid #ef444460", borderRadius: "6px",
-                    color: "#f87171", fontSize: "10px", padding: "2px 6px", cursor: "pointer",
-                  }}>🔄 إعادة</button>
-                )}
-                <button onClick={clearDoneAtal} style={{
-                  background: "none", border: "1px solid #334155", borderRadius: "6px",
-                  color: "#94a3b8", fontSize: "10px", padding: "2px 6px", cursor: "pointer",
-                }}>🧹 مسح</button>
-              </div>
-            </div>
-            <div style={{ fontSize: "10px", color: "#64748b", direction: "ltr", marginBottom: "8px" }}>
-              {atalActive} pending · {atalDone} done · {atalErr} error
-            </div>
-            {atalQueue.length === 0 ? (
-              <div style={{ color: "#475569", textAlign: "center", padding: "16px 0", fontSize: "12px" }}>
-                الطابور فارغ
-              </div>
-            ) : atalQueue.map((f: any) => {
-              const sc = f.status === "done" ? "#22c55e" : f.status === "error" ? "#ef4444" : f.status === "uploading" ? "#fbbf24" : "#94a3b8";
-              const si = f.status === "done" ? "✅" : f.status === "error" ? "❌" : f.status === "uploading" ? "⬆️" : "⏳";
-              return (
-                <div key={f.id} style={{
-                  background: "rgba(255,255,255,0.03)", border: `1px solid ${sc}30`,
-                  borderRadius: "7px", padding: "6px 10px", marginBottom: "5px", direction: "ltr",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: "#e2e8f0", fontSize: "11px", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {si} {f.path}
-                    </span>
-                    <span style={{ color: sc, fontSize: "10px", marginLeft: 6 }}>{f.status}</span>
-                  </div>
-                  {f.error && <div style={{ color: "#ef4444", fontSize: "10px", marginTop: 2 }}>⚠ {f.error}</div>}
-                </div>
-              );
-            })}
-          </PopPanel>
-        )}
-        <IBtn
-          icon="🏭" label="عتال"
-          active={panel === "atal"}
-          onClick={() => toggle("atal")}
-          badge={atalActive}
         />
       </div>
 
@@ -555,22 +491,37 @@ export function TopRightPanel() {
                   onChange={e => setTrigInterval(Number(e.target.value))}
                   style={{ width: "70px", background: "#0d1117", border: "1px solid #333", borderRadius: "7px", padding: "6px 10px", color: "white", fontSize: "12px", marginBottom: "8px" }}
                 />
-                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                {/* multi-select robots */}
+                <div style={{ fontSize: "11px", color: "#555", marginBottom: 5, direction: "rtl" }}>
+                  الموديلات {selRobots.length > 1 ? <span style={{ color: "#facc15", fontWeight: 700 }}>({selRobots.length} متزامنة ⚡)</span> : ""}
+                </div>
+                <div style={{ display: "flex", gap: 5, marginBottom: 10, flexWrap: "wrap" }}>
                   {([
-                    { id: "robot-1", label: "GPT-4o",       color: "#4fc3f7" },
-                    { id: "robot-2", label: "Claude API",   color: "#66bb6a" },
-                    { id: "robot-3", label: "Claude CLI 🆓", color: "#c084fc" },
-                    { id: "robot-4", label: "Gemini ⚡",    color: "#facc15" },
-                  ] as const).map(r => (
-                    <button key={r.id} onClick={() => setSelRobot(r.id)} style={{
-                      flex: 1, padding: "6px", borderRadius: "7px", cursor: "pointer",
-                      border: selRobot === r.id ? `2px solid ${r.color}` : "1px solid #333",
-                      background: selRobot === r.id ? `${r.color}20` : "#0d1117",
-                      color: selRobot === r.id ? r.color : "#aaa", fontSize: "10px",
-                    }}>
-                      {r.label}
-                    </button>
-                  ))}
+                    { id: "robot-1", label: "GPT-4o",        color: "#4fc3f7" },
+                    { id: "robot-2", label: "Claude API",    color: "#66bb6a" },
+                    { id: "robot-3", label: "Claude CLI 🆓",  color: "#c084fc" },
+                    { id: "robot-4", label: "Gemini ⚡",     color: "#facc15" },
+                  ] as const).map(r => {
+                    const on = selRobots.includes(r.id);
+                    return (
+                      <button key={r.id}
+                        onClick={() => setSelRobots(prev =>
+                          on
+                            ? prev.length > 1 ? prev.filter(x => x !== r.id) : prev // لا تشيل الأخير
+                            : [...prev, r.id]
+                        )}
+                        style={{
+                          flex: 1, padding: "6px 4px", borderRadius: "7px", cursor: "pointer",
+                          border: on ? `2px solid ${r.color}` : "1px solid #333",
+                          background: on ? `${r.color}20` : "#0d1117",
+                          color: on ? r.color : "#555", fontSize: "10px",
+                          position: "relative",
+                        }}>
+                        {on && <span style={{ position: "absolute", top: -5, right: -5, width: 10, height: 10, borderRadius: "50%", background: r.color, display: "block" }} />}
+                        {r.label}
+                      </button>
+                    );
+                  })}
                 </div>
                 <button onClick={handleStart} disabled={!selUser || trigLoading} style={{
                   width: "100%", padding: "10px", borderRadius: "8px", border: "none",
@@ -589,10 +540,13 @@ export function TopRightPanel() {
                   </div>
                   <div style={{ color: "#aaa", fontSize: "11px" }}>
                     كل {config?.intervalMinutes} دقائق · {
-                      config?.robotId === "robot-1" ? "GPT-4o" :
-                      config?.robotId === "robot-3" ? "Claude CLI 🆓" :
-                      config?.robotId === "robot-4" ? "Gemini ⚡" : "Claude API"
+                      (config?.robotIds?.length ? config.robotIds : [config?.robotId]).map(id =>
+                        id === "robot-1" ? "GPT-4o" :
+                        id === "robot-3" ? "Claude CLI 🆓" :
+                        id === "robot-4" ? "Gemini ⚡" : "Claude API"
+                      ).join(" + ")
                     }
+                    {(config?.robotIds?.length ?? 1) > 1 && <span style={{ color: "#facc15", marginRight: 4 }}>⚡ متزامن</span>}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
