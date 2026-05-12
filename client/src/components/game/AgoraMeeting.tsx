@@ -133,6 +133,11 @@ export function AgoraMeeting() {
   const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([]);
   const [copiedId,    setCopiedId]    = useState<string | null>(null);
 
+  // session ID ثابت لهذه الجلسة — يميّز من فعّل الـ AI
+  const sessionId = useRef(Math.random().toString(36).slice(2));
+  // هل AI مفعّل من مشارك آخر؟
+  const [aiBlockedByOther, setAiBlockedByOther] = useState(false);
+
   // ── AI (Gemini Live) in meeting ───────────────────────────────────────────
   const [aiActive,     setAiActive]     = useState(false);
   const [aiStatus,     setAiStatus]     = useState<"idle"|"connecting"|"listening"|"speaking"|"error">("idle");
@@ -203,6 +208,12 @@ export function AgoraMeeting() {
     setAiStatus("idle");
     setAiTranscript("");
     setAiError("");
+    // أخبر السيرفر أن AI أوقف
+    fetch("/api/meeting/ai-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId: useGame.getState().user?.roomId || "", active: false, sessionId: sessionId.current }),
+    }).catch(() => {});
   }, []);
 
   // ESC / close
@@ -218,6 +229,14 @@ export function AgoraMeeting() {
     if (!open) { leaveChannel(); }
   }, [open, leaveChannel]);
 
+  // auto-join when meeting opens (من Lobby)
+  useEffect(() => {
+    if (open && !joined && !loading) {
+      joinMeeting();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   // cleanup on unmount
   useEffect(() => () => { leaveChannel(); }, [leaveChannel]);
 
@@ -225,6 +244,32 @@ export function AgoraMeeting() {
   useEffect(() => {
     if (!joined) deactivateAI();
   }, [joined, deactivateAI]);
+
+  // ── polling: هل AI مفعّل من شخص آخر؟ ────────────────────────────────────
+  useEffect(() => {
+    if (!joined || !roomId) return;
+    const check = async () => {
+      try {
+        const r = await fetch(`/api/meeting/ai-status/${roomId}`);
+        const d = await r.json();
+        // blocked إذا AI نشط وليس من هذه الجلسة
+        setAiBlockedByOther(d.active && d.sessionId !== sessionId.current);
+      } catch {}
+    };
+    check();
+    const t = setInterval(check, 3000);
+    return () => clearInterval(t);
+  }, [joined, roomId]);
+
+  // ── auto-start AI when joined ─────────────────────────────────────────────
+  useEffect(() => {
+    if (joined && !aiActive) {
+      // تأخير 1.5s لضمان استقرار Agora أولاً
+      const t = setTimeout(() => activateAI(), 1500);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined]);
 
   // sync remote audio sources into the AI mixer
   useEffect(() => {
@@ -363,6 +408,14 @@ export function AgoraMeeting() {
   // ── activate AI in meeting ────────────────────────────────────────────────
   const activateAI = async () => {
     if (!clientRef.current || !joined) return;
+    // إذا AI مفعّل من مشارك آخر — لا تفعّله
+    if (aiBlockedByOther) return;
+    // أخبر السيرفر أن AI نشط في هذه الغرفة
+    fetch("/api/meeting/ai-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId, active: true, sessionId: sessionId.current }),
+    }).catch(() => {});
     setAiActive(true);
     setAiStatus("connecting");
     setAiError("");
@@ -413,17 +466,41 @@ export function AgoraMeeting() {
       const ws = new WebSocket(`${proto}://${location.host}/ws/gemini-live?${qs}`);
       geminiWsRef.current = ws;
 
+      console.log("[AI] WebSocket created:", ws.url, "readyState:", ws.readyState);
+
       ws.onopen = () => {
-        ws.send(JSON.stringify({
-          type: "init",
-          systemPrompt: [
-            "أنت مساعد ذكي في اجتماع عمل جماعي على منصة Seesaw.",
-            `عدد المشاركين: ${remoteUsers.length + 1}.`,
-            "استمع لجميع المشاركين وأجب باختصار ووضوح.",
-            "يمكنك تنفيذ المهام عبر الأدوات المتاحة (GitHub, ClickUp, VPS).",
-          ].join(" "),
-          messages: [],
-        }));
+        console.log("[AI] ws.onopen fired — readyState:", ws.readyState);
+        // تأخير 300ms لضمان جاهزية nginx proxy pipe قبل إرسال أول message
+        setTimeout(() => {
+          if (ws.readyState !== WebSocket.OPEN) {
+            console.warn("[AI] ws no longer OPEN after delay — aborting init send");
+            return;
+          }
+          try {
+            ws.send(JSON.stringify({
+              type: "init",
+              systemPrompt: [
+                "أنت مساعد ذكي في اجتماع عمل جماعي على منصة Seesaw.",
+                `عدد المشاركين: ${remoteUsers.length + 1}.`,
+                "استمع لجميع المشاركين وأجب باختصار ووضوح.",
+                "يمكنك تنفيذ المهام عبر الأدوات المتاحة (GitHub, ClickUp, VPS).",
+              ].join(" "),
+              messages: [],
+            }));
+            console.log("[AI] init message sent ✅ (after 300ms delay)");
+          } catch (e) {
+            console.error("[AI] ws.send failed:", e);
+          }
+        }, 300);
+      };
+
+      ws.onerror = (e) => {
+        console.error("[AI] ws.onerror:", e);
+      };
+
+      ws.onclose = (e: CloseEvent) => {
+        console.log("[AI] ws.onclose — code:", e.code, "reason:", e.reason, "wasClean:", e.wasClean);
+        setAiActive(false); setAiStatus("idle");
       };
 
       ws.onmessage = (ev) => {
@@ -476,7 +553,8 @@ export function AgoraMeeting() {
 
             const src = pCtx.createBufferSource();
             src.buffer = buf;
-            src.connect(pDest);
+            src.connect(pDest);                  // → Agora track (يسمعه المشاركون)
+            src.connect(pCtx.destination);       // → سماعات المستخدم المحلي
             src.start(aiNextPlayTimeRef.current);
             aiNextPlayTimeRef.current += buf.duration;
 
@@ -491,7 +569,6 @@ export function AgoraMeeting() {
       };
 
       ws.onerror = () => { setAiError("فشل الاتصال بـ Gemini"); setAiStatus("error"); };
-      ws.onclose = () => { setAiActive(false); setAiStatus("idle"); };
 
       // publish Gemini voice as a custom Agora track (best-effort — may fail in observer mode)
       try {
@@ -681,12 +758,20 @@ export function AgoraMeeting() {
               </button>
               <button
                 onClick={aiActive ? deactivateAI : activateAI}
-                disabled={aiStatus === "connecting"}
-                style={ctrlBtn(aiActive, "#a855f7")}
+                disabled={aiStatus === "connecting" || aiBlockedByOther}
+                style={ctrlBtn(aiActive, aiBlockedByOther ? "#666" : "#a855f7")}
+                title={aiBlockedByOther ? "AI مفعّل من مشارك آخر" : aiActive ? "إيقاف AI" : "تشغيل AI"}
               >
-                🤖
+                {aiBlockedByOther ? "🔒" :
+                 aiStatus === "connecting" ? "⏳" :
+                 aiStatus === "speaking"   ? "🔊" :
+                 aiStatus === "listening"  ? "👂" : "🤖"}
                 <span style={{ fontSize: "10px", display: "block" }}>
-                  {aiStatus === "connecting" ? "⏳" : aiActive ? "إيقاف" : "AI"}
+                  {aiBlockedByOther        ? "مشغول" :
+                   aiStatus === "connecting" ? "تحميل" :
+                   aiStatus === "speaking"   ? "يتكلم" :
+                   aiStatus === "listening"  ? "يسمع" :
+                   aiActive ? "إيقاف" : "AI"}
                 </span>
               </button>
               <button onClick={() => { leaveChannel(); close(); }} style={ctrlBtn(false, "#cc2222")}>

@@ -24,7 +24,7 @@ try {
   }
 }
 import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs";
-import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY, getWhatsAppConfig } from "./vaultStore";
+import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY, getWhatsAppConfig, getGoogleConfig } from "./vaultStore";
 import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
 import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
@@ -478,6 +478,48 @@ const toolDefinitions = [
     description: "اقرأ سجل الـ 8 خانات (PD, S0-S6) للمشروع النشط. يُظهر اسم آخر ملف JSON تم رفعه على GitHub لكل مرحلة. استخدمه قبل بناء أي مرحلة جديدة لمعرفة ما تم إنجازه.",
     parameters: { type: "object", properties: {}, required: [] },
   },
+  // ── Google tools ─────────────────────────────────────────────────────────
+  {
+    name: "send_email",
+    description: "إرسال بريد إلكتروني عبر Gmail. استخدمها عندما يطلب المستخدم إرسال إيميل أو رسالة بريد إلكتروني.",
+    parameters: {
+      type: "object",
+      properties: {
+        to:      { type: "string", description: "عنوان البريد الإلكتروني للمستلم" },
+        subject: { type: "string", description: "موضوع الرسالة" },
+        body:    { type: "string", description: "محتوى الرسالة (يدعم HTML أو نص عادي)" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
+  {
+    name: "create_calendar_event",
+    description: "إنشاء حدث في Google Calendar. استخدمها لإضافة اجتماعات، مواعيد، تذكيرات.",
+    parameters: {
+      type: "object",
+      properties: {
+        title:       { type: "string",  description: "عنوان الحدث" },
+        description: { type: "string",  description: "وصف الحدث (اختياري)" },
+        start:       { type: "string",  description: "وقت البداية ISO 8601 مثل 2025-06-01T10:00:00" },
+        end:         { type: "string",  description: "وقت النهاية ISO 8601 مثل 2025-06-01T11:00:00" },
+        attendees:   { type: "string",  description: "إيميلات المدعوين مفصولة بفاصلة (اختياري)" },
+        timezone:    { type: "string",  description: "المنطقة الزمنية مثل Asia/Riyadh (افتراضي: Asia/Jerusalem)" },
+      },
+      required: ["title", "start", "end"],
+    },
+  },
+  {
+    name: "get_calendar_events",
+    description: "جلب قائمة الأحداث القادمة من Google Calendar.",
+    parameters: {
+      type: "object",
+      properties: {
+        days:  { type: "integer", description: "عدد الأيام القادمة للبحث فيها (افتراضي: 7)" },
+        limit: { type: "integer", description: "أقصى عدد أحداث (افتراضي: 10)" },
+      },
+      required: [],
+    },
+  },
   // ── Communication tools ───────────────────────────────────────────────────
   {
     name: "send_whatsapp",
@@ -908,6 +950,108 @@ async function executeToolCall(name: string, args: any, robotId: string = "robot
           slots: formatted,
           summary: PIPELINE_SLOTS.map(s => `${s}: ${formatted[s]}`).join("\n"),
         }, null, 2);
+      }
+      // ── Google helpers ──────────────────────────────────────────────────────
+      case "send_email": {
+        const gCfg = await getGoogleConfig(roomId);
+        if (!gCfg.clientId || !gCfg.clientSecret || !gCfg.refreshToken) {
+          return "❌ Gmail غير مُعدّ. أضف Client ID + Client Secret + Refresh Token في إعدادات الخزنة (تبويب Google).";
+        }
+        // الحصول على access token
+        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: gCfg.clientId, client_secret: gCfg.clientSecret,
+            refresh_token: gCfg.refreshToken, grant_type: "refresh_token",
+          }).toString(),
+        });
+        const tokenData: any = await tokenRes.json();
+        if (!tokenData.access_token) return `❌ فشل الحصول على access token: ${JSON.stringify(tokenData)}`;
+        // إنشاء رسالة MIME بـ base64url
+        const from = gCfg.email || "me";
+        const rawEmail = [
+          `From: ${from}`, `To: ${args.to}`,
+          `Subject: ${args.subject}`,
+          `Content-Type: text/html; charset=utf-8`, `MIME-Version: 1.0`, ``,
+          args.body,
+        ].join("\r\n");
+        const encoded = Buffer.from(rawEmail).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${tokenData.access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ raw: encoded }),
+        });
+        const sendData: any = await sendRes.json();
+        if (sendData.id) return `✅ تم إرسال الإيميل بنجاح إلى ${args.to} (ID: ${sendData.id})`;
+        return `⚠️ استجابة Gmail: ${JSON.stringify(sendData)}`;
+      }
+      case "create_calendar_event": {
+        const gCfg = await getGoogleConfig(roomId);
+        if (!gCfg.clientId || !gCfg.clientSecret || !gCfg.refreshToken) {
+          return "❌ Google Calendar غير مُعدّ. أضف بيانات OAuth في إعدادات الخزنة (تبويب Google).";
+        }
+        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: gCfg.clientId, client_secret: gCfg.clientSecret,
+            refresh_token: gCfg.refreshToken, grant_type: "refresh_token",
+          }).toString(),
+        });
+        const tokenData: any = await tokenRes.json();
+        if (!tokenData.access_token) return `❌ فشل الحصول على access token: ${JSON.stringify(tokenData)}`;
+        const tz = args.timezone || "Asia/Jerusalem";
+        const eventBody: any = {
+          summary: args.title,
+          description: args.description || "",
+          start: { dateTime: args.start, timeZone: tz },
+          end:   { dateTime: args.end,   timeZone: tz },
+        };
+        if (args.attendees) {
+          eventBody.attendees = args.attendees.split(",").map((e: string) => ({ email: e.trim() }));
+        }
+        const calId = encodeURIComponent(gCfg.calendarId || "primary");
+        const evRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${tokenData.access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(eventBody),
+        });
+        const evData: any = await evRes.json();
+        if (evData.id) return `✅ تم إنشاء الحدث: "${args.title}"\nالرابط: ${evData.htmlLink || "—"}`;
+        return `⚠️ استجابة Calendar: ${JSON.stringify(evData)}`;
+      }
+      case "get_calendar_events": {
+        const gCfg = await getGoogleConfig(roomId);
+        if (!gCfg.clientId || !gCfg.clientSecret || !gCfg.refreshToken) {
+          return "❌ Google Calendar غير مُعدّ.";
+        }
+        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: gCfg.clientId, client_secret: gCfg.clientSecret,
+            refresh_token: gCfg.refreshToken, grant_type: "refresh_token",
+          }).toString(),
+        });
+        const tokenData: any = await tokenRes.json();
+        if (!tokenData.access_token) return `❌ فشل الحصول على access token`;
+        const days  = args.days  || 7;
+        const limit = args.limit || 10;
+        const now   = new Date().toISOString();
+        const maxTime = new Date(Date.now() + days * 86400000).toISOString();
+        const calId = encodeURIComponent(gCfg.calendarId || "primary");
+        const evRes = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?timeMin=${now}&timeMax=${maxTime}&maxResults=${limit}&orderBy=startTime&singleEvents=true`,
+          { headers: { "Authorization": `Bearer ${tokenData.access_token}` } }
+        );
+        const evData: any = await evRes.json();
+        if (!evData.items) return `⚠️ استجابة Calendar: ${JSON.stringify(evData)}`;
+        if (evData.items.length === 0) return `📅 لا توجد أحداث في الأيام الـ ${days} القادمة.`;
+        return evData.items.map((e: any) => {
+          const start = e.start?.dateTime || e.start?.date || "—";
+          return `• ${e.summary || "(بلا عنوان)"} — ${new Date(start).toLocaleString("ar-SA")}`;
+        }).join("\n");
       }
       // ── WhatsApp ────────────────────────────────────────────────────────────
       case "send_whatsapp": {
@@ -1798,13 +1942,21 @@ export async function registerRoutes(
 
       // ── حقن أدوات التواصل المتاحة في الـ system prompt ──────────────────────
       {
+        const tools: string[] = [];
         const waCfg = await getWhatsAppConfig(roomId).catch(() => null);
         if (waCfg?.instanceId && waCfg?.token) {
+          tools.push(`• send_whatsapp(message, to?): ترسل رسالة واتساب فوراً. الرقم الافتراضي: ${waCfg.phone || "محفوظ في النظام"}.`);
+        }
+        const gCfg = await getGoogleConfig(roomId).catch(() => null);
+        if (gCfg?.clientId && gCfg?.refreshToken) {
+          tools.push(`• send_email(to, subject, body): ترسل إيميل عبر Gmail من حساب ${gCfg.email || "الحساب المُعدّ"}.`);
+          tools.push(`• create_calendar_event(title, start, end, description?, attendees?, timezone?): تضيف حدثاً في Google Calendar.`);
+          tools.push(`• get_calendar_events(days?, limit?): تجلب الأحداث القادمة من Google Calendar.`);
+        }
+        if (tools.length > 0) {
           systemPrompt +=
-            `\n\n[أدوات التواصل المتاحة — استخدمها مباشرةً عند الطلب]\n` +
-            `• send_whatsapp(message, to?): ترسل رسالة واتساب فوراً عبر UltraMsg. ` +
-            `الرقم الافتراضي: ${waCfg.phone || "محفوظ في النظام"}. ` +
-            `استخدمها حالاً عند أي طلب إرسال واتساب — لا تسأل عن التأكيد فقط نفّذ.`;
+            `\n\n[أدوات التواصل المتاحة — استخدمها مباشرةً عند الطلب، لا تسأل عن التأكيد فقط نفّذ]\n` +
+            tools.join("\n");
         }
       }
 
@@ -3109,6 +3261,48 @@ export async function registerRoutes(
       res.json({ connected, status: data?.status?.accountStatus?.substatus || "unknown", data });
     } catch (err: any) {
       res.json({ connected: false, error: err.message });
+    }
+  });
+
+  // ── Google connection test ───────────────────────────────────────────────
+  app.post("/api/vault-settings/test-google", async (req, res) => {
+    const roomId = getRoomId(req);
+    try {
+      const gCfg = await getGoogleConfig(roomId);
+      if (!gCfg.clientId || !gCfg.clientSecret || !gCfg.refreshToken) {
+        return res.json({ ok: false, error: "Client ID أو Client Secret أو Refresh Token غير مضبوط" });
+      }
+      // جلب access token
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: gCfg.clientId, client_secret: gCfg.clientSecret,
+          refresh_token: gCfg.refreshToken, grant_type: "refresh_token",
+        }).toString(),
+      });
+      const tokenData: any = await tokenRes.json();
+      if (!tokenData.access_token) {
+        return res.json({ ok: false, error: `فشل OAuth: ${tokenData.error_description || tokenData.error}` });
+      }
+      // جلب بيانات المستخدم
+      const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const userData: any = await userRes.json();
+      // جلب اسم التقويم
+      const calId = encodeURIComponent(gCfg.calendarId || "primary");
+      const calRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}`, {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const calData: any = await calRes.json();
+      res.json({
+        ok: true,
+        email: userData.email || gCfg.email,
+        calendar: calData.summary || gCfg.calendarId,
+      });
+    } catch (err: any) {
+      res.json({ ok: false, error: err.message });
     }
   });
 

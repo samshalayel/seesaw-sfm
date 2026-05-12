@@ -64,6 +64,14 @@ export const rooms = pgTable("rooms", {
   ultramsgunToken:     text("ultramsg_token").notNull().default(""),
   ultramsguPhone:      text("ultramsg_phone").notNull().default(""),
 
+  // Google (Gmail + Calendar + Drive) — OAuth2
+  googleClientId:      text("google_client_id").notNull().default(""),
+  googleClientSecret:  text("google_client_secret").notNull().default(""),
+  googleRefreshToken:  text("google_refresh_token").notNull().default(""),
+  googleEmail:         text("google_email").notNull().default(""),
+  googleCalendarId:    text("google_calendar_id").notNull().default("primary"),
+  googleDriveFolderId: text("google_drive_folder_id").notNull().default(""),
+
   // AI
   defaultModel:    text("default_model").notNull().default(""),
   systemPrompt:    text("system_prompt").notNull().default(""),

@@ -90,7 +90,7 @@ export function VaultSettingsDialog() {
   const fetchHumans = useGame((s) => s.fetchHumans);
   const setCompanyInfo = useGame((s) => s.setCompanyInfo);
   const setEntranceBg  = useGame((s) => s.setEntranceBg);
-  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "vps" | "whatsapp" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans">("company");
+  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "vps" | "whatsapp" | "google" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans">("company");
   const [pdfIndexLog, setPdfIndexLog] = useState<string[]>([]);
   const [pdfIndexing, setPdfIndexing] = useState(false);
   const [pdfIndexes, setPdfIndexes] = useState<{name:string,chunkCount:number,createdAt:string}[]>([]);
@@ -132,6 +132,16 @@ export function VaultSettingsDialog() {
   const [waToken, setWaToken] = useState("");
   const [waPhone, setWaPhone] = useState("");
   const [waHasToken, setWaHasToken] = useState(false);
+
+  // Google
+  const [gClientId,      setGClientId]      = useState("");
+  const [gClientSecret,  setGClientSecret]  = useState("");
+  const [gRefreshToken,  setGRefreshToken]  = useState("");
+  const [gEmail,         setGEmail]         = useState("");
+  const [gCalendarId,    setGCalendarId]    = useState("primary");
+  const [gDriveFolderId, setGDriveFolderId] = useState("");
+  const [gHasSecret,     setGHasSecret]     = useState(false);
+  const [gHasRefresh,    setGHasRefresh]    = useState(false);
 
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [hallWorkers, setHallWorkers] = useState<ModelEntry[]>([]);
@@ -209,7 +219,10 @@ export function VaultSettingsDialog() {
 
   // Drag & Resize state
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [size, setSize] = useState({ w: 780, h: 620 });
+  const [size, setSize] = useState(() => ({
+    w: Math.min(1160, window.innerWidth  - 60),
+    h: Math.min(720,  window.innerHeight - 60),
+  }));
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
 
@@ -341,6 +354,16 @@ export function VaultSettingsDialog() {
             setWaPhone(data.whatsapp.phone || "");
             setWaHasToken(data.whatsapp.hasToken || false);
           }
+          if (data.google) {
+            setGClientId(data.google.clientId || "");
+            setGClientSecret(data.google.hasSecret ? "••••••••" : "");
+            setGRefreshToken(data.google.hasRefreshToken ? "••••••••" : "");
+            setGEmail(data.google.email || "");
+            setGCalendarId(data.google.calendarId || "primary");
+            setGDriveFolderId(data.google.driveFolderId || "");
+            setGHasSecret(data.google.hasSecret || false);
+            setGHasRefresh(data.google.hasRefreshToken || false);
+          }
           if (data.models && Array.isArray(data.models)) {
             setModels(data.models);
           }
@@ -410,6 +433,11 @@ export function VaultSettingsDialog() {
           figma:  { token: figmaToken },
           vps: { host: vpsHost, port: vpsPort, user: vpsUser, password: vpsPassword, webRoot: vpsWebRoot },
           whatsapp: { instanceId: waInstanceId, token: waToken, phone: waPhone },
+          google: {
+            clientId: gClientId, clientSecret: gClientSecret,
+            refreshToken: gRefreshToken, email: gEmail,
+            calendarId: gCalendarId, driveFolderId: gDriveFolderId,
+          },
           models: models.filter(m => m.name.trim() || m.apiKey.trim()),
           hallWorkers: hallWorkers.filter(m => m.name.trim() || m.apiKey.trim()),
           humans,
@@ -557,13 +585,14 @@ export function VaultSettingsDialog() {
     display: "block",
   };
 
-  const tabs = ["company", "github", "clickup", "vps", "whatsapp", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
+  const tabs = ["company", "github", "clickup", "vps", "whatsapp", "google", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
   const tabLabels: Record<string, { icon: string; label: string }> = {
     company:      { icon: "🏢", label: "الشركة"       },
     github:       { icon: "🐙", label: "GitHub"       },
     clickup:      { icon: "✅", label: "ClickUp"      },
     vps:          { icon: "🖥️", label: "VPS"          },
     whatsapp:     { icon: "💬", label: "واتساب"       },
+    google:       { icon: "🎯", label: "Google"       },
     sfm:          { icon: "🌐", label: "Sillar"       },
     models:       { icon: "🤖", label: "Models"       },
     "ai-worker":  { icon: "⚡", label: "AI Workers"   },
@@ -583,6 +612,12 @@ export function VaultSettingsDialog() {
   };
 
   return (
+    <>
+    <style>{`
+      .vault-tab:hover { background: rgba(196,164,74,0.08) !important; color: #c4a44a !important; }
+      .vault-hdr-btn:hover { filter: brightness(1.15); }
+      .vault-close:hover { background: rgba(255,255,255,0.12) !important; color:#fff !important; }
+    `}</style>
     <div
       style={{
         position: "fixed",
@@ -591,113 +626,120 @@ export function VaultSettingsDialog() {
         transform: pos ? "none" : "translate(-50%, -50%)",
         width: size.w,
         height: size.h,
-        minWidth: 380,
-        minHeight: 400,
-        background: "rgba(15, 15, 25, 0.97)",
-        borderRadius: "16px",
-        border: `2px solid ${accentColor}`,
-        fontFamily: "Inter, sans-serif",
+        minWidth: 480,
+        minHeight: 440,
+        background: "linear-gradient(160deg,#0a0d18 0%,#0e1220 60%,#0b1019 100%)",
+        borderRadius: "18px",
+        border: `1.5px solid ${accentColor}55`,
+        fontFamily: "'Almarai',Inter,sans-serif",
         zIndex: 100,
-        boxShadow: `0 0 40px ${accentColor}30`,
+        boxShadow: `0 0 0 1px rgba(255,255,255,0.04) inset, 0 32px 80px rgba(0,0,0,0.75), 0 0 50px ${accentColor}18`,
         display: "flex",
         flexDirection: "column",
         userSelect: dragRef.current || resizeRef.current ? "none" : "auto",
+        overflow: "hidden",
       }}
     >
-      {/* ── HEADER (drag handle) ── */}
+      {/* ── HEADER ── */}
       <div
         onMouseDown={onDragStart}
         style={{
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
-          padding: "8px 14px",
-          borderBottom: `1px solid ${accentColor}40`,
+          padding: "0 14px",
+          height: 52,
+          background: "linear-gradient(135deg,#12100e 0%,#1a1508 50%,#0f110d 100%)",
+          borderBottom: `1px solid ${accentColor}30`,
           cursor: "grab",
           flexShrink: 0,
           gap: "10px",
+          direction: "rtl",
         }}
       >
-        {/* Title */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-          <div style={{ fontSize: "16px" }}>🔐</div>
-          <span style={{ color: "white", fontSize: "14px", fontWeight: "bold", direction: "rtl" }}>
-            اعدادات الخزنة
+        {/* أيقونة + عنوان */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+          <div style={{
+            width:30, height:30, borderRadius:9,
+            background:`linear-gradient(135deg,${accentColor}30,${accentColor}18)`,
+            border:`1px solid ${accentColor}40`,
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:15,
+          }}>🔐</div>
+          <span style={{ color:"#e8d5a0", fontSize:14, fontWeight:800, letterSpacing:"-.01em" }}>
+            إعدادات الخزنة
           </span>
-          <span style={{ color: "#444", fontSize: "10px" }}>⠿</span>
+          <span style={{ color:`${accentColor}30`, fontSize:11 }}>⣿</span>
         </div>
 
-        {/* Buttons row */}
+        {/* أزرار — تمنع drag */}
         <div
-          onMouseDown={(e) => e.stopPropagation()}
-          style={{ display: "flex", alignItems: "center", gap: "6px", marginRight: "auto" }}
+          onMouseDown={e => e.stopPropagation()}
+          style={{ display:"flex", alignItems:"center", gap:6, marginRight:"auto" }}
         >
           <button
+            className="vault-hdr-btn"
             onClick={handleTest}
             disabled={testing}
             style={{
-              background: "#1e3a5f",
-              border: "none", borderRadius: "6px",
-              padding: "5px 12px",
-              color: "#7ab8f5", fontSize: "12px",
+              background:"rgba(122,184,245,0.1)",
+              border:"1px solid rgba(122,184,245,0.2)",
+              borderRadius:8, padding:"5px 13px",
+              color:"#7ab8f5", fontSize:12, fontWeight:600,
               cursor: testing ? "not-allowed" : "pointer",
-              opacity: testing ? 0.6 : 1,
+              opacity: testing ? 0.5 : 1, transition:"filter .15s",
             }}
-          >
-            {testing ? "..." : "اختبار"}
-          </button>
+          >{testing ? "⏳" : "اختبار"}</button>
+
           <button
+            className="vault-hdr-btn"
             onClick={closeVault}
             style={{
-              background: "#2a2a2a",
-              border: "none", borderRadius: "6px",
-              padding: "5px 12px",
-              color: "#aaa", fontSize: "12px",
-              cursor: "pointer",
+              background:"rgba(255,255,255,0.05)",
+              border:"1px solid rgba(255,255,255,0.1)",
+              borderRadius:8, padding:"5px 13px",
+              color:"#7a8090", fontSize:12, fontWeight:600,
+              cursor:"pointer", transition:"filter .15s",
             }}
-          >
-            اغلاق
-          </button>
+          >إغلاق</button>
+
           <button
+            className="vault-hdr-btn"
             onClick={handleSave}
             disabled={saving}
             style={{
-              background: accentColor,
-              border: "none", borderRadius: "6px",
-              padding: "5px 14px",
-              color: "#1a1a2e", fontSize: "12px",
-              fontWeight: "bold",
+              background: saving ? `${accentColor}60` : `linear-gradient(135deg,${accentColor},#b8922a)`,
+              border:"none", borderRadius:8, padding:"5px 16px",
+              color:"#0e0c07", fontSize:12, fontWeight:800,
               cursor: saving ? "not-allowed" : "pointer",
-              opacity: saving ? 0.6 : 1,
+              boxShadow: saving ? "none" : `0 2px 12px ${accentColor}40`,
+              transition:"filter .15s",
             }}
-          >
-            {saving ? "..." : "حفظ"}
-          </button>
+          >{saving ? "⏳" : "حفظ"}</button>
+
           <button
+            className="vault-close"
             onClick={closeVault}
-            onMouseDown={(e) => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}
             style={{
-              background: "none", border: "none",
-              color: "#555", fontSize: "16px",
-              cursor: "pointer", padding: "0 2px",
-              lineHeight: 1,
+              width:28, height:28, borderRadius:7,
+              background:"rgba(255,255,255,0.05)", border:"none",
+              color:"#4a4a5a", fontSize:14,
+              cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+              transition:"all .15s",
             }}
-          >
-            ✕
-          </button>
+          >✕</button>
         </div>
       </div>
 
-      {/* ── BODY: sidebar + content ── */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      {/* ── BODY: content + sidebar ── */}
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", flexDirection: "row-reverse" }}>
 
-        {/* Sidebar */}
+        {/* Sidebar — يمين */}
         <div style={{
-          width: "120px", flexShrink: 0,
-          borderLeft: `1px solid ${accentColor}20`,
+          width: "90px", flexShrink: 0,
+          borderLeft: `1px solid rgba(255,255,255,0.05)`,
           display: "flex", flexDirection: "column",
-          overflowY: "auto", padding: "8px 0",
-          background: "rgba(0,0,0,0.2)",
+          overflowY: "auto", padding: "10px 0",
+          background: "rgba(0,0,0,0.25)",
         }}>
           {tabs.map((tab) => {
             const { icon, label } = tabLabels[tab];
@@ -705,29 +747,36 @@ export function VaultSettingsDialog() {
             return (
               <button
                 key={tab}
+                className={active ? "" : "vault-tab"}
                 onClick={() => setActiveTab(tab)}
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center",
-                  gap: "3px", padding: "10px 6px",
-                  background: active ? `${accentColor}18` : "transparent",
+                  gap: "4px", padding: "10px 4px",
+                  background: active
+                    ? `linear-gradient(135deg,${accentColor}20,${accentColor}08)`
+                    : "transparent",
                   border: "none",
-                  borderRight: active ? `3px solid ${accentColor}` : "3px solid transparent",
-                  color: active ? accentColor : "#666",
-                  fontSize: "11px", fontWeight: active ? 700 : 400,
+                  borderLeft: active ? `2.5px solid ${accentColor}` : "2.5px solid transparent",
+                  color: active ? accentColor : "#4a4a5a",
+                  fontSize: "10px", fontWeight: active ? 800 : 400,
                   cursor: "pointer", transition: "all 0.15s",
-                  textAlign: "center", lineHeight: 1.2,
-                  direction: "rtl",
+                  textAlign: "center", lineHeight: 1.3,
+                  direction: "rtl", position: "relative",
                 }}
               >
-                <span style={{ fontSize: "18px", lineHeight: 1 }}>{icon}</span>
-                <span>{label}</span>
+                <span style={{
+                  fontSize: "20px", lineHeight: 1,
+                  filter: active ? "none" : "grayscale(0.6) opacity(0.6)",
+                  transition: "filter .15s",
+                }}>{icon}</span>
+                <span style={{ fontSize:10 }}>{label}</span>
               </button>
             );
           })}
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: "14px", overflowY: "auto" }}>
+        <div style={{ flex: 1, padding: "18px 22px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
         {activeTab === "company" ? (
           <>
             {/* ── اسم الشركة ── */}
@@ -1303,6 +1352,99 @@ export function VaultSettingsDialog() {
 
             <div style={{ color: "#64748b", fontSize: 11, marginTop: 8, direction: "rtl" }}>
               ⚠️ يمكن للروبوت استخدام الأداة <code style={{ color: "#94a3b8" }}>send_whatsapp</code> لإرسال تقارير المهام.
+            </div>
+          </>
+
+        ) : activeTab === "google" ? (
+          <>
+            {/* شرح */}
+            <div style={{ background: "rgba(66,133,244,0.08)", border: "1px solid rgba(66,133,244,0.25)", borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
+              <div style={{ color: "#4285f4", fontWeight: "bold", marginBottom: 6, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                <span>🎯</span> Google Workspace (Gmail · Calendar · Drive)
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.8, direction: "rtl" }}>
+                يحتاج إلى <strong style={{ color: "#e2e8f0" }}>OAuth2 Credentials</strong> من Google Cloud Console:<br/>
+                1. افتح <a href="https://console.cloud.google.com" target="_blank" rel="noopener" style={{ color: "#4285f4" }}>console.cloud.google.com</a><br/>
+                2. فعّل: <strong>Gmail API + Calendar API + Drive API</strong><br/>
+                3. أنشئ OAuth2 Client ID (نوع: Web)<br/>
+                4. احصل على Refresh Token عبر <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener" style={{ color: "#4285f4" }}>OAuth Playground</a>
+              </div>
+            </div>
+
+            {/* Gmail Email */}
+            <div>
+              <label style={labelStyle}>📧 حساب Gmail (الإرسال منه)</label>
+              <input type="email" value={gEmail} onChange={e => setGEmail(e.target.value)}
+                onKeyDown={e => e.stopPropagation()} placeholder="you@gmail.com" style={inputStyle} />
+            </div>
+
+            {/* Client ID */}
+            <div>
+              <label style={labelStyle}>🆔 Client ID</label>
+              <input type="text" value={gClientId} onChange={e => setGClientId(e.target.value)}
+                onKeyDown={e => e.stopPropagation()} placeholder="123456789.apps.googleusercontent.com" style={inputStyle} />
+            </div>
+
+            {/* Client Secret */}
+            <div>
+              <label style={labelStyle}>🔑 Client Secret</label>
+              <input type="password" value={gClientSecret}
+                onChange={e => { setGClientSecret(e.target.value); setGHasSecret(false); }}
+                onKeyDown={e => e.stopPropagation()} placeholder="GOCSPX-••••••••" style={inputStyle} />
+              {gHasSecret && gClientSecret === "••••••••" && (
+                <div style={{ color: "#4ade80", fontSize: 11, marginTop: 3 }}>✓ محفوظ — اتركه كما هو للإبقاء عليه</div>
+              )}
+            </div>
+
+            {/* Refresh Token */}
+            <div>
+              <label style={labelStyle}>🔄 Refresh Token</label>
+              <input type="password" value={gRefreshToken}
+                onChange={e => { setGRefreshToken(e.target.value); setGHasRefresh(false); }}
+                onKeyDown={e => e.stopPropagation()} placeholder="1//0g••••••••" style={inputStyle} />
+              {gHasRefresh && gRefreshToken === "••••••••" && (
+                <div style={{ color: "#4ade80", fontSize: 11, marginTop: 3 }}>✓ محفوظ — اتركه كما هو للإبقاء عليه</div>
+              )}
+              <div style={{ color: "#64748b", fontSize: 11, marginTop: 3, direction: "rtl" }}>
+                احصل عليه من <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener" style={{ color: "#4285f4" }}>OAuth Playground</a> — اختر Gmail + Calendar + Drive scopes
+              </div>
+            </div>
+
+            {/* Calendar ID */}
+            <div>
+              <label style={labelStyle}>📅 Calendar ID (افتراضي: primary)</label>
+              <input type="text" value={gCalendarId} onChange={e => setGCalendarId(e.target.value)}
+                onKeyDown={e => e.stopPropagation()} placeholder="primary" style={inputStyle} />
+              <div style={{ color: "#64748b", fontSize: 11, marginTop: 3 }}>اتركه "primary" للتقويم الرئيسي، أو أدخل ID تقويم محدد</div>
+            </div>
+
+            {/* Drive Folder ID */}
+            <div>
+              <label style={labelStyle}>📁 Google Drive Folder ID (اختياري)</label>
+              <input type="text" value={gDriveFolderId} onChange={e => setGDriveFolderId(e.target.value)}
+                onKeyDown={e => e.stopPropagation()} placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" style={inputStyle} />
+              <div style={{ color: "#64748b", fontSize: 11, marginTop: 3 }}>ID المجلد الافتراضي لرفع الملفات — من رابط Drive</div>
+            </div>
+
+            {/* اختبار */}
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button onClick={async () => {
+                try {
+                  const res = await apiFetch("/api/vault-settings/test-google", { method: "POST" });
+                  const data = await res.json();
+                  if (data.ok) alert(`✅ متصل!\nEmail: ${data.email}\nCalendar: ${data.calendar}`);
+                  else alert(`❌ ${data.error}`);
+                } catch (e: any) { alert(`❌ ${e.message}`); }
+              }} style={{ background: "rgba(66,133,244,0.15)", border: "1px solid rgba(66,133,244,0.4)", color: "#4285f4", padding: "7px 16px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>
+                🔌 اختبار الاتصال
+              </button>
+            </div>
+
+            <div style={{ color: "#64748b", fontSize: 11, marginTop: 10, direction: "rtl", background: "rgba(66,133,244,0.05)", borderRadius: 6, padding: "8px 10px" }}>
+              <strong style={{ color: "#93c5fd" }}>الأدوات المتاحة بعد الإعداد:</strong><br/>
+              • <code style={{ color: "#94a3b8" }}>send_email</code> — إرسال إيميل عبر Gmail<br/>
+              • <code style={{ color: "#94a3b8" }}>create_calendar_event</code> — إضافة حدث في Calendar<br/>
+              • <code style={{ color: "#94a3b8" }}>get_calendar_events</code> — عرض الأحداث القادمة
             </div>
           </>
 
@@ -2789,5 +2931,6 @@ export function VaultSettingsDialog() {
         </svg>
       </div>
     </div>
+    </>
   );
 }

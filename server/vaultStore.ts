@@ -104,6 +104,16 @@ function roomToVault(room: Room, models: ModelConfig[]): VaultSettings {
       token:      (room as any).ultramsgunToken     || "",
       phone:      (room as any).ultramsguPhone      || "",
     },
+    google: {
+      clientId:        (room as any).googleClientId      || "",
+      clientSecret:    (room as any).googleClientSecret  || "",
+      refreshToken:    (room as any).googleRefreshToken  || "",
+      email:           (room as any).googleEmail         || "",
+      calendarId:      (room as any).googleCalendarId    || "primary",
+      driveFolderId:   (room as any).googleDriveFolderId || "",
+      hasSecret:       !!((room as any).googleClientSecret),
+      hasRefreshToken: !!((room as any).googleRefreshToken),
+    },
     humans:      (() => { try { return JSON.parse((room as any).humansJson || "[]"); } catch { return []; } })(),
     models:  models.length > 0
       ? models
@@ -254,6 +264,18 @@ export async function setVaultSettings(
       (update as any).ultramsgunToken = settings.whatsapp.token;
     }
   }
+  if (settings.google) {
+    if (settings.google.clientId)      (update as any).googleClientId      = settings.google.clientId;
+    if (settings.google.email)         (update as any).googleEmail          = settings.google.email;
+    if (settings.google.calendarId)    (update as any).googleCalendarId     = settings.google.calendarId;
+    if (settings.google.driveFolderId !== undefined) (update as any).googleDriveFolderId = settings.google.driveFolderId;
+    if (settings.google.clientSecret && settings.google.clientSecret !== "••••••••") {
+      (update as any).googleClientSecret = settings.google.clientSecret;
+    }
+    if (settings.google.refreshToken && settings.google.refreshToken !== "••••••••") {
+      (update as any).googleRefreshToken = settings.google.refreshToken;
+    }
+  }
   if (settings.systemPrompt !== undefined) {
     update.systemPrompt = settings.systemPrompt;
   }
@@ -347,6 +369,21 @@ export async function getWhatsAppConfig(roomId?: string): Promise<{ instanceId: 
     instanceId: (room as any)?.ultramsguInstanceId || "",
     token:      (room as any)?.ultramsgunToken     || "",
     phone:      (room as any)?.ultramsguPhone      || "",
+  };
+}
+
+export async function getGoogleConfig(roomId?: string): Promise<{
+  clientId: string; clientSecret: string; refreshToken: string;
+  email: string; calendarId: string; driveFolderId: string;
+}> {
+  const room = await storage.getRoom(roomId || "default");
+  return {
+    clientId:      (room as any)?.googleClientId      || "",
+    clientSecret:  (room as any)?.googleClientSecret  || "",
+    refreshToken:  (room as any)?.googleRefreshToken  || "",
+    email:         (room as any)?.googleEmail         || "",
+    calendarId:    (room as any)?.googleCalendarId    || "primary",
+    driveFolderId: (room as any)?.googleDriveFolderId || "",
   };
 }
 

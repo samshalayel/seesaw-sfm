@@ -338,6 +338,9 @@ interface GameState {
   agoraMeetingOpen: boolean;
   openAgoraMeeting: () => void;
   closeAgoraMeeting: () => void;
+  meetingLobbyOpen: boolean;
+  openMeetingLobby: () => void;
+  closeMeetingLobby: () => void;
   cameraMode: "focus" | "medium" | "top" | "fps" | "city" | "overview";
   setCameraMode: (mode: "focus" | "medium" | "top" | "fps" | "city" | "overview") => void;
   cameraResetToken: number;
@@ -400,8 +403,11 @@ export const useGame = create<GameState>()(
     openMeetingMinutes:  () => set({ meetingMinutesOpen: true }),
     closeMeetingMinutes: () => set({ meetingMinutesOpen: false }),
     agoraMeetingOpen: false,
-    openAgoraMeeting:  () => set({ agoraMeetingOpen: true }),
+    openAgoraMeeting:  () => set({ agoraMeetingOpen: true, meetingLobbyOpen: false }),
     closeAgoraMeeting: () => set({ agoraMeetingOpen: false }),
+    meetingLobbyOpen: false,
+    openMeetingLobby:  () => set({ meetingLobbyOpen: true }),
+    closeMeetingLobby: () => set({ meetingLobbyOpen: false }),
     cameraMode: "city",
     cameraResetToken: 0,
 

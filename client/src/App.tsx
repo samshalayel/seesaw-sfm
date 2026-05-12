@@ -38,6 +38,7 @@ import { HumanOverlay } from "./components/game/HumanOverlay";
 import { CpOverlay } from "./components/game/CpOverlay";
 import { BroadcastUI } from "./components/game/BroadcastUI";
 import { MeetingMinutesOverlay } from "./components/game/MeetingMinutesOverlay";
+import { MeetingLobby } from "./components/game/MeetingLobby";
 const AgoraMeeting = lazy(() => import("./components/game/AgoraMeeting").then(m => ({ default: m.AgoraMeeting })));
 import { CameraButtons } from "./components/game/CameraButtons";
 import { CityBackground } from "./components/game/CityBackground";
@@ -1069,6 +1070,7 @@ function App() {
         <CpOverlay />
         <BroadcastUI />
         <MeetingMinutesOverlay />
+        <MeetingLobby />
         <Suspense fallback={null}><AgoraMeeting /></Suspense>
         <ChatBubble />
         <VaultSettingsDialog />
@@ -1218,6 +1220,7 @@ function App() {
       <HumanOverlay />
       <BroadcastUI />
       <MeetingMinutesOverlay />
+      <MeetingLobby />
       <AgoraMeeting />
       <ChatBubble />
       <VaultSettingsDialog />
