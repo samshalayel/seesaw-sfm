@@ -12,13 +12,14 @@ import { apiFetch } from "@/lib/utils";
 interface TriggerConfig {
   enabled: boolean; watchUserId: number | null;
   watchStatuses: string[]; intervalMinutes: number;
-  robotId: string; doneStatus: string;
+  robotId: string; robotIds?: string[]; doneStatus: string;
 }
 interface TriggerLog {
   id: string; taskId: string; taskName: string;
   status: "pending" | "running" | "completed" | "failed";
   result: string; toolsUsed: string[]; startedAt: number;
   completedAt: number | null; error: string | null;
+  modelUsed?: string;
 }
 interface Member { id: number; username: string; email: string; }
 
@@ -302,6 +303,17 @@ export function TopRightPanel() {
     completed: { label: "تم",           color: "#66bb6a", icon: "✅" },
     failed:    { label: "فشل",          color: "#ef5350", icon: "❌" },
   }[s] ?? { label: s, color: "#999", icon: "⏳" });
+
+  // معلومات الموديل من robotId أو modelUsed
+  const modelInfo = (id?: string) => {
+    if (!id) return { label: "—", color: "#666", short: "?" };
+    const lower = id.toLowerCase();
+    if (id === "robot-1" || lower.includes("gpt"))       return { label: "GPT-4o",      color: "#4fc3f7", short: "G" };
+    if (id === "robot-2" || lower.includes("claude api"))return { label: "Claude API",  color: "#66bb6a", short: "C" };
+    if (id === "robot-3" || lower.includes("claude cli"))return { label: "Claude CLI",  color: "#c084fc", short: "🆓" };
+    if (id === "robot-4" || lower.includes("gemini"))    return { label: "Gemini",      color: "#facc15", short: "✦" };
+    return { label: id, color: "#aaa", short: id.slice(0,2).toUpperCase() };
+  };
 
   const handleWebex = async () => {
     setMeetingLoading(true);
@@ -599,14 +611,61 @@ export function TopRightPanel() {
 
                   <button onClick={handleStop} disabled={trigLoading} style={{ flex: 1, padding: "6px", borderRadius: "7px", border: "1px solid #ef5350", background: "#ef535020", color: "#ef5350", fontSize: "11px", cursor: "pointer" }}>أوقف</button>
                 </div>
+                {/* ── صناديق "جاري الآن" ────────────────────────────── */}
+                {(() => {
+                  const running = logs.filter(l => l.status === "running");
+                  if (running.length === 0) return null;
+                  return (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ color: "#42a5f5", fontSize: "11px", fontWeight: 700, marginBottom: 5, display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#42a5f5", display: "inline-block", animation: "pulse 1.2s infinite" }} />
+                        جاري التنفيذ الآن
+                      </div>
+                      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+                      {running.map(log => {
+                        const mi = modelInfo(log.modelUsed);
+                        return (
+                          <div key={log.id} style={{
+                            background: `${mi.color}0d`,
+                            border: `1px solid ${mi.color}50`,
+                            borderRadius: 8, padding: "7px 10px", marginBottom: 4,
+                            display: "flex", alignItems: "center", gap: 8,
+                          }}>
+                            {/* شارة الموديل */}
+                            <span style={{
+                              background: `${mi.color}25`, color: mi.color,
+                              border: `1px solid ${mi.color}60`,
+                              borderRadius: 5, padding: "1px 6px", fontSize: "10px",
+                              fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap",
+                            }}>
+                              {mi.label}
+                            </span>
+                            {/* اسم المهمة */}
+                            <span style={{
+                              color: "#ccc", fontSize: "11px", flex: 1,
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            }}>
+                              {log.taskName}
+                            </span>
+                            {/* ⚙ دوار */}
+                            <span style={{ color: "#42a5f5", fontSize: "13px", animation: "spin 1.4s linear infinite", display: "inline-block", flexShrink: 0 }}>⚙</span>
+                            <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
                 <div style={{ color: "#bbb", fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>سجل التنفيذ:</div>
-                {logs.length === 0 && (
+                {logs.filter(l => l.status !== "running").length === 0 && logs.filter(l => l.status === "running").length === 0 && (
                   <div style={{ color: "#555", textAlign: "center", padding: "12px 0", fontSize: "11px" }}>
                     ما في مهام بعد · يفحص كل {config?.intervalMinutes} دقائق
                   </div>
                 )}
-                {logs.map(log => {
+                {logs.filter(l => l.status !== "running").map(log => {
                   const si = sInfo(log.status);
+                  const mi = modelInfo(log.modelUsed);
                   const exp = expLog === log.id;
                   return (
                     <div
@@ -619,7 +678,7 @@ export function TopRightPanel() {
                         marginBottom: "5px", cursor: "pointer", border: `1px solid ${si.color}30`,
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 4 }}>
                         <span style={{
                           color: "white", fontSize: "11px", flex: 1,
                           overflow: "hidden", textOverflow: "ellipsis",
@@ -627,7 +686,18 @@ export function TopRightPanel() {
                         }}>
                           {log.taskName}
                         </span>
-                        <span style={{ color: si.color, fontSize: "10px", marginRight: 4, flexShrink: 0 }}>
+                        {/* شارة الموديل */}
+                        {log.modelUsed && (
+                          <span style={{
+                            background: `${mi.color}20`, color: mi.color,
+                            border: `1px solid ${mi.color}50`,
+                            borderRadius: 4, padding: "1px 5px", fontSize: "9px",
+                            fontWeight: 700, flexShrink: 0,
+                          }}>
+                            {mi.short}
+                          </span>
+                        )}
+                        <span style={{ color: si.color, fontSize: "10px", flexShrink: 0 }}>
                           {si.icon} {si.label}
                         </span>
                       </div>

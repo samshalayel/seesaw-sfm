@@ -617,11 +617,12 @@ async function scanAndProcess() {
     console.log(`[AutoTrigger] Found ${matchingTasks.length} new tasks to process`);
 
     // ─── مساعد: تنفيذ مهمة واحدة وإرفاق النتيجة ─────────────────────────────
-    const runOne = async (task: any, log: TriggerLog, vaultModel?: ModelConfig) => {
+    const runOne = async (task: any, log: TriggerLog, vaultModel?: ModelConfig, overrideRobotId?: string) => {
       triggerLogs.unshift(log);
       if (triggerLogs.length > 50) triggerLogs.splice(50);
 
-      console.log(`[AutoTrigger${vaultModel ? ` ✦${vaultModel.name}` : ""}] Processing: ${task.name} (${task.id})`);
+      const label = vaultModel ? `✦${vaultModel.name}` : overrideRobotId ?? config.robotId;
+      console.log(`[AutoTrigger ${label}] Processing: ${task.name} (${task.id})`);
 
       try {
         await updateTask(task.id, { status: "in progress" }, triggerRoomId);
@@ -633,7 +634,10 @@ async function scanAndProcess() {
         await processTaskWithModel(task, log, vaultModel);
       } else {
         await refreshClients();
-        await processTaskWithAI(task, log);
+        // ← دائماً نمرر robotId عبر opts — لا نعتمد على config.robotId المشترك
+        const rId = overrideRobotId ?? config.robotId;
+        log.modelUsed = rId;
+        await processTaskWithAI(task, log, { robotId: rId });
       }
 
       // إرفاق ملف النتيجة بمهمة ClickUp
@@ -696,17 +700,15 @@ async function scanAndProcess() {
       const activeRobots = config.robotIds.length > 0 ? config.robotIds : [config.robotId];
 
       if (activeRobots.length === 1) {
-        // مودل واحد — السلوك القديم
+        // مودل واحد — نمرر robotId صراحةً عبر overrideRobotId
+        const rId = activeRobots[0];
         const log: TriggerLog = {
           id: generateId(), taskId: task.id, taskName: task.name,
           status: "running", result: "", toolsUsed: [],
           startedAt: Date.now(), completedAt: null, error: null,
-          modelUsed: activeRobots[0],
+          modelUsed: rId,
         };
-        const savedRobotId = config.robotId;
-        config.robotId = activeRobots[0];
-        await runOne(task, log);
-        config.robotId = savedRobotId;
+        await runOne(task, log, undefined, rId);
       } else {
         // متعدد — شغّل كل المودلات بالتوازي على نفس المهمة
         console.log(`[AutoTrigger] 🔀 Multi-model: task "${task.name}" → [${activeRobots.join(", ")}]`);
