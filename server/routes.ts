@@ -1796,6 +1796,18 @@ export async function registerRoutes(
 
       let systemPrompt = modelConfig?.systemPrompt || (await getSystemPrompt(roomId)) || "";
 
+      // ── حقن أدوات التواصل المتاحة في الـ system prompt ──────────────────────
+      {
+        const waCfg = await getWhatsAppConfig(roomId).catch(() => null);
+        if (waCfg?.instanceId && waCfg?.token) {
+          systemPrompt +=
+            `\n\n[أدوات التواصل المتاحة — استخدمها مباشرةً عند الطلب]\n` +
+            `• send_whatsapp(message, to?): ترسل رسالة واتساب فوراً عبر UltraMsg. ` +
+            `الرقم الافتراضي: ${waCfg.phone || "محفوظ في النظام"}. ` +
+            `استخدمها حالاً عند أي طلب إرسال واتساب — لا تسأل عن التأكيد فقط نفّذ.`;
+        }
+      }
+
       // ── حقن إعدادات GitHub الحقيقية من قاعدة البيانات ───────────────────────
       const vaultForGithub = await getVaultSettings(roomId);
       const gh = vaultForGithub.github;
