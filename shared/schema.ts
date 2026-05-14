@@ -63,6 +63,7 @@ export const rooms = pgTable("rooms", {
   ultramsguInstanceId: text("ultramsg_instance_id").notNull().default(""),
   ultramsgunToken:     text("ultramsg_token").notNull().default(""),
   ultramsguPhone:      text("ultramsg_phone").notNull().default(""),
+  contactsJson:        text("contacts_json").notNull().default("[]"),
 
   // Google (Gmail + Calendar + Drive) — OAuth2
   googleClientId:      text("google_client_id").notNull().default(""),
@@ -124,13 +125,21 @@ export const roomPlaylistRelations = relations(roomPlaylist, ({ one }) => ({
   room: one(rooms, { fields: [roomPlaylist.roomId], references: [rooms.roomId] }),
 }));
 
-// ── projects (per room) ───────────────────────────────────────────────────────
+// ── projects (per room / workspace) ──────────────────────────────────────────
 export const projects = pgTable("projects", {
-  id:         serial("id").primaryKey(),
-  roomId:     text("room_id").notNull().references(() => rooms.roomId),
-  projectKey: text("project_key").notNull(),   // max 6 chars uppercase e.g. "SUPRT"
-  name:       text("name").notNull().default(""),
-  createdAt:  timestamp("created_at").notNull().defaultNow(),
+  id:            serial("id").primaryKey(),
+  roomId:        text("room_id").notNull().references(() => rooms.roomId),
+  projectKey:    text("project_key").notNull(),   // max 6 chars uppercase e.g. "SUPRT"
+  name:          text("name").notNull().default(""),
+
+  // Workspace project config (used by AutoTrigger)
+  githubOwner:   text("github_owner").notNull().default(""),
+  githubRepo:    text("github_repo").notNull().default(""),
+  clickupListId: text("clickup_list_id").notNull().default(""),
+  vpsPath:       text("vps_path").notNull().default(""),
+  contextMd:     text("context_md").notNull().default(""),  // injected into every robot prompt
+
+  createdAt:     timestamp("created_at").notNull().defaultNow(),
 });
 
 // ── project_stage_files ───────────────────────────────────────────────────────
@@ -157,6 +166,17 @@ export const pipelineSlots = pgTable("pipeline_slots", {
   updatedAt:   timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ── project_playbooks (per project — matched by keywords) ────────────────────
+export const projectPlaybooks = pgTable("project_playbooks", {
+  id:          serial("id").primaryKey(),
+  roomId:      text("room_id").notNull().references(() => rooms.roomId),
+  projectKey:  text("project_key").notNull(),
+  name:        text("name").notNull().default(""),
+  keywords:    text("keywords").notNull().default(""),  // comma-separated, e.g. "deploy,رفع,نشر"
+  content:     text("content").notNull().default(""),   // markdown steps
+  orderIndex:  integer("order_index").notNull().default(0),
+});
+
 // ── tier_models (allowed AI models per subscription tier) ─────────────────────
 export const tierModels = pgTable("tier_models", {
   id:        serial("id").primaryKey(),
@@ -170,8 +190,10 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
 });
 
-export type InsertUser       = z.infer<typeof insertUserSchema>;
-export type User             = typeof users.$inferSelect;
-export type Room             = typeof rooms.$inferSelect;
-export type RoomModel        = typeof roomModels.$inferSelect;
-export type RoomPlaylistItem = typeof roomPlaylist.$inferSelect;
+export type InsertUser        = z.infer<typeof insertUserSchema>;
+export type User              = typeof users.$inferSelect;
+export type Room              = typeof rooms.$inferSelect;
+export type RoomModel         = typeof roomModels.$inferSelect;
+export type RoomPlaylistItem  = typeof roomPlaylist.$inferSelect;
+export type WorkspaceProject  = typeof projects.$inferSelect;
+export type ProjectPlaybook   = typeof projectPlaybooks.$inferSelect;

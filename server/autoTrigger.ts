@@ -7,6 +7,7 @@ import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToT
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
 import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig, getModels, getWhatsAppConfig } from "./vaultStore";
+import { storage } from "./storage";
 import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
 
@@ -124,10 +125,17 @@ const toolDefinitions = [
     }, required: ["command"] },
   },
   {
-    name: "send_whatsapp",
-    description: "Send a WhatsApp message via UltraMsg API. Use to notify the team when a task is completed, failed, or needs attention.",
+    name: "get_whatsapp_contacts",
+    description: "Get the WhatsApp phonebook (contacts list) stored in the vault. Returns array of {name, phone, notes}. Use this to look up a contact's phone number by their name before sending a message.",
     parameters: { type: "object" as const, properties: {
-      to:      { type: "string", description: "Recipient phone with country code, e.g. +9705XXXXXXXX, or leave empty to use default room phone" },
+      search: { type: "string", description: "Optional: filter contacts by name or phone (case-insensitive). Leave empty to get all contacts." },
+    }, required: [] },
+  },
+  {
+    name: "send_whatsapp",
+    description: "Send a WhatsApp message via UltraMsg API. IMPORTANT: If the user referenced a person by name (not a phone number), first call get_whatsapp_contacts to look up their number. Use to notify the team when a task is completed, failed, or needs attention.",
+    parameters: { type: "object" as const, properties: {
+      to:      { type: "string", description: "Recipient phone with country code e.g. +9705XXXXXXXX. Or a contact name — the system will resolve it from the phonebook automatically." },
       message: { type: "string", description: "Message text to send (supports newlines)" },
     }, required: ["message"] },
   },
@@ -174,10 +182,31 @@ async function executeToolCall(name: string, args: any): Promise<string> {
         const result = await runOnVps(args.command, timeoutMs, vpsCfg);
         return result;
       }
+      case "get_whatsapp_contacts": {
+        const waCfg = await getWhatsAppConfig(triggerRoomId);
+        let list = waCfg.contacts || [];
+        if (args.search && args.search.trim()) {
+          const q = args.search.trim().toLowerCase();
+          list = list.filter((c: any) =>
+            c.name?.toLowerCase().includes(q) || c.phone?.includes(q)
+          );
+        }
+        if (list.length === 0) return "No contacts found in phonebook.";
+        return JSON.stringify(list, null, 2);
+      }
       case "send_whatsapp": {
         const waCfg = await getWhatsAppConfig(triggerRoomId);
         if (!waCfg.instanceId || !waCfg.token) return "Error: WhatsApp not configured. Add UltraMsg settings in the vault.";
-        const phone = args.to || waCfg.phone;
+        let phone = args.to || waCfg.phone;
+        // Auto-resolve contact name → phone number
+        if (phone && !phone.trim().startsWith("+") && !/^\d{7,}$/.test(phone.trim())) {
+          const q = phone.trim().toLowerCase();
+          const found = (waCfg.contacts || []).find((c: any) =>
+            c.name?.toLowerCase().includes(q)
+          );
+          if (found) { phone = found.phone; }
+          else return `Error: Contact "${args.to}" not found in phonebook. Add them in Vault → WhatsApp → جهات الاتصال.`;
+        }
         if (!phone) return "Error: No recipient phone number. Provide 'to' or set default phone in vault.";
         const url = `https://api.ultramsg.com/${waCfg.instanceId}/messages/chat`;
         const resp = await fetch(url, {
@@ -241,19 +270,22 @@ curl -s -X PUT "https://api.clickup.com/api/v2/task/${task.id}" \\
 
 Now execute the task. Provide a brief Arabic summary when done.`;
 
-  // Find claude CLI: prefer local node_modules binary, fallback to global
-  const localExe = new URL("../../node_modules/@anthropic-ai/claude-code/bin/claude.exe", import.meta.url).pathname.replace(/^\//, "");
+  // Find claude CLI — use __dirname (CJS-safe) then fall back to global paths
   const claudePath = (() => {
-    if (fs.existsSync(localExe)) return localExe;
-    // try global npm bin
-    const globals = [
+    const candidates = [
+      // local node_modules (relative to compiled dist/index.cjs)
+      path.resolve(__dirname, "../../node_modules/@anthropic-ai/claude-code/bin/claude.exe"),
+      path.resolve(__dirname, "../../node_modules/@anthropic-ai/claude-code/bin/claude"),
+      path.resolve(__dirname, "node_modules/@anthropic-ai/claude-code/bin/claude.exe"),
+      // global npm on Windows
       (process.env.APPDATA ?? "") + "\\npm\\claude.cmd",
       (process.env.APPDATA ?? "") + "\\npm\\claude",
+      // global on Linux/Mac
       "/usr/local/bin/claude",
       "/usr/bin/claude",
     ];
-    for (const c of globals) { try { fs.accessSync(c); return c; } catch (_) {} }
-    return "claude";
+    for (const c of candidates) { try { fs.accessSync(c); return c; } catch (_) {} }
+    return "claude"; // last resort — rely on PATH
   })();
 
   console.log(`[AutoTrigger CLI ${log.id}] Using claude at: ${claudePath}`);
@@ -341,6 +373,105 @@ Now execute the task. Provide a brief Arabic summary when done.`;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Robot-5: Devin (Cognition AI — fully autonomous software engineer) ──────
+async function processTaskWithDevin(task: any, log: TriggerLog): Promise<void> {
+  const devinModel = await getModelByName("Devin", triggerRoomId).catch(() => undefined);
+  if (!devinModel?.apiKey) {
+    throw new Error("Devin API key غير مضبوط — أضف موديل باسم 'Devin' في الخزنة.");
+  }
+
+  const apiKey       = devinModel.apiKey;
+  const DEVIN_BASE   = "https://api.devin.ai/v1";
+  const githubOwner  = await getGitHubOwner(triggerRoomId).catch(() => "");
+  const githubRepo   = await getGitHubRepo(triggerRoomId).catch(() => "");
+  const clickupToken = await getClickUpToken(triggerRoomId).catch(() => "");
+
+  const prompt = `You are an autonomous software engineer. Execute the following ClickUp task fully and autonomously.
+
+━━━ TASK ━━━
+Name: ${task.name}
+Description: ${task.description || "(see task name)"}
+ClickUp Task ID: ${task.id}
+
+━━━ GITHUB REPO ━━━
+https://github.com/${githubOwner}/${githubRepo}
+Work in this repository — make commits and push all changes.
+
+━━━ WHEN DONE ━━━
+Mark the ClickUp task as completed:
+curl -s -X PUT "https://api.clickup.com/api/v2/task/${task.id}" \\
+  -H "Authorization: ${clickupToken}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"status":"${config.doneStatus}"}'
+
+Execute everything autonomously without asking for clarification.`;
+
+  console.log(`[AutoTrigger Devin ${log.id}] Creating session for: ${task.name}`);
+
+  // 1 — إنشاء Session
+  const createRes = await fetch(`${DEVIN_BASE}/sessions`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, idempotent_id: log.id }),
+  });
+
+  if (!createRes.ok) {
+    const err = await createRes.text();
+    throw new Error(`Devin session creation failed (${createRes.status}): ${err}`);
+  }
+
+  const session = await createRes.json();
+  const sessionId  = session.session_id;
+  const sessionUrl = session.url || `https://app.devin.ai/sessions/${sessionId}`;
+
+  log.result = `🤖 Devin started\n🔗 ${sessionUrl}\nStatus: ${session.status}`;
+  log.toolsUsed.push(`devin-session:${sessionId}`);
+  console.log(`[AutoTrigger Devin ${log.id}] Session: ${sessionId} — ${sessionUrl}`);
+
+  // 2 — Polling حتى يكتمل (max 30 دقيقة)
+  const maxWaitMs  = 30 * 60 * 1000;
+  const pollMs     = 30 * 1000;
+  const startTime  = Date.now();
+
+  while (Date.now() - startTime < maxWaitMs) {
+    await new Promise(r => setTimeout(r, pollMs));
+
+    try {
+      const pollRes = await fetch(`${DEVIN_BASE}/session/${sessionId}`, {
+        headers: { "Authorization": `Bearer ${apiKey}` },
+      });
+      if (!pollRes.ok) continue;
+
+      const status = await pollRes.json();
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      log.result = `🤖 Devin — ${status.status} (${elapsed}s)\n🔗 ${sessionUrl}`;
+
+      if (status.structured_output) {
+        log.result += `\n\n📋 Output:\n${JSON.stringify(status.structured_output, null, 2)}`;
+      }
+
+      console.log(`[AutoTrigger Devin ${log.id}] status=${status.status} elapsed=${elapsed}s`);
+
+      if (status.status === "stopped") {
+        log.status       = "completed";
+        log.completedAt  = Date.now();
+        log.result += "\n\n✅ Devin أتم المهمة.";
+        return;
+      }
+      if (status.status === "blocked") {
+        log.result += "\n\n⚠️ Devin يحتاج تدخل بشري — blocked.";
+        // نكمل الانتظار — قد يُفتح تلقائياً
+      }
+    } catch (_e) { /* ignore transient errors */ }
+  }
+
+  // Timeout
+  log.result += "\n\n⏱️ انتهت المهلة (30 دقيقة) — راجع الجلسة يدوياً.";
+  log.status      = "completed";
+  log.completedAt = Date.now();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ─── كشف مزوّد الذكاء الاصطناعي من اسم/موديل الموديل ────────────────────────
 function detectProvider(model: ModelConfig): "openai" | "anthropic" | "gemini" {
   const text = (model.name + " " + (model.modelId || "") + " " + (model.alias || "")).toLowerCase();
@@ -381,12 +512,34 @@ interface ProcessOpts {
 }
 
 async function processTaskWithAI(task: any, log: TriggerLog, opts: ProcessOpts = {}) {
-  // قراءة الـ repo والـ VPS من الخزنة أولاً — يجب أن تسبق بناء الـ prompts
-  const vaultOwner = await getGitHubOwner(triggerRoomId).catch(() => "");
-  const vaultRepo  = await getGitHubRepo(triggerRoomId).catch(() => "");
+  // ── تحميل سياق المشروع من الـ Workspace ──────────────────────────────────────
+  const taskListId = task.list?.id || task.list_id || "";
+  const wsProject  = await storage.getProjectByListId(triggerRoomId, taskListId).catch(() => undefined);
+
+  // قراءة الـ repo والـ VPS: project-level يتقدم على workspace defaults
+  const vaultOwner = wsProject?.githubOwner || await getGitHubOwner(triggerRoomId).catch(() => "");
+  const vaultRepo  = wsProject?.githubRepo  || await getGitHubRepo(triggerRoomId).catch(() => "");
+  const projectVpsPath = wsProject?.vpsPath || "";
+
   let githubUser = "";
   try { githubUser = await getAuthenticatedUser(triggerRoomId); } catch (_e) {}
   const vpsCfg = await getVpsConfig(triggerRoomId).catch(() => ({ host: "", port: 22, user: "root", password: "", webRoot: "/var/www" }));
+
+  // Context section يُضاف لأعلى كل system prompt
+  const projectContextSection = wsProject?.contextMd
+    ? `━━━ PROJECT CONTEXT (${wsProject.name || wsProject.projectKey}) ━━━\n${wsProject.contextMd}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`
+    : "";
+
+  // Playbook — يُطابق بناءً على اسم المهمة + وصفها
+  let playbookSection = "";
+  if (wsProject) {
+    const taskText = `${task.name} ${task.description || ""}`;
+    const matched  = await storage.matchPlaybook(triggerRoomId, wsProject.projectKey, taskText).catch(() => undefined);
+    if (matched) {
+      playbookSection = `━━━ PLAYBOOK: ${matched.name} ━━━\n${matched.content}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      console.log(`[AutoTrigger] Matched playbook: "${matched.name}" for task: "${task.name}"`);
+    }
+  }
 
   const taskPrompt = `You are an autonomous AI developer at Sillar Digital Production. A ClickUp task has been assigned and you must execute it.
 
@@ -422,15 +575,16 @@ CRITICAL RULES:
     ? `${vaultOwner}/${vaultRepo}`
     : "not configured";
 
-  const systemPrompt = `You are sillar-model, an autonomous CI/CD agent. You execute ClickUp tasks automatically. Always respond in Arabic.
+  const systemPrompt = `${projectContextSection}${playbookSection}You are sillar-model, an autonomous CI/CD agent. You execute ClickUp tasks automatically. Always respond in Arabic.
 
 ━━━ GITHUB TARGET (FIXED) ━━━
 Owner : ${vaultOwner || "not configured"}
 Repo  : ${vaultRepo  || "not configured"}
 
 ━━━ VPS SERVER ━━━
-Host  : ${vpsCfg.host || "not configured"} (Linux, /var/www is the web root)
-Tool  : run_on_vps("command") — runs bash directly on the server
+Host     : ${vpsCfg.host || "not configured"} (Linux)
+Web Root : ${projectVpsPath || vpsCfg.webRoot || "/var/www"}
+Tool     : run_on_vps("command") — runs bash directly on the server
 
 ━━━ DECISION GUIDE ━━━
 Use run_on_vps when the task needs:
@@ -451,10 +605,16 @@ Use BOTH for full CI/CD tasks:
   3. update_clickup_task → mark done
 
 ━━━ WHATSAPP NOTIFICATIONS ━━━
-Tool: send_whatsapp(message) — sends WhatsApp via UltraMsg (already configured).
+Tool: send_whatsapp(to, message) — sends WhatsApp via UltraMsg.
 • Use AFTER completing each task to notify the team in Arabic.
 • Example: send_whatsapp("✅ تم إنجاز مهمة: ${task.name}")
 • Do NOT skip this step — always notify when a task is done or failed.
+
+📒 PHONEBOOK: get_whatsapp_contacts() — returns the team phonebook.
+• If the task says "أرسل لـ أحمد" or refers to a person by name:
+  1. Call get_whatsapp_contacts() first to find their phone number.
+  2. Then call send_whatsapp(phone, message).
+• You can pass a name directly to send_whatsapp — it will auto-resolve from the phonebook.
 
 RULES:
 - NEVER use get_github_repos — target repo is already given above.
@@ -471,6 +631,12 @@ You must actually execute tool calls — do not describe what you will do, just 
   const _gemini   = opts.geminiClient     ?? gemini;
 
   try {
+    // robot-5: Devin — autonomous software engineer (Cognition AI)
+    if (_robotId === "robot-5") {
+      await processTaskWithDevin(task, log);
+      return;
+    }
+
     // robot-3: Claude CLI — uses claude.ai subscription (zero API tokens)
     if (_robotId === "robot-3") {
       await processTaskWithCLI(task, log);

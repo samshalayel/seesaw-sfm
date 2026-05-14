@@ -37,8 +37,9 @@ import { getFigmaFile, getFigmaNodes, getFigmaComponents, getFigmaStyles, getFig
 import path from "path";
 import fs from "fs";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const _safeK = (v: string | undefined, fb: string) => (v && v.length > 0) ? v : fb;
+const openai = new OpenAI({ apiKey: _safeK(process.env.OPENAI_API_KEY, "sk-placeholder") });
+const anthropic = new Anthropic({ apiKey: _safeK(process.env.ANTHROPIC_API_KEY, "sk-ant-placeholder") });
 
 function getProviderConfig(modelName: string): { baseURL?: string; defaultModel: string; provider: string } {
   const name = modelName.toLowerCase();
@@ -1786,6 +1787,63 @@ export async function registerRoutes(
     }
   });
 
+  // ── Workspace Projects API ───────────────────────────────────────────────────
+  app.get("/api/workspace/projects", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const list = await storage.getWorkspaceProjects(roomId);
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/workspace/projects", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const { id, projectKey, name, githubOwner, githubRepo, clickupListId, vpsPath, contextMd } = req.body;
+      if (!projectKey) return res.status(400).json({ error: "projectKey required" });
+      const row = await storage.upsertWorkspaceProject(roomId, {
+        id, projectKey, name: name || projectKey,
+        githubOwner: githubOwner || "", githubRepo: githubRepo || "",
+        clickupListId: clickupListId || "", vpsPath: vpsPath || "",
+        contextMd: contextMd || "",
+      });
+      res.json(row);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/workspace/projects/:id", async (req, res) => {
+    try {
+      await storage.deleteWorkspaceProject(Number(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Playbooks API ─────────────────────────────────────────────────────────────
+  app.get("/api/workspace/projects/:key/playbooks", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const list = await storage.getProjectPlaybooks(roomId, req.params.key.toUpperCase());
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/workspace/projects/:key/playbooks", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const { id, name, keywords, content, orderIndex } = req.body;
+      if (!name) return res.status(400).json({ error: "name required" });
+      const row = await storage.upsertPlaybook(roomId, req.params.key.toUpperCase(), { id, name, keywords: keywords || "", content: content || "", orderIndex });
+      res.json(row);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/workspace/playbooks/:id", async (req, res) => {
+    try {
+      await storage.deletePlaybook(Number(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   // ── Projects API ─────────────────────────────────────────────────────────────
   app.get("/api/projects", async (req, res) => {
     const roomId = getRoomId(req);
@@ -2525,10 +2583,16 @@ export async function registerRoutes(
   app.get("/api/github/contents", async (req, res) => {
     try {
       const roomId = getRoomId(req);
-      const path = (req.query.path as string) || "";
-      const vault = await getVaultSettings(roomId);
-      const { owner, repo } = vault.github;
-      if (!owner || !repo) return res.status(400).json({ error: "GitHub غير مضبوط في إعدادات الخزنة" });
+      const path  = (req.query.path  as string) || "";
+      // يقبل owner/repo من query params (workspace projects) أو يرجع لـ vault defaults
+      let owner = (req.query.owner as string) || "";
+      let repo  = (req.query.repo  as string) || "";
+      if (!owner || !repo) {
+        const vault = await getVaultSettings(roomId);
+        owner = vault.github.owner;
+        repo  = vault.github.repo;
+      }
+      if (!owner || !repo) return res.status(400).json({ error: "GitHub غير مضبوط" });
       const contents = await getRepoContents(owner, repo, path, roomId);
       res.json(contents);
     } catch (err: any) {
@@ -2902,6 +2966,7 @@ export async function registerRoutes(
         token:      settings.whatsapp?.token ? "••••••••" : "",
         phone:      settings.whatsapp?.phone || "",
         hasToken:   !!(settings.whatsapp?.token),
+        contacts:   settings.whatsapp?.contacts || [],
       },
       humans: settings.humans || [],
     });
@@ -3127,6 +3192,7 @@ export async function registerRoutes(
         instanceId: whatsapp.instanceId ?? current.whatsapp?.instanceId ?? "",
         token:      whatsapp.token === "••••••••" ? current.whatsapp?.token : (whatsapp.token ?? ""),
         phone:      whatsapp.phone ?? current.whatsapp?.phone ?? "",
+        contacts:   whatsapp.contacts ?? current.whatsapp?.contacts ?? [],
       };
     }
     if (models && Array.isArray(models)) {
@@ -3261,6 +3327,37 @@ export async function registerRoutes(
       res.json({ connected, status: data?.status?.accountStatus?.substatus || "unknown", data });
     } catch (err: any) {
       res.json({ connected: false, error: err.message });
+    }
+  });
+
+  // ── WhatsApp — import contacts from UltraMsg ─────────────────────────────
+  app.get("/api/whatsapp/contacts/import", async (req, res) => {
+    const roomId = getRoomId(req);
+    try {
+      const cfg = await getWhatsAppConfig(roomId);
+      if (!cfg.instanceId || !cfg.token)
+        return res.status(400).json({ error: "Instance ID أو Token غير مضبوط في الخزنة" });
+
+      const url = `https://api.ultramsg.com/${cfg.instanceId}/contacts?token=${cfg.token}`;
+      const response = await fetch(url);
+      if (!response.ok)
+        return res.status(502).json({ error: `UltraMsg API error: HTTP ${response.status}` });
+
+      const raw: any = await response.json();
+      // UltraMsg returns array or { contacts: [...] }
+      const list: any[] = Array.isArray(raw) ? raw : (raw.contacts || []);
+
+      const contacts = list
+        .filter((c: any) => c.name && c.number)
+        .map((c: any) => ({
+          name:  c.name  || c.pushname || c.number,
+          phone: "+" + String(c.number).replace(/^\+/, ""),
+          notes: c.type === "group" ? "مجموعة" : "",
+        }));
+
+      res.json({ contacts, total: contacts.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

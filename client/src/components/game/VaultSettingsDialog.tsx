@@ -90,7 +90,7 @@ export function VaultSettingsDialog() {
   const fetchHumans = useGame((s) => s.fetchHumans);
   const setCompanyInfo = useGame((s) => s.setCompanyInfo);
   const setEntranceBg  = useGame((s) => s.setEntranceBg);
-  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "vps" | "whatsapp" | "google" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans">("company");
+  const [activeTab, setActiveTab] = useState<"company" | "github" | "clickup" | "vps" | "whatsapp" | "google" | "sfm" | "models" | "ai-worker" | "instructions" | "stats" | "humans" | "workspace">("company");
   const [pdfIndexLog, setPdfIndexLog] = useState<string[]>([]);
   const [pdfIndexing, setPdfIndexing] = useState(false);
   const [pdfIndexes, setPdfIndexes] = useState<{name:string,chunkCount:number,createdAt:string}[]>([]);
@@ -132,6 +132,14 @@ export function VaultSettingsDialog() {
   const [waToken, setWaToken] = useState("");
   const [waPhone, setWaPhone] = useState("");
   const [waHasToken, setWaHasToken] = useState(false);
+
+  // WhatsApp Contacts (Phonebook)
+  interface WaContact { id: string; name: string; phone: string; notes: string; }
+  const emptyContact = (): WaContact => ({ id: Date.now().toString(36), name: "", phone: "", notes: "" });
+  const [waContacts, setWaContacts] = useState<WaContact[]>([]);
+  const [waContactEditing, setWaContactEditing] = useState<WaContact | null>(null);
+  const [waImporting, setWaImporting] = useState(false);
+  const [waImportResult, setWaImportResult] = useState<string | null>(null);
 
   // Google
   const [gClientId,      setGClientId]      = useState("");
@@ -292,6 +300,30 @@ export function VaultSettingsDialog() {
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // ── Workspace Projects ────────────────────────────────────────────────────────
+  interface WsProject {
+    id?: number; projectKey: string; name: string;
+    githubOwner: string; githubRepo: string;
+    clickupListId: string; vpsPath: string; contextMd: string;
+  }
+  const emptyWsProject = (): WsProject => ({
+    projectKey: "", name: "", githubOwner: "", githubRepo: "",
+    clickupListId: "", vpsPath: "", contextMd: "",
+  });
+  const [wsProjects,    setWsProjects]    = useState<WsProject[]>([]);
+  const [wsEditing,     setWsEditing]     = useState<WsProject | null>(null);
+  const [wsLoading,     setWsLoading]     = useState(false);
+  const [wsRepoFiles,   setWsRepoFiles]   = useState<string[]>([]);
+  const [wsFilesLoading,setWsFilesLoading]= useState(false);
+  const wsFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Playbooks
+  interface Playbook { id?: number; name: string; keywords: string; content: string; orderIndex?: number; }
+  const emptyPlaybook = (): Playbook => ({ name: "", keywords: "", content: "" });
+  const [playbooks,      setPlaybooks]      = useState<Record<string, Playbook[]>>({});  // key = projectKey
+  const [pbEditing,      setPbEditing]      = useState<{ projectKey: string; pb: Playbook } | null>(null);
+  const [pbExpanded,     setPbExpanded]     = useState<string | null>(null);  // which project's playbooks are open
   const [savedHint, setSavedHint] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -353,6 +385,11 @@ export function VaultSettingsDialog() {
             setWaToken(data.whatsapp.token || "");
             setWaPhone(data.whatsapp.phone || "");
             setWaHasToken(data.whatsapp.hasToken || false);
+            if (Array.isArray(data.whatsapp.contacts)) {
+              setWaContacts(data.whatsapp.contacts.map((c: any, i: number) => ({
+                id: c.id || String(i), name: c.name || "", phone: c.phone || "", notes: c.notes || "",
+              })));
+            }
           }
           if (data.google) {
             setGClientId(data.google.clientId || "");
@@ -432,7 +469,10 @@ export function VaultSettingsDialog() {
           apidog: { token: apidogToken },
           figma:  { token: figmaToken },
           vps: { host: vpsHost, port: vpsPort, user: vpsUser, password: vpsPassword, webRoot: vpsWebRoot },
-          whatsapp: { instanceId: waInstanceId, token: waToken, phone: waPhone },
+          whatsapp: {
+            instanceId: waInstanceId, token: waToken, phone: waPhone,
+            contacts: waContacts.filter(c => c.name.trim() || c.phone.trim()).map(c => ({ name: c.name, phone: c.phone, notes: c.notes })),
+          },
           google: {
             clientId: gClientId, clientSecret: gClientSecret,
             refreshToken: gRefreshToken, email: gEmail,
@@ -585,7 +625,7 @@ export function VaultSettingsDialog() {
     display: "block",
   };
 
-  const tabs = ["company", "github", "clickup", "vps", "whatsapp", "google", "sfm", "models", "ai-worker", "instructions", "humans", "stats"] as const;
+  const tabs = ["company", "github", "clickup", "vps", "whatsapp", "google", "sfm", "models", "ai-worker", "instructions", "humans", "workspace", "stats"] as const;
   const tabLabels: Record<string, { icon: string; label: string }> = {
     company:      { icon: "🏢", label: "الشركة"       },
     github:       { icon: "🐙", label: "GitHub"       },
@@ -598,6 +638,7 @@ export function VaultSettingsDialog() {
     "ai-worker":  { icon: "⚡", label: "AI Workers"   },
     instructions: { icon: "📋", label: "تعليمات"      },
     humans:       { icon: "👥", label: "الفريق"       },
+    workspace:    { icon: "🗂️", label: "مشاريع"       },
     stats:        { icon: "📊", label: "إحصائيات"     },
   };
 
@@ -609,6 +650,107 @@ export function VaultSettingsDialog() {
       setAdminStats(data);
     } catch { }
     setStatsLoading(false);
+  };
+
+  const loadWsProjects = async () => {
+    setWsLoading(true);
+    try {
+      const r = await apiFetch("/api/workspace/projects");
+      const data = await r.json();
+      if (Array.isArray(data)) setWsProjects(data);
+    } catch { }
+    setWsLoading(false);
+  };
+
+  const saveWsProject = async (p: WsProject) => {
+    try {
+      const r = await apiFetch("/api/workspace/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+      const saved = await r.json();
+      if (saved.error) { alert("خطأ: " + saved.error); return; }
+      setWsEditing(null);
+      await loadWsProjects();
+    } catch (e: any) { alert("خطأ: " + e.message); }
+  };
+
+  const deleteWsProject = async (id: number) => {
+    if (!confirm("حذف المشروع؟")) return;
+    await apiFetch(`/api/workspace/projects/${id}`, { method: "DELETE" });
+    await loadWsProjects();
+  };
+
+  const loadRepoFiles = async (owner: string, repo: string) => {
+    if (!owner || !repo) return;
+    setWsFilesLoading(true);
+    setWsRepoFiles([]);
+    try {
+      const r = await apiFetch(`/api/github/contents?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&path=`);
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        const mdFiles = data
+          .filter((f: any) => f.type === "file" && (f.name.endsWith(".md") || f.name.endsWith(".txt") || f.name.endsWith(".json")))
+          .map((f: any) => f.path);
+        setWsRepoFiles(mdFiles);
+      }
+    } catch { }
+    setWsFilesLoading(false);
+  };
+
+  const loadFileContent = async (owner: string, repo: string, filePath: string) => {
+    try {
+      const r = await apiFetch(`/api/github/contents?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(filePath)}`);
+      const data = await r.json();
+      if (data.content) {
+        const content = atob(data.content.replace(/\n/g, ""));
+        setWsEditing(prev => prev ? { ...prev, contextMd: content } : prev);
+      }
+    } catch { alert("فشل تحميل الملف"); }
+  };
+
+  const handleWsFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      setWsEditing(prev => prev ? { ...prev, contextMd: content } : prev);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  // ── Playbook helpers ──────────────────────────────────────────────────────────
+  const loadPlaybooks = async (projectKey: string) => {
+    try {
+      const r = await apiFetch(`/api/workspace/projects/${projectKey}/playbooks`);
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        setPlaybooks(prev => ({ ...prev, [projectKey]: data }));
+      }
+    } catch { }
+  };
+
+  const savePlaybook = async (projectKey: string, pb: Playbook) => {
+    try {
+      const r = await apiFetch(`/api/workspace/projects/${projectKey}/playbooks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pb),
+      });
+      const result = await r.json();
+      if (result.error) { alert("خطأ: " + result.error); return; }
+      setPbEditing(null);
+      await loadPlaybooks(projectKey);
+    } catch (e: any) { alert("خطأ: " + e.message); }
+  };
+
+  const deletePlaybookItem = async (projectKey: string, id: number) => {
+    if (!confirm("حذف الـ Playbook؟")) return;
+    await apiFetch(`/api/workspace/playbooks/${id}`, { method: "DELETE" });
+    await loadPlaybooks(projectKey);
   };
 
   return (
@@ -748,7 +890,10 @@ export function VaultSettingsDialog() {
               <button
                 key={tab}
                 className={active ? "" : "vault-tab"}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  setActiveTab(tab);
+                  if (tab === "workspace") loadWsProjects();
+                }}
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center",
                   gap: "4px", padding: "10px 4px",
@@ -1352,6 +1497,149 @@ export function VaultSettingsDialog() {
 
             <div style={{ color: "#64748b", fontSize: 11, marginTop: 8, direction: "rtl" }}>
               ⚠️ يمكن للروبوت استخدام الأداة <code style={{ color: "#94a3b8" }}>send_whatsapp</code> لإرسال تقارير المهام.
+            </div>
+
+            {/* ── جهات الاتصال (Phonebook) ── */}
+            <div style={{ marginTop: 20, borderTop: "1px solid #1e2a1e", paddingTop: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div>
+                  <div style={{ color: "#25d366", fontWeight: "bold", fontSize: "13px" }}>📒 دفتر جهات الاتصال</div>
+                  <div style={{ color: "#64748b", fontSize: "11px", marginTop: 2, direction: "rtl" }}>
+                    الروبوت يبحث فيه بالاسم — قل له "أرسل لـ أحمد" وسيعرف الرقم تلقائياً
+                  </div>
+                </div>
+                {!waContactEditing && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={async () => {
+                        setWaImporting(true);
+                        setWaImportResult(null);
+                        try {
+                          const r = await apiFetch("/api/whatsapp/contacts/import");
+                          const data = await r.json();
+                          if (data.error) { setWaImportResult("❌ " + data.error); return; }
+                          const imported: WaContact[] = (data.contacts || []).map((c: any, i: number) => ({
+                            id: "wa-" + i + "-" + Date.now().toString(36),
+                            name: c.name, phone: c.phone, notes: c.notes || "",
+                          }));
+                          // دمج — تجنّب التكرار بالرقم
+                          setWaContacts(prev => {
+                            const existing = new Set(prev.map(c => c.phone.replace(/\s/g, "")));
+                            const newOnes = imported.filter(c => !existing.has(c.phone.replace(/\s/g, "")));
+                            setWaImportResult(`✅ استُورد ${newOnes.length} جهة جديدة (من ${data.total} إجمالاً)`);
+                            return [...prev, ...newOnes];
+                          });
+                        } catch (e: any) {
+                          setWaImportResult("❌ " + e.message);
+                        }
+                        setWaImporting(false);
+                        setTimeout(() => setWaImportResult(null), 5000);
+                      }}
+                      disabled={waImporting}
+                      style={{ background: "rgba(37,211,102,0.1)", border: "1px solid rgba(37,211,102,0.3)", borderRadius: 6, color: "#86efac", padding: "5px 12px", fontSize: "12px", cursor: waImporting ? "not-allowed" : "pointer", opacity: waImporting ? 0.6 : 1 }}
+                    >{waImporting ? "⏳ استيراد..." : "⬇️ استيراد من واتساب"}</button>
+                    <button
+                      onClick={() => setWaContactEditing(emptyContact())}
+                      style={{ background: "rgba(37,211,102,0.15)", border: "1px solid rgba(37,211,102,0.4)", borderRadius: 6, color: "#4ade80", padding: "5px 12px", fontSize: "12px", cursor: "pointer" }}
+                    >+ يدوي</button>
+                  </div>
+                )}
+              </div>
+
+              {waImportResult && (
+                <div style={{ color: waImportResult.startsWith("✅") ? "#4ade80" : "#f87171", fontSize: "12px", marginBottom: 8, direction: "rtl" }}>
+                  {waImportResult}
+                </div>
+              )}
+
+              {/* قائمة الجهات */}
+              {waContacts.length === 0 && !waContactEditing && (
+                <div style={{ color: "#374151", fontSize: "12px", textAlign: "center", padding: "12px 0", border: "1px dashed #1e3a1e", borderRadius: 8 }}>
+                  لا توجد جهات بعد — اضغط "+ جهة اتصال"
+                </div>
+              )}
+              {waContacts.map(c => (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(37,211,102,0.05)", border: "1px solid rgba(37,211,102,0.15)", borderRadius: 7, padding: "8px 10px", marginBottom: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ color: "#4ade80", fontWeight: "bold", fontSize: "13px" }}>{c.name}</span>
+                    <span style={{ color: "#94a3b8", fontSize: "12px", marginRight: 8, fontFamily: "monospace" }}>{c.phone}</span>
+                    {c.notes && <span style={{ color: "#64748b", fontSize: "11px", marginRight: 6 }}>— {c.notes}</span>}
+                  </div>
+                  <button
+                    onClick={() => setWaContactEditing({ ...c })}
+                    style={{ background: "rgba(100,100,255,0.1)", border: "1px solid #334", borderRadius: 5, color: "#88aaff", padding: "3px 8px", fontSize: "11px", cursor: "pointer" }}
+                  >تعديل</button>
+                  <button
+                    onClick={() => setWaContacts(prev => prev.filter(x => x.id !== c.id))}
+                    style={{ background: "rgba(255,80,80,0.1)", border: "1px solid #422", borderRadius: 5, color: "#f87", padding: "3px 8px", fontSize: "11px", cursor: "pointer" }}
+                  >حذف</button>
+                </div>
+              ))}
+
+              {/* نموذج إضافة/تعديل */}
+              {waContactEditing && (
+                <div style={{ background: "rgba(37,211,102,0.07)", border: "1px solid rgba(37,211,102,0.3)", borderRadius: 8, padding: 12, marginTop: 8 }}>
+                  <div style={{ color: "#4ade80", fontWeight: "bold", marginBottom: 10, fontSize: "12px" }}>
+                    {waContacts.find(c => c.id === waContactEditing.id) ? "✏️ تعديل جهة اتصال" : "➕ جهة اتصال جديدة"}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: "11px" }}>الاسم</label>
+                      <input
+                        value={waContactEditing.name}
+                        onChange={e => setWaContactEditing({ ...waContactEditing, name: e.target.value })}
+                        onKeyDown={e => e.stopPropagation()}
+                        placeholder="أحمد محمد"
+                        style={{ ...inputStyle, fontSize: "13px", padding: "7px 10px", direction: "rtl", textAlign: "right", fontFamily: "'Almarai', sans-serif" }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: "11px" }}>رقم الهاتف (مع رمز الدولة)</label>
+                      <input
+                        value={waContactEditing.phone}
+                        onChange={e => setWaContactEditing({ ...waContactEditing, phone: e.target.value })}
+                        onKeyDown={e => e.stopPropagation()}
+                        placeholder="+966501234567"
+                        style={{ ...inputStyle, fontSize: "13px", padding: "7px 10px" }}
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ ...labelStyle, fontSize: "11px" }}>ملاحظة (اختياري — مثل: مدير المشروع)</label>
+                    <input
+                      value={waContactEditing.notes}
+                      onChange={e => setWaContactEditing({ ...waContactEditing, notes: e.target.value })}
+                      onKeyDown={e => e.stopPropagation()}
+                      placeholder="مدير المشروع، يُرسَل له تقارير النشر"
+                      style={{ ...inputStyle, fontSize: "12px", padding: "7px 10px", direction: "rtl", textAlign: "right", fontFamily: "'Almarai', sans-serif" }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
+                    <button onClick={() => setWaContactEditing(null)} style={{ background: "rgba(100,100,100,0.3)", border: "1px solid #555", borderRadius: 6, color: "#aaa", padding: "5px 12px", fontSize: "11px", cursor: "pointer" }}>إلغاء</button>
+                    <button
+                      onClick={() => {
+                        if (!waContactEditing.name.trim() || !waContactEditing.phone.trim()) {
+                          alert("الاسم والرقم مطلوبان"); return;
+                        }
+                        setWaContacts(prev => {
+                          const exists = prev.find(c => c.id === waContactEditing.id);
+                          if (exists) return prev.map(c => c.id === waContactEditing.id ? waContactEditing : c);
+                          return [...prev, waContactEditing];
+                        });
+                        setWaContactEditing(null);
+                      }}
+                      style={{ background: "rgba(37,211,102,0.2)", border: "1px solid rgba(37,211,102,0.5)", borderRadius: 6, color: "#4ade80", padding: "5px 12px", fontSize: "11px", cursor: "pointer" }}
+                    >💾 حفظ الجهة</button>
+                  </div>
+                </div>
+              )}
+
+              {waContacts.length > 0 && (
+                <div style={{ color: "#374151", fontSize: "10px", marginTop: 8, direction: "rtl" }}>
+                  💡 اضغط "حفظ" في الأعلى لحفظ دفتر الاتصال في قاعدة البيانات
+                </div>
+              )}
             </div>
           </>
 
@@ -2752,6 +3040,232 @@ export function VaultSettingsDialog() {
               💡 كل موظف يحصل على كود دخول فريد · انسخ الرابط وأرسله له ·
               عند دخوله سيُحوَّل تلقائياً للغرفة المحددة
             </div>
+          </>
+        ) : activeTab === "workspace" ? (
+          <>
+            {/* Workspace Projects */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div>
+                <div style={{ color: "#c4a44a", fontWeight: "bold", fontSize: "15px" }}>🗂️ مشاريع الـ Workspace</div>
+                <div style={{ color: "#888", fontSize: "11px", marginTop: 3 }}>كل مشروع يحتوي سياقه الخاص — يُحقن تلقائياً في كل مهمة من قائمته</div>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={loadWsProjects} style={{ background: "rgba(100,100,100,0.3)", border: "1px solid #555", borderRadius: 6, color: "#aaa", padding: "5px 10px", fontSize: "12px", cursor: "pointer" }}>🔄 تحديث</button>
+                <button onClick={() => setWsEditing(emptyWsProject())} style={{ background: "rgba(196,164,74,0.2)", border: "1px solid #c4a44a", borderRadius: 6, color: "#c4a44a", padding: "5px 12px", fontSize: "12px", cursor: "pointer" }}>+ مشروع جديد</button>
+              </div>
+            </div>
+
+            {wsLoading && <div style={{ color: "#888", textAlign: "center", padding: 20 }}>⏳ جاري التحميل...</div>}
+
+            {!wsLoading && wsProjects.length === 0 && !wsEditing && (
+              <div style={{ color: "#666", textAlign: "center", padding: 30, border: "1px dashed #333", borderRadius: 8 }}>
+                لا توجد مشاريع بعد — اضغط "+ مشروع جديد"
+              </div>
+            )}
+
+            {/* قائمة المشاريع */}
+            {wsProjects.map(p => (
+              <div key={p.id} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid #333", borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <span style={{ color: "#c4a44a", fontWeight: "bold", fontSize: "13px" }}>{p.projectKey}</span>
+                    <span style={{ color: "#ccc", fontSize: "13px", marginRight: 8 }}>{p.name}</span>
+                    <div style={{ color: "#666", fontSize: "11px", marginTop: 4 }}>
+                      {p.githubOwner && p.githubRepo && <span>🐙 {p.githubOwner}/{p.githubRepo} · </span>}
+                      {p.clickupListId && <span>✅ List: {p.clickupListId} · </span>}
+                      {p.vpsPath && <span>🖥️ {p.vpsPath}</span>}
+                    </div>
+                    {p.contextMd && (
+                      <div style={{ color: "#555", fontSize: "10px", marginTop: 4, maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        📄 {p.contextMd.substring(0, 80)}...
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={() => {
+                        const key = p.projectKey;
+                        if (pbExpanded === key) {
+                          setPbExpanded(null);
+                        } else {
+                          setPbExpanded(key);
+                          if (!playbooks[key]) loadPlaybooks(key);
+                        }
+                      }}
+                      style={{ background: pbExpanded === p.projectKey ? "rgba(139,92,246,0.25)" : "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.4)", borderRadius: 5, color: "#a78bfa", padding: "4px 10px", fontSize: "11px", cursor: "pointer" }}
+                    >
+                      📋 {pbExpanded === p.projectKey ? "▲" : "▼"} Playbooks {playbooks[p.projectKey]?.length ? `(${playbooks[p.projectKey].length})` : ""}
+                    </button>
+                    <button onClick={() => setWsEditing({ ...p })} style={{ background: "rgba(100,100,255,0.15)", border: "1px solid #445", borderRadius: 5, color: "#88aaff", padding: "4px 10px", fontSize: "11px", cursor: "pointer" }}>تعديل</button>
+                    <button onClick={() => p.id && deleteWsProject(p.id)} style={{ background: "rgba(255,80,80,0.12)", border: "1px solid #633", borderRadius: 5, color: "#f87", padding: "4px 10px", fontSize: "11px", cursor: "pointer" }}>حذف</button>
+                  </div>
+                </div>
+
+                {/* ── Playbooks panel ── */}
+                {pbExpanded === p.projectKey && (
+                  <div style={{ marginTop: 12, borderTop: "1px solid #2a2a3a", paddingTop: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ color: "#a78bfa", fontSize: "12px", fontWeight: "bold" }}>📋 Playbooks — خطوات مُفعَّلة بالكلمات المفتاحية</span>
+                      {!(pbEditing && pbEditing.projectKey === p.projectKey) && (
+                        <button
+                          onClick={() => setPbEditing({ projectKey: p.projectKey, pb: emptyPlaybook() })}
+                          style={{ background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", borderRadius: 5, color: "#a78bfa", padding: "3px 10px", fontSize: "11px", cursor: "pointer" }}
+                        >+ Playbook جديد</button>
+                      )}
+                    </div>
+
+                    {/* قائمة الـ playbooks */}
+                    {(playbooks[p.projectKey] || []).length === 0 && !(pbEditing && pbEditing.projectKey === p.projectKey) && (
+                      <div style={{ color: "#555", fontSize: "11px", textAlign: "center", padding: "8px 0" }}>لا يوجد playbooks بعد</div>
+                    )}
+                    {(playbooks[p.projectKey] || []).map(pb => (
+                      <div key={pb.id} style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 6, padding: "8px 10px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ color: "#d4bbff", fontSize: "12px", fontWeight: "bold" }}>{pb.name}</div>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+                            {(pb.keywords || "").split(",").filter(Boolean).map(kw => (
+                              <span key={kw} style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: 4, padding: "1px 6px", color: "#a78bfa", fontSize: "10px" }}>{kw.trim()}</span>
+                            ))}
+                          </div>
+                          {pb.content && (
+                            <div style={{ color: "#666", fontSize: "10px", marginTop: 4, maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {pb.content.substring(0, 100)}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: 4, marginRight: 8, flexShrink: 0 }}>
+                          <button onClick={() => setPbEditing({ projectKey: p.projectKey, pb: { ...pb } })} style={{ background: "rgba(100,100,255,0.15)", border: "1px solid #445", borderRadius: 4, color: "#88aaff", padding: "3px 8px", fontSize: "10px", cursor: "pointer" }}>تعديل</button>
+                          <button onClick={() => pb.id && deletePlaybookItem(p.projectKey, pb.id)} style={{ background: "rgba(255,80,80,0.1)", border: "1px solid #633", borderRadius: 4, color: "#f87", padding: "3px 8px", fontSize: "10px", cursor: "pointer" }}>حذف</button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* نموذج إضافة/تعديل Playbook */}
+                    {pbEditing && pbEditing.projectKey === p.projectKey && (
+                      <div style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: 8, padding: 12, marginTop: 8 }}>
+                        <div style={{ color: "#a78bfa", fontWeight: "bold", marginBottom: 10, fontSize: "12px" }}>
+                          {pbEditing.pb.id ? "✏️ تعديل Playbook" : "➕ Playbook جديد"}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                          <div>
+                            <label style={{ ...labelStyle, fontSize: "11px" }}>اسم الـ Playbook</label>
+                            <input
+                              value={pbEditing.pb.name}
+                              onChange={e => setPbEditing({ ...pbEditing, pb: { ...pbEditing.pb, name: e.target.value } })}
+                              onKeyDown={e => e.stopPropagation()}
+                              placeholder="Deploy to VPS"
+                              style={{ ...inputStyle, fontSize: "12px", padding: "7px 10px" }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ ...labelStyle, fontSize: "11px" }}>كلمات مفتاحية — فاصلة بين كل كلمة</label>
+                            <input
+                              value={pbEditing.pb.keywords}
+                              onChange={e => setPbEditing({ ...pbEditing, pb: { ...pbEditing.pb, keywords: e.target.value } })}
+                              onKeyDown={e => e.stopPropagation()}
+                              placeholder="deploy, رفع, نشر, push"
+                              style={{ ...inputStyle, fontSize: "12px", padding: "7px 10px" }}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label style={{ ...labelStyle, fontSize: "11px" }}>خطوات التنفيذ (Markdown)</label>
+                          <textarea
+                            value={pbEditing.pb.content}
+                            onChange={e => setPbEditing({ ...pbEditing, pb: { ...pbEditing.pb, content: e.target.value } })}
+                            onKeyDown={e => e.stopPropagation()}
+                            placeholder={`## خطوات الرفع\n1. بناء المشروع: \`npm run build\`\n2. رفع الملفات عبر SFTP\n3. إعادة تشغيل PM2: \`pm2 restart app\``}
+                            style={{ ...inputStyle, height: 120, fontFamily: "monospace", fontSize: "11px", resize: "vertical" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
+                          <button onClick={() => setPbEditing(null)} style={{ background: "rgba(100,100,100,0.3)", border: "1px solid #555", borderRadius: 6, color: "#aaa", padding: "5px 12px", fontSize: "11px", cursor: "pointer" }}>إلغاء</button>
+                          <button onClick={() => savePlaybook(p.projectKey, pbEditing.pb)} style={{ background: "rgba(139,92,246,0.25)", border: "1px solid rgba(139,92,246,0.5)", borderRadius: 6, color: "#c4b5fd", padding: "5px 12px", fontSize: "11px", cursor: "pointer" }}>💾 حفظ</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* نموذج إضافة/تعديل */}
+            {wsEditing && (
+              <div style={{ background: "rgba(196,164,74,0.06)", border: "1px solid rgba(196,164,74,0.3)", borderRadius: 10, padding: 16, marginTop: 12 }}>
+                <div style={{ color: "#c4a44a", fontWeight: "bold", marginBottom: 12 }}>{wsEditing.id ? "✏️ تعديل مشروع" : "➕ مشروع جديد"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <label style={labelStyle}>مفتاح المشروع (max 6)</label>
+                    <input value={wsEditing.projectKey} onChange={e => setWsEditing({...wsEditing, projectKey: e.target.value.toUpperCase().slice(0,6)})}
+                      onKeyDown={e => e.stopPropagation()} placeholder="SEESAW" style={inputStyle} maxLength={6} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>اسم المشروع</label>
+                    <input value={wsEditing.name} onChange={e => setWsEditing({...wsEditing, name: e.target.value})}
+                      onKeyDown={e => e.stopPropagation()} placeholder="Seesaw Platform" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>🐙 GitHub Owner</label>
+                    <input value={wsEditing.githubOwner} onChange={e => setWsEditing({...wsEditing, githubOwner: e.target.value})}
+                      onKeyDown={e => e.stopPropagation()} placeholder="samshalayel" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>🐙 GitHub Repo</label>
+                    <input value={wsEditing.githubRepo} onChange={e => setWsEditing({...wsEditing, githubRepo: e.target.value})}
+                      onKeyDown={e => e.stopPropagation()} placeholder="seesaw-sfm" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>✅ ClickUp List ID</label>
+                    <input value={wsEditing.clickupListId} onChange={e => setWsEditing({...wsEditing, clickupListId: e.target.value})}
+                      onKeyDown={e => e.stopPropagation()} placeholder="901234567890" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>🖥️ VPS Path</label>
+                    <input value={wsEditing.vpsPath} onChange={e => setWsEditing({...wsEditing, vpsPath: e.target.value})}
+                      onKeyDown={e => e.stopPropagation()} placeholder="/var/www/seesaw" style={inputStyle} />
+                  </div>
+                </div>
+                <div>
+                  {/* Context header + controls */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0, flex: 1 }}>📄 Project Context — يُحقن في كل مهمة</label>
+
+                    {/* Dropdown: ملفات الـ repo */}
+                    <select
+                      defaultValue=""
+                      onChange={e => {
+                        if (e.target.value) loadFileContent(wsEditing.githubOwner, wsEditing.githubRepo, e.target.value);
+                        e.target.value = "";
+                      }}
+                      onFocus={() => {
+                        if (wsRepoFiles.length === 0 && wsEditing.githubOwner && wsEditing.githubRepo)
+                          loadRepoFiles(wsEditing.githubOwner, wsEditing.githubRepo);
+                      }}
+                      style={{ ...inputStyle, width: "auto", minWidth: 160, padding: "4px 8px", fontSize: "11px", cursor: "pointer" }}
+                    >
+                      <option value="">{wsFilesLoading ? "⏳ تحميل..." : "📂 من الـ repo"}</option>
+                      {wsRepoFiles.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+
+                    {/* زر رفع ملف محلي */}
+                    <button
+                      onClick={() => wsFileInputRef.current?.click()}
+                      title="رفع ملف من جهازك"
+                      style={{ background: "rgba(196,164,74,0.15)", border: "1px solid rgba(196,164,74,0.4)", borderRadius: 6, color: "#c4a44a", padding: "4px 10px", fontSize: "13px", cursor: "pointer" }}
+                    >＋</button>
+                    <input ref={wsFileInputRef} type="file" accept=".md,.txt,.json" style={{ display: "none" }} onChange={handleWsFileUpload} />
+                  </div>
+                  <textarea value={wsEditing.contextMd} onChange={e => setWsEditing({...wsEditing, contextMd: e.target.value})}
+                    onKeyDown={e => e.stopPropagation()}
+                    placeholder={`## Stack\n- Frontend: React + Vite\n- Backend: Express\n\n## Conventions\n- ESM imports only\n- Arabic comments allowed\n\n## Rules\n- NEVER touch /dist directly`}
+                    style={{ ...inputStyle, height: 160, fontFamily: "monospace", fontSize: "12px", resize: "vertical" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+                  <button onClick={() => setWsEditing(null)} style={{ background: "rgba(100,100,100,0.3)", border: "1px solid #555", borderRadius: 6, color: "#aaa", padding: "6px 14px", fontSize: "12px", cursor: "pointer" }}>إلغاء</button>
+                  <button onClick={() => saveWsProject(wsEditing)} style={{ background: "rgba(196,164,74,0.25)", border: "1px solid #c4a44a", borderRadius: 6, color: "#c4a44a", padding: "6px 14px", fontSize: "12px", cursor: "pointer" }}>💾 حفظ</button>
+                </div>
+              </div>
+            )}
           </>
         ) : activeTab === "stats" ? (
           <>

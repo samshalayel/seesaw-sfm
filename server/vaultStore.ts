@@ -103,6 +103,7 @@ function roomToVault(room: Room, models: ModelConfig[]): VaultSettings {
       instanceId: (room as any).ultramsguInstanceId || "",
       token:      (room as any).ultramsgunToken     || "",
       phone:      (room as any).ultramsguPhone      || "",
+      contacts:   (() => { try { return JSON.parse((room as any).contactsJson || "[]"); } catch { return []; } })(),
     },
     google: {
       clientId:        (room as any).googleClientId      || "",
@@ -263,6 +264,10 @@ export async function setVaultSettings(
     if (settings.whatsapp.token && settings.whatsapp.token !== "••••••••") {
       (update as any).ultramsgunToken = settings.whatsapp.token;
     }
+    // Always persist contacts (even empty array clears old data intentionally)
+    if (settings.whatsapp.contacts !== undefined) {
+      (update as any).contactsJson = JSON.stringify(settings.whatsapp.contacts);
+    }
   }
   if (settings.google) {
     if (settings.google.clientId)      (update as any).googleClientId      = settings.google.clientId;
@@ -363,13 +368,28 @@ export async function getVpsConfig(roomId?: string): Promise<{ host: string; por
   };
 }
 
-export async function getWhatsAppConfig(roomId?: string): Promise<{ instanceId: string; token: string; phone: string }> {
+export async function getWhatsAppConfig(roomId?: string): Promise<{
+  instanceId: string; token: string; phone: string;
+  contacts: Array<{ name: string; phone: string; notes?: string }>;
+}> {
   const room = await storage.getRoom(roomId || "default");
+  let contacts: Array<{ name: string; phone: string; notes?: string }> = [];
+  try { contacts = JSON.parse((room as any)?.contactsJson || "[]"); } catch { }
   return {
     instanceId: (room as any)?.ultramsguInstanceId || "",
     token:      (room as any)?.ultramsgunToken     || "",
     phone:      (room as any)?.ultramsguPhone      || "",
+    contacts,
   };
+}
+
+export async function lookupContact(roomId: string, nameOrPhone: string): Promise<string | null> {
+  const cfg = await getWhatsAppConfig(roomId);
+  const q = nameOrPhone.trim().toLowerCase();
+  const found = cfg.contacts.find(c =>
+    c.name.toLowerCase().includes(q) || c.phone.replace(/\s/g, "").includes(q.replace(/\s/g, ""))
+  );
+  return found ? found.phone : null;
 }
 
 export async function getGoogleConfig(roomId?: string): Promise<{
