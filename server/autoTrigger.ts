@@ -72,6 +72,24 @@ const config: AutoTriggerConfig = {
 // roomId مرتبط بالغرفة التي شغّلت المراقب
 let triggerRoomId: string | undefined = undefined;
 
+// معرّفات المهام التي طلب المستخدم إلغاءها
+const cancelledLogIds = new Set<string>();
+
+export function cancelTriggerLog(logId: string): boolean {
+  const log = triggerLogs.find(l => l.id === logId);
+  if (!log) return false;
+  cancelledLogIds.add(logId);
+  log.status = "failed";
+  log.error  = "⛔ أُوقفت يدوياً";
+  log.completedAt = Date.now();
+  console.log(`[AutoTrigger] ⛔ Cancelled log ${logId} (task: ${log.taskName})`);
+  return true;
+}
+
+export function isLogCancelled(logId: string): boolean {
+  return cancelledLogIds.has(logId);
+}
+
 // ─── VPS SSH ─────────────────────────────────────────────────────────────────
 // تشغيل أمر على الـ VPS وإرجاع stdout + stderr
 function runOnVps(command: string, timeoutMs = 120000, vpsConfig?: { host: string; port: number; user: string; password: string }): Promise<string> {
@@ -537,6 +555,9 @@ interface ProcessOpts {
 }
 
 async function processTaskWithAI(task: any, log: TriggerLog, opts: ProcessOpts = {}) {
+  // ── فحص الإلغاء المبكر ───────────────────────────────────────────────────────
+  if (isLogCancelled(log.id)) return;
+
   // ── تحميل سياق المشروع من الـ Workspace ──────────────────────────────────────
   const taskListId = task.list?.id || task.list_id || "";
   const wsProject  = await storage.getProjectByListId(triggerRoomId, taskListId).catch(() => undefined);

@@ -63,6 +63,7 @@ export function AutoTriggerPanel() {
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const fetchConfig = async () => {
     try {
@@ -169,6 +170,16 @@ export function AutoTriggerPanel() {
     try {
       await apiFetch("/api/auto-trigger/clear-cache", { method: "POST" });
     } catch (_e) {}
+  };
+
+  const handleCancelLog = async (logId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // لا نفتح/نغلق الـ card
+    setCancellingId(logId);
+    try {
+      await apiFetch(`/api/auto-trigger/cancel/${logId}`, { method: "POST" });
+      await fetchLogs();
+    } catch (_e) {}
+    setCancellingId(null);
   };
 
   const formatTime = (ts: number) =>
@@ -513,7 +524,28 @@ export function AutoTriggerPanel() {
                             <span style={{ color: "#888" }}>{formatTime(log.startedAt)}</span>
                           </div>
                         </div>
-                        <span style={{ color: "#666", fontSize: "14px" }}>{isExpanded ? "▲" : "▼"}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          {log.status === "running" && (
+                            <button
+                              onClick={(e) => handleCancelLog(log.id, e)}
+                              disabled={cancellingId === log.id}
+                              title="أوقف هذه المهمة"
+                              style={{
+                                background: cancellingId === log.id ? "#333" : "#ef535025",
+                                border: `1px solid ${cancellingId === log.id ? "#555" : "#ef5350"}`,
+                                borderRadius: "6px",
+                                padding: "3px 8px",
+                                color: cancellingId === log.id ? "#888" : "#ef5350",
+                                fontSize: "11px",
+                                cursor: cancellingId === log.id ? "wait" : "pointer",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {cancellingId === log.id ? "..." : "⬛ إيقاف"}
+                            </button>
+                          )}
+                          <span style={{ color: "#666", fontSize: "14px" }}>{isExpanded ? "▲" : "▼"}</span>
+                        </div>
                       </div>
 
                       {isExpanded && log.result && (
