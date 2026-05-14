@@ -417,6 +417,7 @@ export function AutoTriggerPanel() {
                         { id: "robot-2", label: "Claude",  color: "#c084fc" },
                         { id: "robot-4", label: "Gemini",  color: "#4fc3f7" },
                         { id: "robot-3", label: "CLI",     color: "#ff9800" },
+                        { id: "robot-5", label: "Devin",   color: "#00bcd4" },
                       ].map(r => (
                         <button key={r.id}
                           onClick={() => setSelectedRobot(r.id)}
@@ -473,7 +474,7 @@ export function AutoTriggerPanel() {
                     </div>
                   ) : (
                     <div style={{ color: "#aaa", fontSize: "12px" }}>
-                      الروبوت: {config?.robotId === "robot-1" ? "GPT-4o" : config?.robotId === "robot-2" ? "Claude" : config?.robotId === "robot-4" ? "Gemini" : "CLI"}
+                      الروبوت: {config?.robotId === "robot-1" ? "GPT-4o" : config?.robotId === "robot-2" ? "Claude" : config?.robotId === "robot-4" ? "Gemini" : config?.robotId === "robot-5" ? "Devin" : "CLI"}
                     </div>
                   )}
                   <div style={{ fontSize: "12px", color: config?.whatsappNotify ? "#25d366" : "#666" }}>

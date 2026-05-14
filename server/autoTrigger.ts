@@ -552,19 +552,21 @@ async function processTaskWithAI(task: any, log: TriggerLog, opts: ProcessOpts =
   // ── فحص الإلغاء المبكر ───────────────────────────────────────────────────────
   if (isLogCancelled(log.id)) return;
 
-  // ── تحميل سياق المشروع من الـ Workspace ──────────────────────────────────────
+  // ── تحميل سياق المشروع بشكل متوازي (أسرع بكثير من التسلسلي) ─────────────────
   const taskListId = task.list?.id || task.list_id || "";
-  const wsProject  = await storage.getProjectByListId(triggerRoomId, taskListId).catch(() => undefined);
+
+  const [wsProject, vaultOwnerDirect, vaultRepoDirect, vpsCfg, waCfg] = await Promise.all([
+    storage.getProjectByListId(triggerRoomId, taskListId).catch(() => undefined),
+    getGitHubOwner(triggerRoomId).catch(() => ""),
+    getGitHubRepo(triggerRoomId).catch(() => ""),
+    getVpsConfig(triggerRoomId).catch(() => ({ host: "", port: 22, user: "root", password: "", webRoot: "/var/www" })),
+    getWhatsAppConfig(triggerRoomId).catch(() => ({ instanceId: "", token: "", phone: "", contacts: [] as any[] })),
+  ]);
 
   // قراءة الـ repo والـ VPS: project-level يتقدم على workspace defaults
-  const vaultOwner = wsProject?.githubOwner || await getGitHubOwner(triggerRoomId).catch(() => "");
-  const vaultRepo  = wsProject?.githubRepo  || await getGitHubRepo(triggerRoomId).catch(() => "");
+  const vaultOwner = wsProject?.githubOwner || vaultOwnerDirect;
+  const vaultRepo  = wsProject?.githubRepo  || vaultRepoDirect;
   const projectVpsPath = wsProject?.vpsPath || "";
-
-  let githubUser = "";
-  try { githubUser = await getAuthenticatedUser(triggerRoomId); } catch (_e) {}
-  const vpsCfg    = await getVpsConfig(triggerRoomId).catch(() => ({ host: "", port: 22, user: "root", password: "", webRoot: "/var/www" }));
-  const waCfg     = await getWhatsAppConfig(triggerRoomId).catch(() => ({ instanceId: "", token: "", phone: "", contacts: [] }));
   const waDefault = waCfg.phone || "";
 
   // Context section يُضاف لأعلى كل system prompt
@@ -663,11 +665,14 @@ ${config.whatsappNotify
 • Use ONLY for ClickUp task assignment (to get clickupUserId).
 • Do NOT use their phone number for WhatsApp — always send to the default number above.
 
-RULES:
+EFFICIENCY RULES (CRITICAL):
+- START WORKING IMMEDIATELY — do NOT call get_clickup_tasks, get_workspace_structure, or get_workspace_members unless the task explicitly requires it.
+- The task details, GitHub repo, and VPS are already given above — no need to explore first.
+- Chain multiple bash commands with && in ONE run_on_vps call instead of multiple calls.
+- Use get_repo_contents ONLY if you need to read an existing file before modifying it.
 - NEVER use get_github_repos — target repo is already given above.
 - For GitHub: always owner="${vaultOwner}", repo="${vaultRepo}".
-- For VPS: project root is typically /var/www/<project-name>.
-- Chain commands with && to keep them in one run_on_vps call.
+- Aim to complete each task in the fewest tool calls possible (ideally 3-5 calls total).
 
 You must actually execute tool calls — do not describe what you will do, just do it.`;
 
@@ -676,6 +681,13 @@ You must actually execute tool calls — do not describe what you will do, just 
   const _openai   = opts.openaiClient     ?? openai;
   const _anthropic = opts.anthropicClient ?? anthropic;
   const _gemini   = opts.geminiClient     ?? gemini;
+
+  // ── Task timeout: 8 دقائق كحد أقصى لكل مهمة ────────────────────────────────
+  const TASK_TIMEOUT_MS = 8 * 60 * 1000;
+  const MAX_ITERATIONS  = 12;  // أقل من 20 — يكفي لأي مهمة عادية
+  const taskStartTime   = Date.now();
+
+  const checkTimeout = () => Date.now() - taskStartTime > TASK_TIMEOUT_MS;
 
   try {
     // robot-5: Devin — autonomous software engineer (Cognition AI)
@@ -693,9 +705,17 @@ You must actually execute tool calls — do not describe what you will do, just 
     if (_robotId === "robot-2") {
       let messages: Anthropic.MessageParam[] = [{ role: "user", content: taskPrompt }];
       let fullResult = "";
-      let maxIterations = 20;
+      let iterations = 0;
 
-      while (maxIterations-- > 0) {
+      while (iterations++ < MAX_ITERATIONS) {
+        // فحص الإلغاء + الـ timeout داخل كل دورة
+        if (isLogCancelled(log.id)) return;
+        if (checkTimeout()) {
+          fullResult += "\n\n⏱️ انتهت المهلة (8 دقائق) — توقفت تلقائياً.";
+          log.result = fullResult;
+          break;
+        }
+
         const response = await _anthropic.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2048,
@@ -710,6 +730,7 @@ You must actually execute tool calls — do not describe what you will do, just 
         for (const block of response.content) {
           if (block.type === "text") {
             fullResult += block.text;
+            log.result = fullResult;
           } else if (block.type === "tool_use") {
             hasToolUse = true;
             log.toolsUsed.push(block.name);
@@ -734,9 +755,16 @@ You must actually execute tool calls — do not describe what you will do, just 
         { role: "user", content: taskPrompt },
       ];
       let fullResult = "";
-      let maxIterations = 20;
+      let iterations = 0;
 
-      while (maxIterations-- > 0) {
+      while (iterations++ < MAX_ITERATIONS) {
+        if (isLogCancelled(log.id)) return;
+        if (checkTimeout()) {
+          fullResult += "\n\n⏱️ انتهت المهلة (8 دقائق) — توقفت تلقائياً.";
+          log.result = fullResult;
+          break;
+        }
+
         const response = await _gemini.chat.completions.create({
           model: "gemini-2.0-flash",
           messages,
@@ -745,7 +773,10 @@ You must actually execute tool calls — do not describe what you will do, just 
         });
 
         const choice = response.choices[0];
-        if (choice.message.content) fullResult += choice.message.content;
+        if (choice.message.content) {
+          fullResult += choice.message.content;
+          log.result = fullResult;
+        }
 
         if (choice.finish_reason === "tool_calls" && choice.message.tool_calls) {
           messages.push(choice.message);
@@ -768,9 +799,16 @@ You must actually execute tool calls — do not describe what you will do, just 
         { role: "user", content: taskPrompt },
       ];
       let fullResult = "";
-      let maxIterations = 20;
+      let iterations = 0;
 
-      while (maxIterations-- > 0) {
+      while (iterations++ < MAX_ITERATIONS) {
+        if (isLogCancelled(log.id)) return;
+        if (checkTimeout()) {
+          fullResult += "\n\n⏱️ انتهت المهلة (8 دقائق) — توقفت تلقائياً.";
+          log.result = fullResult;
+          break;
+        }
+
         const response = await _openai.chat.completions.create({
           model: "gpt-4o",
           messages,
@@ -781,6 +819,7 @@ You must actually execute tool calls — do not describe what you will do, just 
         const choice = response.choices[0];
         if (choice.message.content) {
           fullResult += choice.message.content;
+          log.result = fullResult;
         }
 
         if (choice.finish_reason === "tool_calls" && choice.message.tool_calls) {
@@ -803,7 +842,8 @@ You must actually execute tool calls — do not describe what you will do, just 
 
     log.status = "completed";
     log.completedAt = Date.now();
-    console.log(`[AutoTrigger ${log.id}] Completed task: ${task.name}`);
+    const elapsed = Math.round((Date.now() - taskStartTime) / 1000);
+    console.log(`[AutoTrigger ${log.id}] Completed task: ${task.name} (${elapsed}s)`);
   } catch (err: any) {
     log.status = "failed";
     log.error = err.message;
