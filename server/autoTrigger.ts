@@ -125,8 +125,15 @@ const toolDefinitions = [
     }, required: ["command"] },
   },
   {
+    name: "get_team_member",
+    description: "Look up a team member by name or role from the HR directory. Returns their name, role, WhatsApp phone, ClickUp user ID, and room assignment. Use this BEFORE: assigning a ClickUp task to someone, sending a WhatsApp message to a team member, or finding out who handles a specific role.",
+    parameters: { type: "object" as const, properties: {
+      query: { type: "string", description: "Name or role to search for, e.g. 'أحمد' or 'backend' or 'مطور'" },
+    }, required: ["query"] },
+  },
+  {
     name: "get_whatsapp_contacts",
-    description: "Get the WhatsApp phonebook (contacts list) stored in the vault. Returns array of {name, phone, notes}. Use this to look up a contact's phone number by their name before sending a message.",
+    description: "Get the full WhatsApp phonebook (team members + manual contacts). Returns array of {name, phone, notes}. Use this to look up a contact's phone number by their name before sending a message.",
     parameters: { type: "object" as const, properties: {
       search: { type: "string", description: "Optional: filter contacts by name or phone (case-insensitive). Leave empty to get all contacts." },
     }, required: [] },
@@ -181,6 +188,24 @@ async function executeToolCall(name: string, args: any): Promise<string> {
         if (!vpsCfg.host) return "Error: VPS not configured. Add VPS settings in the vault.";
         const result = await runOnVps(args.command, timeoutMs, vpsCfg);
         return result;
+      }
+      case "get_team_member": {
+        const room = await storage.getRoom(triggerRoomId);
+        let humans: any[] = [];
+        try { humans = JSON.parse((room as any)?.humansJson || "[]"); } catch { }
+        const q = (args.query || "").toLowerCase();
+        const found = humans.filter((h: any) =>
+          (h.name  || "").toLowerCase().includes(q) ||
+          (h.role  || "").toLowerCase().includes(q)
+        );
+        if (!found.length) return `لا يوجد عضو في الفريق يطابق "${args.query}". تحقق من تبويب الفريق في الخزنة.`;
+        return JSON.stringify(found.map((h: any) => ({
+          name:          h.name          || "",
+          role:          h.role          || "",
+          phone:         h.phone         || null,
+          clickupUserId: h.clickupUserId || null,
+          roomAssignment: h.roomAssignment || "main",
+        })), null, 2);
       }
       case "get_whatsapp_contacts": {
         const waCfg = await getWhatsAppConfig(triggerRoomId);
@@ -610,9 +635,14 @@ Tool: send_whatsapp(to, message) — sends WhatsApp via UltraMsg.
 • Example: send_whatsapp("✅ تم إنجاز مهمة: ${task.name}")
 • Do NOT skip this step — always notify when a task is done or failed.
 
-📒 PHONEBOOK: get_whatsapp_contacts() — returns the team phonebook.
+👥 TEAM DIRECTORY: get_team_member(query) — find a team member by name or role.
+• Returns: name, role, phone (WhatsApp), clickupUserId, roomAssignment.
+• Use BEFORE assigning a task or sending a WhatsApp message to a named person.
+• Example: get_team_member("أحمد") → { name: "أحمد", clickupUserId: "12345", phone: "+966..." }
+
+📒 PHONEBOOK: get_whatsapp_contacts() — returns all contacts (team + manual).
 • If the task says "أرسل لـ أحمد" or refers to a person by name:
-  1. Call get_whatsapp_contacts() first to find their phone number.
+  1. Call get_team_member("أحمد") to get their phone + ClickUp ID.
   2. Then call send_whatsapp(phone, message).
 • You can pass a name directly to send_whatsapp — it will auto-resolve from the phonebook.
 

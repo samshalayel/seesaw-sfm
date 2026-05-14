@@ -155,16 +155,23 @@ export function VaultSettingsDialog() {
   const [hallWorkers, setHallWorkers] = useState<ModelEntry[]>([]);
 
   // الموظفون البشريون
-  interface HumanMember { id: string; name: string; role: string; joinCode: string; roomAssignment: string; }
+  interface HumanMember {
+    id: string; name: string; role: string; joinCode: string; roomAssignment: string;
+    phone?: string;         // رقم واتساب
+    clickupUserId?: string; // ClickUp user ID
+    notes?: string;
+  }
   const [humans, setHumans] = useState<HumanMember[]>([]);
   const [humanCopied, setHumanCopied] = useState<string | null>(null);
+  const [cuImporting, setCuImporting] = useState(false);
+  const [cuImportMsg, setCuImportMsg] = useState<string | null>(null);
 
   const genCode = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
   };
   const addHuman = () => {
-    setHumans(h => [...h, { id: Date.now().toString(36), name: "", role: "", joinCode: genCode(), roomAssignment: "main" }]);
+    setHumans(h => [...h, { id: Date.now().toString(36), name: "", role: "", joinCode: genCode(), roomAssignment: "main", phone: "", clickupUserId: "" }]);
   };
   const removeHuman = (id: string) => setHumans(h => h.filter(m => m.id !== id));
   const updateHuman = (id: string, field: keyof HumanMember, value: string) =>
@@ -177,6 +184,39 @@ export function VaultSettingsDialog() {
       setHumanCopied(code);
       setTimeout(() => setHumanCopied(null), 2000);
     });
+  };
+
+  const importFromClickUp = async () => {
+    setCuImporting(true); setCuImportMsg(null);
+    try {
+      const r = await apiFetch("/api/clickup/members");
+      const members = await r.json();
+      if (!Array.isArray(members)) { setCuImportMsg("❌ فشل جلب الأعضاء"); return; }
+      let added = 0;
+      setHumans(prev => {
+        const existingIds = new Set(prev.map(h => h.clickupUserId).filter(Boolean));
+        const existingNames = new Set(prev.map(h => h.name.toLowerCase()));
+        const newMembers: HumanMember[] = [];
+        for (const m of members) {
+          if (existingIds.has(String(m.id))) continue;
+          if (m.username && existingNames.has(m.username.toLowerCase())) continue;
+          newMembers.push({
+            id: "cu-" + m.id,
+            name: m.username || m.name || "",
+            role: "",
+            joinCode: genCode(),
+            roomAssignment: "main",
+            phone: "",
+            clickupUserId: String(m.id),
+          });
+          added++;
+        }
+        return [...prev, ...newMembers];
+      });
+      setCuImportMsg(`✅ استُورد ${added} عضو جديد من ClickUp`);
+    } catch (e: any) { setCuImportMsg("❌ " + e.message); }
+    setCuImporting(false);
+    setTimeout(() => setCuImportMsg(null), 5000);
   };
   const [defaultModel, setDefaultModelState] = useState<string>("Groq");
   const [systemPrompt, setSystemPrompt] = useState<string>("");
@@ -411,7 +451,12 @@ export function VaultSettingsDialog() {
             setSystemPrompt(data.systemPrompt || "");
           }
           if (data.humans && Array.isArray(data.humans)) {
-            setHumans(data.humans);
+            setHumans(data.humans.map((h: any) => ({
+              ...h,
+              phone:         h.phone         || "",
+              clickupUserId: h.clickupUserId || "",
+              notes:         h.notes         || "",
+            })));
           }
         })
         .catch(() => {});
@@ -2950,20 +2995,36 @@ export function VaultSettingsDialog() {
           </>
         ) : activeTab === "humans" ? (
           <>
-            {/* ── لوحة الفريق البشري ── */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <span style={{ color: "#fff", fontWeight: "bold", fontSize: 14, direction: "rtl" }}>
-                👥 أعضاء الفريق البشري
-              </span>
-              <button onClick={addHuman} style={{
-                background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.5)",
-                borderRadius: 8, color: "#a5b4fc", padding: "5px 14px", cursor: "pointer", fontSize: 13,
-              }}>+ إضافة موظف</button>
+            {/* ── Header ── */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div>
+                <div style={{ color: "#fff", fontWeight: "bold", fontSize: 14, direction: "rtl" }}>👥 دليل الفريق الموحّد</div>
+                <div style={{ color: "#475569", fontSize: 11, direction: "rtl", marginTop: 3 }}>
+                  كل عضو = اسم + دور + 📱 واتساب + ✅ ClickUp ID + رمز دخول
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={importFromClickUp}
+                  disabled={cuImporting}
+                  style={{ background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.4)", borderRadius: 8, color: "#c4b5fd", padding: "5px 12px", cursor: cuImporting ? "not-allowed" : "pointer", fontSize: 12, opacity: cuImporting ? 0.6 : 1 }}
+                >{cuImporting ? "⏳..." : "⬇️ استيراد ClickUp"}</button>
+                <button onClick={addHuman} style={{
+                  background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.5)",
+                  borderRadius: 8, color: "#a5b4fc", padding: "5px 14px", cursor: "pointer", fontSize: 13,
+                }}>+ إضافة يدوي</button>
+              </div>
             </div>
+
+            {cuImportMsg && (
+              <div style={{ color: cuImportMsg.startsWith("✅") ? "#4ade80" : "#f87171", fontSize: 12, marginBottom: 10, direction: "rtl" }}>
+                {cuImportMsg}
+              </div>
+            )}
 
             {humans.length === 0 && (
               <div style={{ color: "#475569", textAlign: "center", padding: "30px 0", fontSize: 13, direction: "rtl" }}>
-                لا يوجد موظفون بعد — اضغط "+ إضافة موظف"
+                لا يوجد موظفون — اضغط "⬇️ استيراد ClickUp" أو "+ إضافة يدوي"
               </div>
             )}
 
@@ -2972,23 +3033,53 @@ export function VaultSettingsDialog() {
                 background: "rgba(255,255,255,0.03)", border: "1px solid rgba(99,102,241,0.2)",
                 borderRadius: 10, padding: "12px 14px", marginBottom: 10,
               }}>
-                {/* الصف الأول: الاسم + الوظيفة */}
+                {/* الصف الأول: الاسم + الوظيفة + حذف */}
                 <div style={{ display: "flex", gap: 8, marginBottom: 8, direction: "rtl" }}>
                   <input
                     placeholder="الاسم"
                     value={m.name}
                     onChange={e => updateHuman(m.id, "name", e.target.value)}
-                    style={{ ...inputStyle, flex: 1, direction: "rtl", textAlign: "right" }}
+                    onKeyDown={e => e.stopPropagation()}
+                    style={{ ...inputStyle, flex: 2, direction: "rtl", textAlign: "right" }}
                   />
                   <input
-                    placeholder="المسمى الوظيفي"
+                    placeholder="المسمى الوظيفي (Backend, Designer...)"
                     value={m.role}
                     onChange={e => updateHuman(m.id, "role", e.target.value)}
-                    style={{ ...inputStyle, flex: 1, direction: "rtl", textAlign: "right" }}
+                    onKeyDown={e => e.stopPropagation()}
+                    style={{ ...inputStyle, flex: 2, direction: "rtl", textAlign: "right" }}
                   />
+                  <button onClick={() => removeHuman(m.id)}
+                    style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, flexShrink: 0, alignSelf: "center" }}>✕</button>
                 </div>
 
-                {/* الصف الثاني: الغرفة + الكود + أزرار */}
+                {/* الصف الثاني: واتساب + ClickUp ID */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ ...labelStyle, fontSize: "10px" }}>📱 واتساب</label>
+                    <input
+                      placeholder="+966501234567"
+                      value={m.phone || ""}
+                      onChange={e => updateHuman(m.id, "phone", e.target.value)}
+                      onKeyDown={e => e.stopPropagation()}
+                      style={{ ...inputStyle, fontSize: "12px", padding: "7px 10px" }}
+                      dir="ltr"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ ...labelStyle, fontSize: "10px" }}>✅ ClickUp User ID</label>
+                    <input
+                      placeholder="12345678"
+                      value={m.clickupUserId || ""}
+                      onChange={e => updateHuman(m.id, "clickupUserId", e.target.value)}
+                      onKeyDown={e => e.stopPropagation()}
+                      style={{ ...inputStyle, fontSize: "12px", padding: "7px 10px" }}
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* الصف الثالث: الغرفة + كود الدخول + مؤشرات */}
                 <div style={{ display: "flex", gap: 8, alignItems: "center", direction: "rtl", flexWrap: "wrap" }}>
                   <select
                     value={m.roomAssignment}
@@ -3000,46 +3091,42 @@ export function VaultSettingsDialog() {
                     ))}
                   </select>
 
-                  {/* كود الدخول */}
                   <div style={{
                     display: "flex", alignItems: "center", gap: 6,
                     background: "rgba(0,0,0,0.3)", border: "1px solid rgba(99,102,241,0.35)",
                     borderRadius: 8, padding: "6px 10px", flexShrink: 0,
                   }}>
-                    <span style={{ color: "#a5b4fc", fontFamily: "monospace", fontSize: 15, letterSpacing: 3, fontWeight: "bold" }}>
-                      {m.joinCode}
-                    </span>
+                    <span style={{ color: "#a5b4fc", fontFamily: "monospace", fontSize: 15, letterSpacing: 3, fontWeight: "bold" }}>{m.joinCode}</span>
                     <button onClick={() => regenCode(m.id)} title="توليد كود جديد"
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 13 }}>🔄</button>
                   </div>
 
-                  {/* نسخ رابط الانضمام */}
                   <button
                     onClick={() => copyJoinLink(m.joinCode)}
-                    title="نسخ رابط الدخول"
                     style={{
                       background: humanCopied === m.joinCode ? "rgba(34,197,94,0.2)" : "rgba(99,102,241,0.15)",
                       border: `1px solid ${humanCopied === m.joinCode ? "rgba(34,197,94,0.5)" : "rgba(99,102,241,0.4)"}`,
                       borderRadius: 7, color: humanCopied === m.joinCode ? "#4ade80" : "#a5b4fc",
                       padding: "5px 10px", cursor: "pointer", fontSize: 12, flexShrink: 0,
                     }}
-                  >
-                    {humanCopied === m.joinCode ? "✓ تم النسخ" : "🔗 رابط الدخول"}
-                  </button>
+                  >{humanCopied === m.joinCode ? "✓ تم النسخ" : "🔗 رابط الدخول"}</button>
 
-                  {/* حذف */}
-                  <button onClick={() => removeHuman(m.id)}
-                    style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, flexShrink: 0 }}>
-                    ✕
-                  </button>
+                  {m.phone && <span title="مرتبط بواتساب" style={{ fontSize: 16, flexShrink: 0 }}>📱</span>}
+                  {m.clickupUserId && <span title={`ClickUp: ${m.clickupUserId}`} style={{ fontSize: 16, flexShrink: 0 }}>✅</span>}
                 </div>
               </div>
             ))}
 
-            <div style={{ color: "#475569", fontSize: 11, direction: "rtl", marginTop: 8, lineHeight: 1.7 }}>
-              💡 كل موظف يحصل على كود دخول فريد · انسخ الرابط وأرسله له ·
-              عند دخوله سيُحوَّل تلقائياً للغرفة المحددة
-            </div>
+            {humans.length > 0 && (
+              <div style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 8, padding: "10px 14px", marginTop: 8 }}>
+                <div style={{ color: "#a5b4fc", fontSize: 11, direction: "rtl", lineHeight: 1.9 }}>
+                  🤖 <strong>ما يقدر يفعله الروبوت:</strong><br/>
+                  • <code style={{ color: "#c4b5fd" }}>get_team_member("أحمد")</code> ← اسم + رقم واتساب + ClickUp ID<br/>
+                  • يعيّن مهمة ClickUp لشخص بالاسم ← يرسل له واتساب تلقائياً<br/>
+                  • أعضاء الفريق 📱 يظهرون تلقائياً في دفتر جهات الاتصال
+                </div>
+              </div>
+            )}
           </>
         ) : activeTab === "workspace" ? (
           <>

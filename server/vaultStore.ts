@@ -373,13 +373,31 @@ export async function getWhatsAppConfig(roomId?: string): Promise<{
   contacts: Array<{ name: string; phone: string; notes?: string }>;
 }> {
   const room = await storage.getRoom(roomId || "default");
+
+  // Manual contacts from phonebook
   let contacts: Array<{ name: string; phone: string; notes?: string }> = [];
   try { contacts = JSON.parse((room as any)?.contactsJson || "[]"); } catch { }
+
+  // Auto-merge: humans with phones come first (team members are the primary source)
+  let humans: any[] = [];
+  try { humans = JSON.parse((room as any)?.humansJson || "[]"); } catch { }
+  const humanContacts = humans
+    .filter((h: any) => h.phone && String(h.phone).trim())
+    .map((h: any) => ({
+      name:  h.name  || "",
+      phone: h.phone || "",
+      notes: h.role  || "",
+    }));
+
+  // Merge: humanContacts first, then manual contacts that aren't already covered
+  const coveredPhones = new Set(humanContacts.map((c: any) => c.phone.replace(/\s/g, "")));
+  const extraContacts = contacts.filter(c => !coveredPhones.has(c.phone.replace(/\s/g, "")));
+
   return {
     instanceId: (room as any)?.ultramsguInstanceId || "",
     token:      (room as any)?.ultramsgunToken     || "",
     phone:      (room as any)?.ultramsguPhone      || "",
-    contacts,
+    contacts:   [...humanContacts, ...extraContacts],
   };
 }
 

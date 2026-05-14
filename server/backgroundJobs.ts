@@ -3,8 +3,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getClickUpSummary, getTeams, getSpaces, getFolders, getLists, getFolderlessLists, getTasks, getTask, getWorkspaceMembers, updateTask, createTask, searchTasksByName, getFullWorkspaceStructure } from "./clickup";
 import { getGitHubSummary, getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const _safeK = (v: string | undefined, fb: string) => (v && v.length > 0) ? v : fb;
+const openai = new OpenAI({ apiKey: _safeK(process.env.OPENAI_API_KEY, "sk-placeholder") });
+const anthropic = new Anthropic({ apiKey: _safeK(process.env.ANTHROPIC_API_KEY, "sk-ant-placeholder") });
 
 export interface BackgroundJob {
   id: string;

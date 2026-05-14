@@ -1,7 +1,7 @@
 import { db } from "./db";
 import {
-  users, rooms, roomModels, roomPlaylist, tierModels,
-  type User, type InsertUser, type Room, type RoomModel, type RoomPlaylistItem,
+  users, rooms, roomModels, roomPlaylist, tierModels, projects, projectPlaybooks,
+  type User, type InsertUser, type Room, type RoomModel, type RoomPlaylistItem, type WorkspaceProject, type ProjectPlaybook,
 } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 
@@ -32,6 +32,24 @@ export interface IStorage {
   // Tier Models
   getTierModels(): Promise<Record<string, string[]>>;
   setTierModels(data: Record<string, string[]>): Promise<void>;
+
+  // Workspace Projects
+  getWorkspaceProjects(roomId: string): Promise<WorkspaceProject[]>;
+  getProjectByListId(roomId: string, clickupListId: string): Promise<WorkspaceProject | undefined>;
+  upsertWorkspaceProject(roomId: string, data: {
+    id?: number; projectKey: string; name: string;
+    githubOwner: string; githubRepo: string;
+    clickupListId: string; vpsPath: string; contextMd: string;
+  }): Promise<WorkspaceProject>;
+  deleteWorkspaceProject(id: number): Promise<void>;
+
+  // Project Playbooks
+  getProjectPlaybooks(roomId: string, projectKey: string): Promise<ProjectPlaybook[]>;
+  upsertPlaybook(roomId: string, projectKey: string, data: {
+    id?: number; name: string; keywords: string; content: string; orderIndex?: number;
+  }): Promise<ProjectPlaybook>;
+  deletePlaybook(id: number): Promise<void>;
+  matchPlaybook(roomId: string, projectKey: string, taskText: string): Promise<ProjectPlaybook | undefined>;
 }
 
 export class DrizzleStorage implements IStorage {
@@ -175,6 +193,86 @@ export class DrizzleStorage implements IStorage {
     if (rows.length > 0) {
       await db.insert(tierModels).values(rows);
     }
+  }
+
+  // ── Workspace Projects ───────────────────────────────────────────────────────
+  async getWorkspaceProjects(roomId: string): Promise<WorkspaceProject[]> {
+    return db.select().from(projects)
+      .where(eq(projects.roomId, roomId))
+      .orderBy(asc(projects.createdAt));
+  }
+
+  async getProjectByListId(roomId: string, clickupListId: string): Promise<WorkspaceProject | undefined> {
+    if (!clickupListId) return undefined;
+    const result = await db.select().from(projects)
+      .where(eq(projects.roomId, roomId));
+    return result.find(p => p.clickupListId === clickupListId);
+  }
+
+  async upsertWorkspaceProject(roomId: string, data: {
+    id?: number; projectKey: string; name: string;
+    githubOwner: string; githubRepo: string;
+    clickupListId: string; vpsPath: string; contextMd: string;
+  }): Promise<WorkspaceProject> {
+    const vals = {
+      roomId,
+      projectKey:    data.projectKey.toUpperCase().slice(0, 6),
+      name:          data.name,
+      githubOwner:   data.githubOwner,
+      githubRepo:    data.githubRepo,
+      clickupListId: data.clickupListId,
+      vpsPath:       data.vpsPath,
+      contextMd:     data.contextMd,
+    };
+    if (data.id) {
+      await db.update(projects).set(vals).where(eq(projects.id, data.id));
+      return (await db.select().from(projects).where(eq(projects.id, data.id)))[0];
+    }
+    const result = await db.insert(projects).values(vals).returning();
+    return result[0];
+  }
+
+  async deleteWorkspaceProject(id: number): Promise<void> {
+    await db.delete(projects).where(eq(projects.id, id));
+  }
+
+  // ── Project Playbooks ────────────────────────────────────────────────────────
+  async getProjectPlaybooks(roomId: string, projectKey: string): Promise<ProjectPlaybook[]> {
+    return db.select().from(projectPlaybooks)
+      .where(eq(projectPlaybooks.roomId, roomId))
+      .then(rows => rows.filter(r => r.projectKey === projectKey)
+        .sort((a, b) => a.orderIndex - b.orderIndex));
+  }
+
+  async upsertPlaybook(roomId: string, projectKey: string, data: {
+    id?: number; name: string; keywords: string; content: string; orderIndex?: number;
+  }): Promise<ProjectPlaybook> {
+    const vals = {
+      roomId, projectKey,
+      name:       data.name,
+      keywords:   data.keywords,
+      content:    data.content,
+      orderIndex: data.orderIndex ?? 0,
+    };
+    if (data.id) {
+      await db.update(projectPlaybooks).set(vals).where(eq(projectPlaybooks.id, data.id));
+      return (await db.select().from(projectPlaybooks).where(eq(projectPlaybooks.id, data.id)))[0];
+    }
+    const result = await db.insert(projectPlaybooks).values(vals).returning();
+    return result[0];
+  }
+
+  async deletePlaybook(id: number): Promise<void> {
+    await db.delete(projectPlaybooks).where(eq(projectPlaybooks.id, id));
+  }
+
+  async matchPlaybook(roomId: string, projectKey: string, taskText: string): Promise<ProjectPlaybook | undefined> {
+    const playbooks = await this.getProjectPlaybooks(roomId, projectKey);
+    const text = taskText.toLowerCase();
+    return playbooks.find(pb => {
+      const keywords = pb.keywords.split(",").map(k => k.trim().toLowerCase()).filter(Boolean);
+      return keywords.some(kw => text.includes(kw));
+    });
   }
 }
 

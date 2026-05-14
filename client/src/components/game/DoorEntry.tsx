@@ -317,22 +317,7 @@ export function DoorEntry({ onUnlock }: DoorEntryProps) {
             {unlocking ? "ENTERING..." : loading ? "WAIT..." : isRegister ? "CREATE" : "ENTER"}
           </button>
 
-          {/* رابط التبديل */}
-          <div
-            onClick={() => { setIsRegister(!isRegister); setError(""); }}
-            style={{
-              color: "#776a50",
-              fontSize: "11px",
-              fontFamily: "monospace",
-              cursor: "pointer",
-              letterSpacing: "1px",
-              transition: "color 0.2s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "#c4a44a"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = "#776a50"; }}
-          >
-            {isRegister ? "HAVE AN ACCOUNT? LOGIN" : "NEW? CREATE ACCOUNT"}
-          </div>
+          {/* رابط التبديل — مخفي (التسجيل عبر الإدارة فقط) */}
         </div>
       </div>
 
