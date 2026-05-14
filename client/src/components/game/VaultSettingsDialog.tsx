@@ -3055,16 +3055,35 @@ export function VaultSettingsDialog() {
 
                 {/* الصف الثاني: واتساب + ClickUp ID */}
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, position: "relative" }}>
                     <label style={{ ...labelStyle, fontSize: "10px" }}>📱 واتساب</label>
                     <input
-                      placeholder="+966501234567"
+                      placeholder="ابحث باسم جهة الاتصال أو أدخل الرقم..."
                       value={m.phone || ""}
                       onChange={e => updateHuman(m.id, "phone", e.target.value)}
                       onKeyDown={e => e.stopPropagation()}
                       style={{ ...inputStyle, fontSize: "12px", padding: "7px 10px" }}
                       dir="ltr"
+                      list={`wa-contacts-${m.id}`}
                     />
+                    <datalist id={`wa-contacts-${m.id}`}>
+                      {waContacts
+                        .filter(c => c.phone)
+                        .map(c => (
+                          <option key={c.id} value={c.phone}>
+                            {c.name}{c.notes ? ` — ${c.notes}` : ""}
+                          </option>
+                        ))
+                      }
+                      {humans
+                        .filter(h => h.phone && h.id !== m.id)
+                        .map(h => (
+                          <option key={h.id} value={h.phone}>
+                            {h.name}{h.role ? ` — ${h.role}` : ""}
+                          </option>
+                        ))
+                      }
+                    </datalist>
                   </div>
                   <div style={{ flex: 1 }}>
                     <label style={{ ...labelStyle, fontSize: "10px" }}>✅ ClickUp User ID</label>
