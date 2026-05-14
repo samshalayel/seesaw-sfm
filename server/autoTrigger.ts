@@ -423,6 +423,8 @@ async function processTaskWithDevin(task: any, log: TriggerLog): Promise<void> {
   const githubRepo   = await getGitHubRepo(triggerRoomId).catch(() => "");
   const clickupToken = await getClickUpToken(triggerRoomId).catch(() => "");
 
+  const githubToken  = await getGitHubToken(triggerRoomId).catch(() => "");
+
   const prompt = `You are an autonomous software engineer. Execute the following ClickUp task fully and autonomously.
 
 ━━━ TASK ━━━
@@ -431,8 +433,15 @@ Description: ${task.description || "(see task name)"}
 ClickUp Task ID: ${task.id}
 
 ━━━ GITHUB REPO ━━━
-https://github.com/${githubOwner}/${githubRepo}
-Work in this repository — make commits and push all changes.
+Owner: ${githubOwner}
+Repo:  ${githubRepo}
+URL:   https://github.com/${githubOwner}/${githubRepo}
+
+IMPORTANT — Use this token for ALL git push/commit operations (do NOT use GitHub App):
+  git remote set-url origin https://x-access-token:${githubToken}@github.com/${githubOwner}/${githubRepo}
+  git config user.email "devin@sillar.ai"
+  git config user.name "Devin"
+Then commit and push normally. Do NOT create a PR — push directly to main/master.
 
 ━━━ WHEN DONE ━━━
 Mark the ClickUp task as completed:
