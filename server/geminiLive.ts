@@ -155,13 +155,34 @@ const TOOLS = [
     },
   },
   {
+    name: "get_whatsapp_contacts",
+    description: "اعرض جهات اتصال الواتساب المحفوظة (الفريق + جهات الاتصال اليدوية) — استخدمها لمعرفة رقم شخص قبل إرسال رسالة",
+    parameters: {
+      type: "object",
+      properties: {
+        search: { type: "string", description: "ابحث باسم أو رقم (اختياري — اتركه فارغاً لعرض الكل)" },
+      },
+    },
+  },
+  {
+    name: "get_team_member",
+    description: "ابحث عن عضو في الفريق بالاسم أو الدور — يعيد رقم واتساب وـ ClickUp ID",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "اسم العضو أو دوره مثال: مصمم، أحمد، backend" },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "send_whatsapp",
-    description: "أرسل رسالة واتساب عبر UltraMsg — استخدمها لإشعار الفريق عند إنجاز مهمة أو حدوث خطأ",
+    description: "أرسل رسالة واتساب — يمكنك كتابة اسم الشخص بدل الرقم وسيتم البحث تلقائياً في جهات الاتصال",
     parameters: {
       type: "object",
       properties: {
         message: { type: "string", description: "نص الرسالة (يدعم السطور الجديدة)" },
-        to: { type: "string", description: "رقم المستلم مع رمز الدولة مثال +9705XXXXXXXX — اتركه فارغاً لاستخدام الرقم الافتراضي" },
+        to: { type: "string", description: "اسم الشخص (مثال: أحمد) أو رقمه الكامل (+966XXXXXXXXX) — اتركه فارغاً للرقم الافتراضي" },
       },
       required: ["message"],
     },
@@ -286,20 +307,74 @@ async function executeTool(
       }
     }
 
+    // ── get_whatsapp_contacts ──────────────────────────────────────────────────
+    if (name === "get_whatsapp_contacts") {
+      const waCfg = await getWhatsAppConfig(roomId);
+      let contacts = waCfg.contacts || [];
+      if (args.search) {
+        const q = args.search.toLowerCase();
+        contacts = contacts.filter((c: any) =>
+          (c.name || "").toLowerCase().includes(q) ||
+          (c.phone || "").includes(q)
+        );
+      }
+      if (!contacts.length) return args.search ? `لا توجد جهة اتصال تطابق "${args.search}"` : "لا توجد جهات اتصال محفوظة";
+      return contacts.map((c: any) =>
+        `👤 ${c.name}${c.notes ? ` (${c.notes})` : ""} — ${c.phone}`
+      ).join("\n");
+    }
+
+    // ── get_team_member ────────────────────────────────────────────────────────
+    if (name === "get_team_member") {
+      const { storage } = await import("./storage");
+      const room = await storage.getRoom(roomId || "default");
+      let humans: any[] = [];
+      try { humans = JSON.parse((room as any)?.humansJson || "[]"); } catch { /* */ }
+      const q = (args.query || "").toLowerCase();
+      const found = humans.filter((h: any) =>
+        (h.name || "").toLowerCase().includes(q) ||
+        (h.role || "").toLowerCase().includes(q)
+      );
+      if (!found.length) return `لا يوجد عضو في الفريق يطابق "${args.query}"`;
+      return found.map((h: any) =>
+        `👤 ${h.name}${h.role ? ` — ${h.role}` : ""}${h.phone ? ` — 📱 ${h.phone}` : ""}${h.clickupUserId ? ` — ClickUp: ${h.clickupUserId}` : ""}`
+      ).join("\n");
+    }
+
+    // ── send_whatsapp ──────────────────────────────────────────────────────────
     if (name === "send_whatsapp") {
       const waCfg = await getWhatsAppConfig(roomId);
       if (!waCfg.instanceId || !waCfg.token) return "❌ WhatsApp غير مُعدّ — أضف إعدادات UltraMsg في الخزنة";
-      const phone = args.to || waCfg.phone;
-      if (!phone) return "❌ لا يوجد رقم هاتف — أضف رقم المستلم أو اضبط الرقم الافتراضي في الخزنة";
+
+      // حل اسم الشخص لرقم هاتف
+      let phone = args.to || "";
+      if (phone && !phone.trim().startsWith("+") && !/^\d{7,}$/.test(phone.trim())) {
+        // يبدو اسماً وليس رقماً — ابحث في جهات الاتصال
+        const q = phone.trim().toLowerCase();
+        const contacts = waCfg.contacts || [];
+        const found = contacts.find((c: any) =>
+          (c.name || "").toLowerCase().includes(q)
+        );
+        if (found) {
+          console.log(`[GeminiLive] 📱 Resolved contact "${args.to}" → ${found.phone}`);
+          phone = found.phone;
+        } else {
+          return `❌ لم أجد جهة اتصال باسم "${args.to}" — استخدم get_whatsapp_contacts لعرض الأسماء المتاحة`;
+        }
+      }
+
+      const finalPhone = phone || waCfg.phone;
+      if (!finalPhone) return "❌ لا يوجد رقم هاتف — أضف رقم المستلم أو اضبط الرقم الافتراضي في الخزنة";
+
       const resp = await fetch(`https://api.ultramsg.com/${waCfg.instanceId}/messages/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ token: waCfg.token, to: phone, body: args.message, priority: "10" }).toString(),
+        body: new URLSearchParams({ token: waCfg.token, to: finalPhone, body: args.message, priority: "10" }).toString(),
       });
       const data: any = await resp.json();
       if (data?.sent === "true" || data?.sent === true) {
-        console.log(`[GeminiLive] 📱 WhatsApp sent to ${phone}`);
-        return `✅ تم إرسال رسالة واتساب إلى ${phone}`;
+        console.log(`[GeminiLive] 📱 WhatsApp sent to ${finalPhone}`);
+        return `✅ تم إرسال رسالة واتساب إلى ${args.to ? `${args.to} (${finalPhone})` : finalPhone}`;
       }
       return `❌ فشل إرسال واتساب: ${JSON.stringify(data)}`;
     }
