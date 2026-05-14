@@ -59,6 +59,7 @@ export function AutoTriggerPanel() {
   const [interval, setIntervalVal] = useState(5);
   const [selectedRobot, setSelectedRobot] = useState("robot-1");
   const [parallelMode, setParallelMode] = useState(false);
+  const [whatsappNotify, setWhatsappNotify] = useState(false);
 
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,7 +74,8 @@ export function AutoTriggerPanel() {
       if (data.watchUserId)   setSelectedUser(data.watchUserId);
       if (data.intervalMinutes) setIntervalVal(data.intervalMinutes);
       if (data.robotId)       setSelectedRobot(data.robotId);
-      if (data.parallelMode !== undefined) setParallelMode(data.parallelMode);
+      if (data.parallelMode    !== undefined) setParallelMode(data.parallelMode);
+      if (data.whatsappNotify  !== undefined) setWhatsappNotify(data.whatsappNotify);
     } catch (_e) {}
   };
 
@@ -141,6 +143,7 @@ export function AutoTriggerPanel() {
           intervalMinutes: interval,
           robotId: selectedRobot,
           parallelMode,
+          whatsappNotify,
         }),
       });
       await fetchConfig();
@@ -367,6 +370,41 @@ export function AutoTriggerPanel() {
                   )}
                 </div>
 
+                {/* ─── مفتاح إشعارات واتساب ─── */}
+                <div style={{
+                  background: whatsappNotify ? "rgba(37,211,102,0.08)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${whatsappNotify ? "#25d36640" : "#333"}`,
+                  borderRadius: "10px", padding: "10px 12px", marginBottom: "14px",
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                }}>
+                  <div>
+                    <div style={{ color: "#ddd", fontSize: "13px", fontWeight: "bold" }}>
+                      💬 إشعارات واتساب
+                    </div>
+                    <div style={{ color: "#888", fontSize: "11px", marginTop: "2px" }}>
+                      {whatsappNotify ? "يُرسل ملخص بعد كل مهمة ✅" : "لا يُرسل إلا لو المهمة طلبت"}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setWhatsappNotify(p => !p)}
+                    style={{
+                      width: "44px", height: "24px", borderRadius: "12px",
+                      border: "none", cursor: "pointer",
+                      background: whatsappNotify ? "#25d366" : "#333",
+                      position: "relative", transition: "background 0.2s",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span style={{
+                      position: "absolute",
+                      top: "3px", left: whatsappNotify ? "22px" : "3px",
+                      width: "18px", height: "18px",
+                      borderRadius: "50%", background: "white",
+                      transition: "left 0.2s",
+                    }} />
+                  </button>
+                </div>
+
                 {/* اختيار الموديل في وضع التسلسل */}
                 {!parallelMode && (
                   <div style={{ marginBottom: "16px" }}>
@@ -438,6 +476,9 @@ export function AutoTriggerPanel() {
                       الروبوت: {config?.robotId === "robot-1" ? "GPT-4o" : config?.robotId === "robot-2" ? "Claude" : config?.robotId === "robot-4" ? "Gemini" : "CLI"}
                     </div>
                   )}
+                  <div style={{ fontSize: "12px", color: config?.whatsappNotify ? "#25d366" : "#666" }}>
+                    💬 واتساب: {config?.whatsappNotify ? "إشعارات تلقائية ✅" : "يدوي فقط"}
+                  </div>
                 </div>
 
                 {/* عرض موديلات الخزنة في وضع التوازي */}

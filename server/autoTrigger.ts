@@ -39,10 +39,11 @@ export interface AutoTriggerConfig {
   watchUserId: number | null;
   watchStatuses: string[];
   intervalMinutes: number;
-  robotId: string;          // للتوافق مع القديم (أول عنصر في robotIds)
-  robotIds: string[];       // قائمة الموديلات المحددة — كل مهمة تُشغَّل على الكل بالتوازي
+  robotId: string;
+  robotIds: string[];
   doneStatus: string;
-  parallelMode: boolean;   // تشغيل مهمة لكل موديل في الخزنة بالتوازي
+  parallelMode: boolean;
+  whatsappNotify: boolean;  // إرسال إشعار واتساب تلقائياً عند إنجاز كل مهمة
 }
 
 export interface TriggerLog {
@@ -67,6 +68,7 @@ const config: AutoTriggerConfig = {
   robotIds: ["robot-1"],
   doneStatus: "complete",
   parallelMode: false,
+  whatsappNotify: false,
 };
 
 // roomId مرتبط بالغرفة التي شغّلت المراقب
@@ -652,9 +654,12 @@ Use BOTH for full CI/CD tasks:
 
 ━━━ WHATSAPP NOTIFICATIONS ━━━
 Tool: send_whatsapp(to, message) — sends WhatsApp via UltraMsg.
-• Use ONLY when the task description explicitly asks you to send a WhatsApp message
-  (e.g. "أرسل إشعار", "أبلغ الفريق", "notify", "send message to ...").
-• Do NOT send WhatsApp automatically after every task — only when instructed.
+${config.whatsappNotify
+  ? `• AUTO-NOTIFY IS ON: After completing or failing each task, ALWAYS send a WhatsApp summary to the default number.
+• Format: "✅ تم إنجاز: <task name>" or "❌ فشل: <task name> — <brief reason>".`
+  : `• Use ONLY when the task description explicitly asks you to notify someone via WhatsApp.
+• Do NOT send WhatsApp automatically — only when the task says "أرسل إشعار", "أبلغ الفريق", or "notify".`
+}
 
 👥 TEAM DIRECTORY: get_team_member(query) — find a team member by name or role.
 • Returns: name, role, phone (WhatsApp), clickupUserId, roomAssignment.
@@ -981,6 +986,7 @@ export function startAutoTrigger(
   roomId?: string,
   parallelMode?: boolean,
   robotIds?: string[],
+  whatsappNotify?: boolean,
 ) {
   config.watchUserId   = userId;
   if (intervalMinutes !== undefined) config.intervalMinutes = intervalMinutes;
@@ -994,7 +1000,8 @@ export function startAutoTrigger(
   if (watchStatuses)    config.watchStatuses  = watchStatuses;
   if (doneStatus)       config.doneStatus     = doneStatus;
   if (roomId)           triggerRoomId         = roomId;
-  if (parallelMode !== undefined) config.parallelMode = parallelMode;
+  if (parallelMode    !== undefined) config.parallelMode    = parallelMode;
+  if (whatsappNotify  !== undefined) config.whatsappNotify  = whatsappNotify;
   config.enabled = true;
 
   if (intervalHandle) {
