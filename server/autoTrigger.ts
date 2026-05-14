@@ -158,7 +158,7 @@ const toolDefinitions = [
   },
   {
     name: "send_whatsapp",
-    description: "Send a WhatsApp message via UltraMsg API. IMPORTANT: If the user referenced a person by name (not a phone number), first call get_whatsapp_contacts to look up their number. Use to notify the team when a task is completed, failed, or needs attention.",
+    description: "Send a WhatsApp message via UltraMsg API. Use ONLY when the task explicitly requests a WhatsApp notification. Do NOT call this automatically after every task.",
     parameters: { type: "object" as const, properties: {
       to:      { type: "string", description: "Recipient phone with country code e.g. +9705XXXXXXXX. Or a contact name — the system will resolve it from the phonebook automatically." },
       message: { type: "string", description: "Message text to send (supports newlines)" },
@@ -652,9 +652,9 @@ Use BOTH for full CI/CD tasks:
 
 ━━━ WHATSAPP NOTIFICATIONS ━━━
 Tool: send_whatsapp(to, message) — sends WhatsApp via UltraMsg.
-• Use AFTER completing each task to notify the team in Arabic.
-• Example: send_whatsapp("✅ تم إنجاز مهمة: ${task.name}")
-• Do NOT skip this step — always notify when a task is done or failed.
+• Use ONLY when the task description explicitly asks you to send a WhatsApp message
+  (e.g. "أرسل إشعار", "أبلغ الفريق", "notify", "send message to ...").
+• Do NOT send WhatsApp automatically after every task — only when instructed.
 
 👥 TEAM DIRECTORY: get_team_member(query) — find a team member by name or role.
 • Returns: name, role, phone (WhatsApp), clickupUserId, roomAssignment.
