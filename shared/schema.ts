@@ -65,6 +65,10 @@ export const rooms = pgTable("rooms", {
   ultramsguPhone:      text("ultramsg_phone").notNull().default(""),
   contactsJson:        text("contacts_json").notNull().default("[]"),
 
+  // Agora — Live Meeting
+  agoraAppId:          text("agora_app_id").notNull().default(""),
+  agoraAppCertificate: text("agora_app_certificate").notNull().default(""),
+
   // Google (Gmail + Calendar + Drive) — OAuth2
   googleClientId:      text("google_client_id").notNull().default(""),
   googleClientSecret:  text("google_client_secret").notNull().default(""),

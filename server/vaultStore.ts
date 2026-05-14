@@ -47,6 +47,7 @@ export interface VaultSettings {
   figma?:       { token: string };
   vps?: { host: string; port: string; user: string; password: string; webRoot: string };
   whatsapp?: { instanceId: string; token: string; phone: string };
+  agora?: { appId: string; appCertificate: string };
   humans:       HumanMember[];
   models:       ModelConfig[];
   hallWorkers:  ModelConfig[];
@@ -104,6 +105,10 @@ function roomToVault(room: Room, models: ModelConfig[]): VaultSettings {
       token:      (room as any).ultramsgunToken     || "",
       phone:      (room as any).ultramsguPhone      || "",
       contacts:   (() => { try { return JSON.parse((room as any).contactsJson || "[]"); } catch { return []; } })(),
+    },
+    agora: {
+      appId:          (room as any).agoraAppId          || "",
+      appCertificate: (room as any).agoraAppCertificate || "",
     },
     google: {
       clientId:        (room as any).googleClientId      || "",
@@ -268,6 +273,10 @@ export async function setVaultSettings(
     if (settings.whatsapp.contacts !== undefined) {
       (update as any).contactsJson = JSON.stringify(settings.whatsapp.contacts);
     }
+  }
+  if (settings.agora) {
+    if (settings.agora.appId          && settings.agora.appId          !== "••••••••") (update as any).agoraAppId          = settings.agora.appId;
+    if (settings.agora.appCertificate && settings.agora.appCertificate !== "••••••••") (update as any).agoraAppCertificate = settings.agora.appCertificate;
   }
   if (settings.google) {
     if (settings.google.clientId)      (update as any).googleClientId      = settings.google.clientId;

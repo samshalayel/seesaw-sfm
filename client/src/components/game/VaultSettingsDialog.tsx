@@ -141,6 +141,11 @@ export function VaultSettingsDialog() {
   const [waImporting, setWaImporting] = useState(false);
   const [waImportResult, setWaImportResult] = useState<string | null>(null);
 
+  // Agora — Live Meeting
+  const [agoraAppId,          setAgoraAppId]          = useState("");
+  const [agoraAppCertificate, setAgoraAppCertificate] = useState("");
+  const [agoraHasAppId,       setAgoraHasAppId]       = useState(false);
+
   // Google
   const [gClientId,      setGClientId]      = useState("");
   const [gClientSecret,  setGClientSecret]  = useState("");
@@ -431,6 +436,11 @@ export function VaultSettingsDialog() {
               })));
             }
           }
+          if (data.agora) {
+            setAgoraAppId(data.agora.appId || "");
+            setAgoraAppCertificate(data.agora.appCertificate || "");
+            setAgoraHasAppId(data.agora.hasAppId || false);
+          }
           if (data.google) {
             setGClientId(data.google.clientId || "");
             setGClientSecret(data.google.hasSecret ? "••••••••" : "");
@@ -517,6 +527,10 @@ export function VaultSettingsDialog() {
           whatsapp: {
             instanceId: waInstanceId, token: waToken, phone: waPhone,
             contacts: waContacts.filter(c => c.name.trim() || c.phone.trim()).map(c => ({ name: c.name, phone: c.phone, notes: c.notes })),
+          },
+          agora: {
+            appId: agoraAppId,
+            appCertificate: agoraAppCertificate,
           },
           google: {
             clientId: gClientId, clientSecret: gClientSecret,
@@ -1252,6 +1266,42 @@ export function VaultSettingsDialog() {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* ── Agora (Live Meeting) ── */}
+            <div style={{ borderTop: "1px solid #ffffff15", paddingTop: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                <span style={{ fontSize: "16px" }}>📹</span>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: "13px" }}>Agora — Live Meeting</span>
+                {agoraHasAppId && <span style={{ fontSize: "10px", background: "#4ade8020", border: "1px solid #4ade8060", color: "#4ade80", borderRadius: "4px", padding: "1px 7px" }}>✓ مُعدّ</span>}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div>
+                  <label style={labelStyle}>App ID</label>
+                  <input
+                    type="text"
+                    value={agoraAppId}
+                    onChange={(e) => setAgoraAppId(e.target.value)}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    style={{ ...inputStyle, fontFamily: "monospace", fontSize: "12px" }}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>App Certificate</label>
+                  <input
+                    type="password"
+                    value={agoraAppCertificate}
+                    onChange={(e) => setAgoraAppCertificate(e.target.value)}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    style={{ ...inputStyle, fontFamily: "monospace", fontSize: "12px" }}
+                  />
+                </div>
+              </div>
+              <p style={{ color: "#ffffff50", fontSize: "11px", margin: "8px 0 0" }}>
+                احصل على المفاتيح من <a href="https://console.agora.io" target="_blank" rel="noreferrer" style={{ color: accentColor }}>console.agora.io</a> ← Projects ← Config
+              </p>
             </div>
           </>
         ) : activeTab === "github" ? (

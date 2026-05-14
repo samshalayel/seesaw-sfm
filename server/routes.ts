@@ -2968,6 +2968,11 @@ export async function registerRoutes(
         hasToken:   !!(settings.whatsapp?.token),
         contacts:   settings.whatsapp?.contacts || [],
       },
+      agora: {
+        appId:          settings.agora?.appId          ? "••••••••" : "",
+        appCertificate: settings.agora?.appCertificate ? "••••••••" : "",
+        hasAppId:       !!(settings.agora?.appId),
+      },
       humans: settings.humans || [],
     });
   });
@@ -3116,8 +3121,8 @@ export async function registerRoutes(
 
   app.post("/api/vault-settings", async (req, res) => {
     const roomId = getRoomId(req);
-    const { company, loginBg, doors, github, clickup, sfm, huggingface, apidog, figma, vps, whatsapp, models, hallWorkers, humans, systemPrompt } = req.body;
-    if (!github && !clickup && !sfm && !huggingface && !apidog && !figma && !vps && !whatsapp && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
+    const { company, loginBg, doors, github, clickup, sfm, huggingface, apidog, figma, vps, whatsapp, agora, models, hallWorkers, humans, systemPrompt } = req.body;
+    if (!github && !clickup && !sfm && !huggingface && !apidog && !figma && !vps && !whatsapp && !agora && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
       return res.status(400).json({ error: "Invalid payload" });
     }
     const current = await getVaultSettings(roomId);
@@ -3193,6 +3198,12 @@ export async function registerRoutes(
         token:      whatsapp.token === "••••••••" ? current.whatsapp?.token : (whatsapp.token ?? ""),
         phone:      whatsapp.phone ?? current.whatsapp?.phone ?? "",
         contacts:   whatsapp.contacts ?? current.whatsapp?.contacts ?? [],
+      };
+    }
+    if (agora) {
+      updatePayload.agora = {
+        appId:          agora.appId          === "••••••••" ? current.agora?.appId          : (agora.appId          ?? ""),
+        appCertificate: agora.appCertificate === "••••••••" ? current.agora?.appCertificate : (agora.appCertificate ?? ""),
       };
     }
     if (models && Array.isArray(models)) {
@@ -3666,8 +3677,10 @@ export async function registerRoutes(
       const { channelName, uid = 0 } = req.body;
       if (!channelName) return res.status(400).json({ error: "channelName مطلوب" });
 
-      const appId          = process.env.AGORA_APP_ID;
-      const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+      const roomId = getRoomId(req);
+      const vaultCfg = await getVaultSettings(roomId);
+      const appId          = vaultCfg.agora?.appId          || process.env.AGORA_APP_ID;
+      const appCertificate = vaultCfg.agora?.appCertificate || process.env.AGORA_APP_CERTIFICATE;
 
       if (!appId || !appCertificate) {
         return res.status(500).json({ error: "AGORA_APP_ID / AGORA_APP_CERTIFICATE غير موجودين في .env" });
@@ -3686,8 +3699,11 @@ export async function registerRoutes(
   });
 
   // ── Agora: App ID فقط (للـ client) ───────────────────────────────────────
-  app.get("/api/agora/app-id", (_req, res) => {
-    res.json({ appId: process.env.AGORA_APP_ID || "" });
+  app.get("/api/agora/app-id", async (req, res) => {
+    const roomId = getRoomId(req);
+    const vaultCfg = await getVaultSettings(roomId);
+    const appId = vaultCfg.agora?.appId || process.env.AGORA_APP_ID || "";
+    res.json({ appId });
   });
 
   // ── Meeting AI state — per room ───────────────────────────────────────────
