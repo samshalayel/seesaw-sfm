@@ -242,17 +242,9 @@ async function executeToolCall(name: string, args: any): Promise<string> {
       case "send_whatsapp": {
         const waCfg = await getWhatsAppConfig(triggerRoomId);
         if (!waCfg.instanceId || !waCfg.token) return "Error: WhatsApp not configured. Add UltraMsg settings in the vault.";
-        let phone = args.to || waCfg.phone;
-        // Auto-resolve contact name → phone number
-        if (phone && !phone.trim().startsWith("+") && !/^\d{7,}$/.test(phone.trim())) {
-          const q = phone.trim().toLowerCase();
-          const found = (waCfg.contacts || []).find((c: any) =>
-            c.name?.toLowerCase().includes(q)
-          );
-          if (found) { phone = found.phone; }
-          else return `Error: Contact "${args.to}" not found in phonebook. Add them in Vault → WhatsApp → جهات الاتصال.`;
-        }
-        if (!phone) return "Error: No recipient phone number. Provide 'to' or set default phone in vault.";
+        // دائماً استخدم الرقم الافتراضي من الخزنة — لا تقبل أرقاماً أخرى
+        const phone = waCfg.phone;
+        if (!phone) return "Error: No default phone number set in vault (Vault → WhatsApp → رقم الإشعارات الافتراضي).";
         const url = `https://api.ultramsg.com/${waCfg.instanceId}/messages/chat`;
         const resp = await fetch(url, {
           method: "POST",
@@ -571,7 +563,9 @@ async function processTaskWithAI(task: any, log: TriggerLog, opts: ProcessOpts =
 
   let githubUser = "";
   try { githubUser = await getAuthenticatedUser(triggerRoomId); } catch (_e) {}
-  const vpsCfg = await getVpsConfig(triggerRoomId).catch(() => ({ host: "", port: 22, user: "root", password: "", webRoot: "/var/www" }));
+  const vpsCfg    = await getVpsConfig(triggerRoomId).catch(() => ({ host: "", port: 22, user: "root", password: "", webRoot: "/var/www" }));
+  const waCfg     = await getWhatsAppConfig(triggerRoomId).catch(() => ({ instanceId: "", token: "", phone: "", contacts: [] }));
+  const waDefault = waCfg.phone || "";
 
   // Context section يُضاف لأعلى كل system prompt
   const projectContextSection = wsProject?.contextMd
@@ -654,23 +648,20 @@ Use BOTH for full CI/CD tasks:
 
 ━━━ WHATSAPP NOTIFICATIONS ━━━
 Tool: send_whatsapp(to, message) — sends WhatsApp via UltraMsg.
+${waDefault ? `DEFAULT NUMBER (FIXED): ${waDefault}` : "DEFAULT NUMBER: not configured"}
 ${config.whatsappNotify
-  ? `• AUTO-NOTIFY IS ON: After completing or failing each task, ALWAYS send a WhatsApp summary to the default number.
-• Format: "✅ تم إنجاز: <task name>" or "❌ فشل: <task name> — <brief reason>".`
-  : `• Use ONLY when the task description explicitly asks you to notify someone via WhatsApp.
-• Do NOT send WhatsApp automatically — only when the task says "أرسل إشعار", "أبلغ الفريق", or "notify".`
+  ? `• AUTO-NOTIFY IS ON: After completing or failing each task, ALWAYS call:
+  send_whatsapp("${waDefault}", "✅ تم إنجاز: <task name>")   — on success
+  send_whatsapp("${waDefault}", "❌ فشل: <task name> — <brief reason>")   — on failure
+• ALWAYS use the fixed default number above. Do NOT use any other number.`
+  : `• Use ONLY when the task explicitly says "أرسل إشعار", "أبلغ الفريق", or "notify".
+• When sending, ALWAYS use the fixed default number: ${waDefault || "(not set)"}.
+• Do NOT look up contacts or use any other number — always send to the default only.`
 }
 
 👥 TEAM DIRECTORY: get_team_member(query) — find a team member by name or role.
-• Returns: name, role, phone (WhatsApp), clickupUserId, roomAssignment.
-• Use BEFORE assigning a task or sending a WhatsApp message to a named person.
-• Example: get_team_member("أحمد") → { name: "أحمد", clickupUserId: "12345", phone: "+966..." }
-
-📒 PHONEBOOK: get_whatsapp_contacts() — returns all contacts (team + manual).
-• If the task says "أرسل لـ أحمد" or refers to a person by name:
-  1. Call get_team_member("أحمد") to get their phone + ClickUp ID.
-  2. Then call send_whatsapp(phone, message).
-• You can pass a name directly to send_whatsapp — it will auto-resolve from the phonebook.
+• Use ONLY for ClickUp task assignment (to get clickupUserId).
+• Do NOT use their phone number for WhatsApp — always send to the default number above.
 
 RULES:
 - NEVER use get_github_repos — target repo is already given above.
