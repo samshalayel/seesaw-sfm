@@ -89,7 +89,7 @@ function roomToVault(room: Room, models: ModelConfig[]): VaultSettings {
     },
     github:  { token: room.githubToken, owner: room.githubOwner, repo: room.githubRepo },
     clickup: { token: room.clickupToken, listId: room.clickupListId, assignee: room.clickupAssignee },
-    sfm:         { apiKey: room.sfmApiKey || "" },
+    sfm:         { apiKey: room.sfmApiKey || "", project: (room as any).sfmProject || "" },
     huggingface: { token: (room as any).huggingfaceToken || "" },
     apidog:      { token: (room as any).apidogToken || "" },
     figma:       { token: (room as any).figmaToken  || "" },
@@ -233,9 +233,11 @@ export async function setVaultSettings(
     update.clickupAssignee = settings.clickup.assignee || "";
   }
   if (settings.sfm) {
-    // لا تحفظ القيمة المُقنَّعة "••••••••" — فقط المفتاح الحقيقي
     if (settings.sfm.apiKey && settings.sfm.apiKey !== "••••••••") {
       update.sfmApiKey = settings.sfm.apiKey;
+    }
+    if (settings.sfm.project !== undefined) {
+      (update as any).sfmProject = settings.sfm.project;
     }
   }
   if (settings.huggingface) {

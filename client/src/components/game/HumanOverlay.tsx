@@ -16,7 +16,8 @@ export function HumanOverlay() {
       .then((r) => r.json())
       .then((data) => {
         if (data.apiKey && data.apiKey !== "••••••••") {
-          setIframeUrl(`${BASE_URL}/auth/api-login?key=${encodeURIComponent(data.apiKey)}`);
+          const projectParam = data.project ? `&project=${encodeURIComponent(data.project)}` : "";
+          setIframeUrl(`${BASE_URL}/auth/api-login?key=${encodeURIComponent(data.apiKey)}${projectParam}`);
         } else {
           setIframeUrl(""); // لا يوجد مفتاح
         }

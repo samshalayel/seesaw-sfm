@@ -42,6 +42,7 @@ export const rooms = pgTable("rooms", {
 
   // Sillar SFM
   sfmApiKey:       text("sfm_api_key").notNull().default(""),
+  sfmProject:      text("sfm_project").notNull().default(""),
 
   // HuggingFace (embeddings / RAG)
   huggingfaceToken: text("huggingface_token").notNull().default(""),
