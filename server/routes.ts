@@ -2224,7 +2224,12 @@ export async function registerRoutes(
             });
           } catch (claudeError: any) {
             console.error("[Claude] API error:", claudeError.message);
-            res.write(`data: ${JSON.stringify({ content: `خطأ في الاتصال بكلود: ${claudeError.message}` })}\n\n`);
+            const ceMsg = claudeError.message || "";
+            const isCtx = ceMsg.includes("context_length_exceeded") || ceMsg.includes("maximum context length") || ceMsg.includes("context window") || ceMsg.includes("too many tokens") || ceMsg.includes("prompt is too long");
+            const errContent = isCtx
+              ? `\n⚠️ الرسالة أو تاريخ المحادثة أطول من نافذة السياق للموديل. امسح المحادثة وأعد الإرسال.`
+              : `\n⚠️ خطأ في الاتصال بكلود: ${ceMsg.substring(0, 150)}`;
+            res.write(`data: ${JSON.stringify({ content: errContent })}\n\n`);
             break;
           }
 
@@ -2334,10 +2339,12 @@ export async function registerRoutes(
         let gptTotalInput = 0;
         let gptTotalOutput = 0;
 
-        // OpenRouter/ZhipuAI: trim history to last 8 messages to save input tokens
-        const trimmedHistory = (provider === "OpenRouter" || provider === "ZhipuAI")
-          ? chatHistory.slice(-8)
-          : chatHistory;
+        // Trim history to avoid context window overflow:
+        // OpenRouter/ZhipuAI: last 8 | GPT: last 20 | others: last 15
+        const historyLimit = provider === "OpenRouter" || provider === "ZhipuAI" ? 8
+          : provider === "OpenAI" ? 20
+          : 15;
+        const trimmedHistory = chatHistory.slice(-historyLimit);
 
         let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
           ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
@@ -2387,6 +2394,8 @@ export async function registerRoutes(
             let userMsg: string;
             if (errMsg.includes("余额不足") || errMsg.includes("请充值") || errMsg.includes("资源包")) {
               userMsg = `\n⚠️ رصيد ZhipuAI غير كافٍ. يرجى شحن الحساب على open.bigmodel.cn أو استخدام نموذج مجاني (glm-4.7-flash أو glm-4.5-flash).`;
+            } else if (errMsg.includes("context_length_exceeded") || errMsg.includes("maximum context length") || errMsg.includes("context window") || errMsg.includes("too many tokens")) {
+              userMsg = `\n⚠️ الرسالة أو تاريخ المحادثة أطول من نافذة السياق للموديل. جرب: مسح المحادثة (زر ×) ثم إعادة الإرسال، أو اختر موديلاً بسياق أكبر.`;
             } else if (errMsg.includes("429") || errMsg.includes("Rate limit") || errMsg.includes("tokens per min")) {
               userMsg = `\n⚠️ تجاوزت حد الطلبات. انتظر قليلاً وحاول مرة ثانية.`;
             } else if (errMsg.includes("401") || errMsg.includes("Incorrect API key") || errMsg.includes("invalid_api_key")) {
