@@ -72,82 +72,102 @@ PD = اكتشاف المشكلة فقط. لا تصمم، لا تقترح، لا 
   "position": {"x":120,"y":-600}, "width":2000, "height":1800,
   "style": {"width":2000,"height":1800,"zIndex":-1} }
 
-═══ كل نود تالي يحتوي: parentId + extent + provenance[] ═══
+═══ كل نود تالي يحتوي: parentId + extent + data{} ═══
+
+⚠️ قاعدة هيكلية أساسية — label + description + points + provenance لازم داخل "data": {}:
+{
+  "id": "pd-summary-1",
+  "type": "pd-summary-node",
+  "data": {
+    "label": "Problem Summary",
+    "description": "قصة الألم الأصلية — بدون تعديل",
+    "points": ["...", "..."],
+    "provenance": [{"point_index":0, "source":"stakeholder_statement", "confidence":0.95, "derived_from":[], "validation_status":"human_pending", "reasoning":"مباشرة من القصة"}]
+  },
+  "position": {"x":40, "y":80},
+  "width": 320, "height": 280,
+  "parentId": "group-pd-YYYYMMDD-project_name",
+  "extent": "parent"
+}
+❗ بدون "data": {} wrapper = المنصة ما تقرأ النود
+❗ بدون "label" = النود يظهر بدون عنوان
+❗ بدون parentId + extent = النود يطلع برا المجموعة
 
 ─── الصف 1 (y=80) ───
 
-█ 1 — Problem Summary: id="pd-summary-1", type="pd-summary-node"
-  description="قصة الألم الأصلية — بدون تعديل", points=[3-5 نقاط]
-  provenance: source=stakeholder_statement, confidence≥0.90, derived_from=[]
+█ 1 — Problem Summary: id="pd-summary-1", type="pd-summary-node", label="Problem Summary"
+  data.description="قصة الألم الأصلية — بدون تعديل", data.points=[3-5 نقاط]
+  data.provenance: source=stakeholder_statement, confidence≥0.90, derived_from=[]
   position={x:40,y:80}, width=320, height=280
 
-█ 2 — Actors: id="pd-actors-2", type="pd-actors-node"
-  description="الأطراف المتأثرة — من يعاني", points=["الطرف — ماذا يعاني", 3-6]
-  provenance: source=stakeholder_statement, derived_from=["pd-summary-1"]
+█ 2 — Actors: id="pd-actors-2", type="pd-actors-node", label="Actors"
+  data.description="الأطراف المتأثرة — من يعاني", data.points=["الطرف — ماذا يعاني", 3-6]
+  data.provenance: source=stakeholder_statement, derived_from=["pd-summary-1"]
   position={x:420,y:80}, width=300, height=240
 
-█ 3 — Goals: id="pd-goals-3", type="pd-goals-node"
-  description="ماذا نريد تحقيقه — بدون كيف", points=[3-5 أهداف غير تقنية]
-  provenance: source=ai_inference, derived_from=["pd-pain-4"]
+█ 3 — Goals: id="pd-goals-3", type="pd-goals-node", label="Goals"
+  data.description="ماذا نريد تحقيقه — بدون كيف", data.points=[3-5 أهداف غير تقنية]
+  data.provenance: source=ai_inference, derived_from=["pd-pain-4"]
   position={x:760,y:80}, width=320, height=260
 
-█ 4 — Pain Points: id="pd-pain-4", type="pd-pain-points-node"
-  description="مشاكل صريحة من القصة — بكلمات المستخدم", points=[3-6]
-  provenance: source=stakeholder_statement, confidence≥0.90, derived_from=[]
+█ 4 — Pain Points: id="pd-pain-4", type="pd-pain-points-node", label="Pain Points"
+  data.description="مشاكل صريحة من القصة — بكلمات المستخدم", data.points=[3-6]
+  data.provenance: source=stakeholder_statement, confidence≥0.90, derived_from=[]
   position={x:1120,y:80}, width=320, height=260
 
 ─── الصف 2 (y=420) ───
 
-█ 5 — Constraints: id="pd-constraints-5", type="pd-constraints-node"
-  description="حدود صلبة — ما لا نغيره", points=[3-5]
+█ 5 — Constraints: id="pd-constraints-5", type="pd-constraints-node", label="Constraints"
+  data.description="حدود صلبة — ما لا نغيره", data.points=[3-5]
   ⚠️ ممنوع كلمة "نظام" هنا. بدل "تحسين النظام" → "تحسين الوضع"
-  provenance: source=domain_knowledge, confidence=0.75
+  data.provenance: source=domain_knowledge, confidence=0.75
   position={x:40,y:420}, width=320, height=260
 
-█ 6 — Scope: id="pd-scope-6", type="pd-scope-node"
-  description="desired outcomes + ما نؤجل"
-  ⚠️ بدون points[] — فقط inScope[] + outScope[]
-  ⚠️ يستخدم scope_provenance[] بدل provenance[]
+█ 6 — Scope: id="pd-scope-6", type="pd-scope-node", label="Scope"
+  data.description="desired outcomes + ما نؤجل"
+  ⚠️ data فيها inScope[] + outScope[] (بدون points[])
+  ⚠️ data فيها scope_provenance[] بدل provenance[]
   scope_provenance كل عنصر: { scope_type:"inScope"|"outScope", item_index, point_index, source, confidence, derived_from, validation_status, reasoning }
   ⚠️ ممنوع: "توفير نظام" / "بناء نظام" / "واجهة مستخدم"
   ✅ "تقليل الأخطاء" / "شفافية الجدول" / "منع تداخل المواعيد"
   position={x:420,y:420}, width=320, height=300
 
-█ 7 — Success Signals: id="pd-signals-7", type="pd-signals-node"
-  description="مؤشرات سلوكية — بدون نسب مخترعة", points=[3-5]
+█ 7 — Success Signals: id="pd-signals-7", type="pd-signals-node", label="Success Signals"
+  data.description="مؤشرات سلوكية — بدون نسب مخترعة", data.points=[3-5]
   ✅ "لا مريض ينتظر بسبب خطأ" ❌ "يحجزون أونلاين"
-  provenance: source=ai_inference, derived_from=["pd-goals-3","pd-pain-4"]
+  data.provenance: source=ai_inference, derived_from=["pd-goals-3","pd-pain-4"]
   position={x:760,y:420}, width=320, height=260
 
-█ 8 — Unknowns: id="pd-unknowns-8", type="pd-unknowns-node"
-  description="أسئلة معلوماتية + حدودية", points=[4-6, على الأقل 1 boundary]
+█ 8 — Unknowns: id="pd-unknowns-8", type="pd-unknowns-node", label="Unknowns & Clarifying Questions"
+  data.description="أسئلة معلوماتية + حدودية", data.points=[4-6, على الأقل 1 boundary]
   كل سؤال يبدأ بـ [معلوماتي] أو [حدودي]
-  provenance: source=ai_inference, derived_from=["pd-summary-1"]
+  data.provenance: source=ai_inference, derived_from=["pd-summary-1"]
   position={x:1120,y:420}, width=320, height=260
 
 ─── الصف 3 (y=780) ───
 
-█ 9 — Problem Insight: id="pd-insight-9", type="pd-summary-node"
-  description="الجذر العميق — بلغة المشكلة لا المعمارية"
+█ 9 — Problem Insight: id="pd-insight-9", type="pd-summary-node", label="Problem Insight"
+  data.description="الجذر العميق — بلغة المشكلة لا المعمارية"
   ❌ "غياب نظام مركزي" ✅ "لا مصدر موحد للحقيقة التشغيلية"
-  provenance: source=ai_inference, derived_from=["pd-summary-1","pd-pain-4"] (ممنوع فارغ)
+  data.provenance: source=ai_inference, derived_from=["pd-summary-1","pd-pain-4"] (ممنوع فارغ)
   position={x:40,y:780}, width=320, height=220
 
-█ 10 — Desired Outcome: id="pd-outcome-10", type="pd-goals-node"
-  description="العالم بعد حل المشكلة — بدون ذكر الحل"
-  provenance: source=ai_inference, derived_from=["pd-goals-3","pd-pain-4"]
+█ 10 — Desired Outcome: id="pd-outcome-10", type="pd-goals-node", label="Desired Outcome"
+  data.description="العالم بعد حل المشكلة — بدون ذكر الحل"
+  data.provenance: source=ai_inference, derived_from=["pd-goals-3","pd-pain-4"]
   position={x:420,y:780}, width=320, height=220
 
-█ 11 — Strategic Direction: id="pd-direction-11", type="pd-summary-node"
-  description="إلى أين (WHERE) — بدون كيف (HOW)"
-  provenance: source=ai_inference, derived_from=["pd-insight-9","pd-outcome-10"] (ممنوع فارغ)
+█ 11 — Strategic Direction: id="pd-direction-11", type="pd-summary-node", label="Strategic Direction"
+  data.description="إلى أين (WHERE) — بدون كيف (HOW)"
+  data.provenance: source=ai_inference, derived_from=["pd-insight-9","pd-outcome-10"] (ممنوع فارغ)
   position={x:760,y:780}, width=320, height=220
 
 ─── Gate (y=1100, بدون provenance) ───
 
-█ 12 — PD Lock Gate: id="gate-problem-12", type="gate-problem"
-  gateStatus="pending_human_review", decisionAuthority="Human Only"
-  gateChecklist=[11 بند: summary, actors, goals, pain, scope, signals, unknowns, no solution smuggling, boundary questions, insight root cause, provenance present]
+█ 12 — PD Lock Gate: id="gate-problem-12", type="gate-problem", label="PD Lock Gate ⏳"
+  data.gateStatus="pending_human_review", data.decisionAuthority="Human Only"
+  data.gateChecklist=[11 بند: summary, actors, goals, pain, scope, signals, unknowns, no solution smuggling, boundary questions, insight root cause, provenance present]
+  data.description="لا يمكن الانتقال إلى S0 قبل اعتماد المشكلة من الإنسان"
   position={x:350,y:1100}, width=700, height=300
 
 ══════════════════════════════════════════════════
