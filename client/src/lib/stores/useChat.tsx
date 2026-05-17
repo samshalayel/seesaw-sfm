@@ -209,7 +209,8 @@ export const useChat = create<ChatState>((set, get) => ({
       const currentMessages = get().messages;
       const history = currentMessages
         .filter(m => m.content.trim().length > 0)
-        .map(m => ({ role: m.role, content: m.content }));
+        .map(m => ({ role: m.role, content: m.content }))
+        .slice(-30);
 
       const response = await apiFetch("/api/chat", {
         method: "POST",
@@ -292,6 +293,16 @@ export const useChat = create<ChatState>((set, get) => ({
           }
         }
       }
+
+      // إذا انتهى الـ stream والرد لا يزال فارغاً، أظهر رسالة خطأ واضحة
+      set((state) => {
+        const msgs = [...state.messages];
+        const last = msgs[msgs.length - 1];
+        if (last && last.role === "assistant" && !last.content.trim()) {
+          msgs[msgs.length - 1] = { ...last, content: "⚠️ لم يصل رد من الموديل. تحقق من مفتاح API أو جرب موديلاً آخر." };
+        }
+        return { messages: msgs };
+      });
 
       const finalMessages = get().messages;
       if (activeRobotId) {
