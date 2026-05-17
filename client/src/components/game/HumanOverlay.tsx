@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useGame } from "@/lib/stores/useGame";
 
-const BASE_URL = "https://seesaw.sillar.us";
+const BASE_URL = "https://seesaw.sillar.uk";
 
 export function HumanOverlay() {
   const isOpen = useGame((s) => s.humanOverlayOpen);

@@ -1837,7 +1837,7 @@ export function VaultSettingsDialog() {
             <div style={{ background: "rgba(34,211,238,0.07)", border: "1px solid rgba(34,211,238,0.2)", borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
               <div style={{ color: "#22d3ee", fontWeight: "bold", marginBottom: 6, fontSize: 13 }}>🌐 ربط Sillar SFM</div>
               <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6 }}>
-                أدخل الـ API key الخاص بك من منصة <strong style={{ color: "#e2e8f0" }}>seesaw.sillar.us</strong> حتى يفتح الموقع تلقائياً بدون تسجيل دخول يدوي لما تضغط F عند الموظف البشري.
+                أدخل الـ API key الخاص بك من منصة <strong style={{ color: "#e2e8f0" }}>seesaw.sillar.uk</strong> حتى يفتح الموقع تلقائياً بدون تسجيل دخول يدوي لما تضغط F عند الموظف البشري.
               </div>
             </div>
 
@@ -1898,9 +1898,9 @@ export function VaultSettingsDialog() {
               للحصول على API key:{" "}
               <span
                 style={{ color: "#22d3ee", cursor: "pointer", textDecoration: "underline" }}
-                onClick={() => window.open("https://seesaw.sillar.us/settings/api", "_blank")}
+                onClick={() => window.open("https://seesaw.sillar.uk/settings/api", "_blank")}
               >
-                seesaw.sillar.us/settings/api ↗
+                seesaw.sillar.uk/settings/api ↗
               </span>
             </div>
 

@@ -3030,13 +3030,13 @@ export async function registerRoutes(
       return res.status(400).json({ valid: false, error: "لا يوجد مفتاح" });
     }
     try {
-      const resp = await fetch("https://seesaw.sillar.us/api/auth/api-key", {
+      const resp = await fetch("https://seesaw.sillar.uk/api/auth/api-key", {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
       const data = await resp.json() as any;
       res.json({ valid: !!data.valid, key_name: data.key_name || "" });
     } catch (e: any) {
-      res.status(502).json({ valid: false, error: "تعذّر الوصول لـ seesaw.sillar.us" });
+      res.status(502).json({ valid: false, error: "تعذّر الوصول لـ seesaw.sillar.uk" });
     }
   });
 
