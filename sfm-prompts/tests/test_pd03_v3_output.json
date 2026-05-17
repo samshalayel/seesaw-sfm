@@ -1,0 +1,261 @@
+{
+  "nodes": [
+    {
+      "id": "group-pd-20260517-dental_clinic",
+      "type": "group",
+      "data": { "label": "PD — Problem Discovery" },
+      "position": { "x": 120, "y": -600 },
+      "width": 2000,
+      "height": 1800,
+      "style": { "width": 2000, "height": 1800, "zIndex": -1 }
+    },
+    {
+      "id": "pd-summary-1",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Problem Summary",
+        "description": "قصة الألم الأصلية كما أعطاها المستخدم — بدون تعديل أو اختصار أو تفسير",
+        "points": [
+          "عيادة أسنان صغيرة تواجه مشكلة في تنظيم مواعيد المرضى.",
+          "يحدث تداخل في المواعيد مما يؤدي إلى إزعاج المرضى وفقدان الزبائن.",
+          "الموظفة تعتمد على الورق مما يسبب أخطاء في تسجيل المواعيد."
+        ]
+      },
+      "position": { "x": 40, "y": 80 },
+      "width": 320,
+      "height": 280,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-actors-2",
+      "type": "pd-actors-node",
+      "data": {
+        "label": "Actors",
+        "description": "الأطراف المتأثرة بالمشكلة — من يعاني ومن يتأثر",
+        "points": [
+          "الأطباء — يشعرون بالإحباط بسبب الفوضى في مواعيد المرضى.",
+          "الموظفة — تعاني من الضغط بسبب عدم تنظيم الحجوزات.",
+          "المرضى — يعانون من انتظار طويل وزيادة الأخطاء في المواعيد."
+        ]
+      },
+      "position": { "x": 420, "y": 80 },
+      "width": 300,
+      "height": 240,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-goals-3",
+      "type": "pd-goals-node",
+      "data": {
+        "label": "Goals",
+        "description": "ماذا نريد تحقيقه — بدون ذكر كيف. أهداف غير تقنية.",
+        "points": [
+          "تقليل الاعتماد على التنسيق اليدوي للحجوزات.",
+          "منع تداخل المواعيد.",
+          "زيادة رضا المرضى من خلال تنظيم أفضل للمواعيد."
+        ]
+      },
+      "position": { "x": 760, "y": 80 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-pain-4",
+      "type": "pd-pain-points-node",
+      "data": {
+        "label": "Pain Points",
+        "description": "مشاكل محددة وصريحة من القصة — بكلمات المستخدم",
+        "points": [
+          "تداخل المواعيد بين مرضى مختلفين.",
+          "الأخطاء في تسجيل الحجوزات تؤدي إلى إرباك.",
+          "الوقت الذي يضيع على الأطباء في محاولة معرفة من يأتي."
+        ]
+      },
+      "position": { "x": 1120, "y": 80 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-constraints-5",
+      "type": "pd-constraints-node",
+      "data": {
+        "label": "Constraints",
+        "description": "ما لا يجب لمسه أو تجاوزه — حدود صلبة",
+        "points": [
+          "لا يمكن تغيير عدد الأطباء أو الموظفين.",
+          "يجب الالتزام بالمواعيد المحددة للمرضى.",
+          "عدم إزعاج المرضى فيما يتعلق بالخصوصية."
+        ]
+      },
+      "position": { "x": 40, "y": 420 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-scope-6",
+      "type": "pd-scope-node",
+      "data": {
+        "label": "Scope",
+        "description": "نطاق المشكلة — ماذا نريد تحقيقه (desired outcomes) وماذا نؤجل",
+        "inScope": [
+          "تقليل الجهد المبذول للحصول على معلومات دقيقة حول المواعيد.",
+          "تحسين تجربة المرضى من خلال تخفيض فترات الانتظار.",
+          "وضوح رؤية للجدول الزمني لكل طبيب."
+        ],
+        "outScope": [
+          "تطوير أي تطبيقات تقنية معقدة.",
+          "تغيير أسلوب العمل للموظفة.",
+          "إعادة هيكلة الفريق الطبي."
+        ]
+      },
+      "position": { "x": 420, "y": 420 },
+      "width": 320,
+      "height": 300,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-signals-7",
+      "type": "pd-signals-node",
+      "data": {
+        "label": "Success Signals",
+        "description": "مؤشرات نجاح سلوكية وقابلة للملاحظة — بدون نسب مخترعة",
+        "points": [
+          "انخفاض عدد المشاكل المرتبطة بالمواعيد.",
+          "تحسن في ردود فعل المرضى حول تجربة الحجز.",
+          "الأطباء لا يضيعون وقتهم في معرفة مواعيد المرضى."
+        ]
+      },
+      "position": { "x": 760, "y": 420 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-unknowns-8",
+      "type": "pd-unknowns-node",
+      "data": {
+        "label": "Unknowns & Clarifying Questions",
+        "description": "أسئلة مفتوحة: معلوماتية + حدودية (boundary enforcement)",
+        "points": [
+          "[معلوماتي] كم عدد المواعيد التي يتم حجزها يومياً؟",
+          "[حدودي] هل هناك فترات معينة تكثر فيها المشاكل أكثر من غيرها؟",
+          "[حدودي] ما أسوأ شيء قد يحدث إذا لم يتم حل هذه المشكلة؟",
+          "هل هناك ممارسات سابقة حاولت حل المشكلة، وما سبب فشلها؟"
+        ]
+      },
+      "position": { "x": 1120, "y": 420 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-insight-9",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Problem Insight",
+        "description": "الجذر العميق: لماذا المشكلة موجودة أصلاً — بلغة المشكلة لا لغة المعمارية",
+        "points": [
+          "لا يوجد تنظيم مركزي لموعد المرضى، مما يؤدي إلى الفوضى.",
+          "تعتمد العيادة على أسلوب قديم في تسجيل المواعيد.",
+          "يمكن أن تؤدي السياسات غير الواضحة إلى إرباك."
+        ]
+      },
+      "position": { "x": 40, "y": 780 },
+      "width": 320,
+      "height": 220,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-outcome-10",
+      "type": "pd-goals-node",
+      "data": {
+        "label": "Desired Outcome",
+        "description": "كيف يبدو العالم بعد حل المشكلة — بدون ذكر الحل نفسه",
+        "points": [
+          "سير العمل سيكون منظماً وآلياً مما يقلل الأخطاء.",
+          "المرضى يشعرون بالرضا ويستقبلهم الموظفون بأمان.",
+          "يكون لدى الأطباء رؤية واضحة لمعدل الملاحظات وسهولة الوصول إليها."
+        ]
+      },
+      "position": { "x": 420, "y": 780 },
+      "width": 320,
+      "height": 220,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-direction-11",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Strategic Direction",
+        "description": "إلى أين نتجه (WHERE) — بدون تحديد كيف (HOW)",
+        "points": [
+          "تحسين تنظيم المعلومات حول المواعيد.",
+          "زيادة الشفافية في الترتيبات.",
+          "مركزية البيانات لتسهيل الوصول إليها."
+        ]
+      },
+      "position": { "x": 760, "y": 780 },
+      "width": 320,
+      "height": 220,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "gate-problem-12",
+      "type": "gate-problem",
+      "data": {
+        "label": "PD Lock Gate ⏳",
+        "description": "لا يمكن الانتقال إلى S0 قبل اعتماد المشكلة من الإنسان وإغلاق كل الأسئلة المفتوحة",
+        "gateStatus": "pending_human_review",
+        "decisionAuthority": "Human Only",
+        "gateChecklist": [
+          "Summary يعكس قصة الألم الأصلية بدون تحريف",
+          "الأطراف محددة بأسمائهم وأدوارهم",
+          "الأهداف غير تقنية ولا تصف حلولاً",
+          "نقاط الألم صريحة ومن وجهة نظر المستخدم",
+          "inScope يصف desired outcomes لا ميزات تقنية",
+          "outScope يوضح ما يُؤجل صراحة",
+          "مؤشرات النجاح سلوكية وبدون أرقام مخترعة",
+          "لا يوجد تهريب حلول في أي نود",
+          "Unknowns تتضمن أسئلة حدودية (boundary)",
+          "Insight يصف جذر المشكلة لا غياب حل",
+          "كل الأسئلة المفتوحة تحتاج إجابة من الإنسان"
+        ]
+      },
+      "position": { "x": 350, "y": 1100 },
+      "width": 700,
+      "height": 300,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    }
+  ],
+  "edges": [
+    { "id": "e-1-2", "type": "custom", "source": "pd-summary-1", "target": "pd-actors-2" },
+    { "id": "e-2-3", "type": "custom", "source": "pd-actors-2", "target": "pd-goals-3" },
+    { "id": "e-3-4", "type": "custom", "source": "pd-goals-3", "target": "pd-pain-4" },
+    { "id": "e-5-6", "type": "custom", "source": "pd-constraints-5", "target": "pd-scope-6" },
+    { "id": "e-6-7", "type": "custom", "source": "pd-scope-6", "target": "pd-signals-7" },
+    { "id": "e-7-8", "type": "custom", "source": "pd-signals-7", "target": "pd-unknowns-8" },
+    { "id": "e-4-9", "type": "custom", "source": "pd-pain-4", "target": "pd-insight-9" },
+    { "id": "e-8-10", "type": "custom", "source": "pd-unknowns-8", "target": "pd-outcome-10" },
+    { "id": "e-9-11", "type": "custom", "source": "pd-insight-9", "target": "pd-direction-11" },
+    { "id": "e-10-11", "type": "custom", "source": "pd-outcome-10", "target": "pd-direction-11" },
+    { "id": "e-11-gate", "type": "custom", "source": "pd-direction-11", "target": "gate-problem-12" },
+    { "id": "e-insight-gate", "type": "custom", "source": "pd-insight-9", "target": "gate-problem-12" }
+  ],
+  "evidence": [],
+  "exportedAt": "2026-05-17T10:02:45.000Z"
+}
