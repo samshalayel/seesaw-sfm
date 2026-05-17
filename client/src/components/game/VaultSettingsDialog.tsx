@@ -111,6 +111,7 @@ export function VaultSettingsDialog() {
 
   const [sfmApiKey, setSfmApiKey] = useState("");
   const [sfmHasKey, setSfmHasKey] = useState(false);
+  const [sfmProject, setSfmProject] = useState("");
   const [hfToken, setHfToken] = useState("");
   const [apidogToken, setApidogToken] = useState("");
   const [figmaToken, setFigmaToken] = useState("");
@@ -412,6 +413,7 @@ export function VaultSettingsDialog() {
           if (data.sfm) {
             setSfmApiKey(data.sfm.apiKey || "");
             setSfmHasKey(data.sfm.hasKey || false);
+            setSfmProject(data.sfm.project || "");
           }
           if (data.huggingface) {
             setHfToken(data.huggingface.token || "");
@@ -519,7 +521,7 @@ export function VaultSettingsDialog() {
           loginBg,
           github: { token: githubToken, owner: githubOwner, repo: githubRepo },
           clickup: { token: clickupToken, listId: clickupListId, assignee: clickupAssignee },
-          sfm: { apiKey: sfmApiKey },
+          sfm: { apiKey: sfmApiKey, project: sfmProject },
           huggingface: { token: hfToken },
           apidog: { token: apidogToken },
           figma:  { token: figmaToken },
@@ -1855,6 +1857,22 @@ export function VaultSettingsDialog() {
               {sfmHasKey && sfmApiKey === "••••••••" && (
                 <div style={{ color: "#4ade80", fontSize: 11, marginTop: 4 }}>✓ مفتاح محفوظ — اتركه كما هو للإبقاء عليه</div>
               )}
+            </div>
+
+            {/* اسم المشروع */}
+            <div style={{ marginTop: 12 }}>
+              <label style={labelStyle}>اسم المشروع في SFM</label>
+              <input
+                type="text"
+                value={sfmProject}
+                onChange={(e) => setSfmProject(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="مثال: sillar-app أو My Project"
+                style={inputStyle}
+              />
+              <div style={{ color: "#64748b", fontSize: 11, marginTop: 4 }}>
+                لما تضغط F عند الموظف البشري يفتح هذا المشروع مباشرة
+              </div>
             </div>
 
             {/* زر اختبار */}

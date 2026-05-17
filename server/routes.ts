@@ -2955,6 +2955,7 @@ export async function registerRoutes(
       sfm: {
         apiKey: settings.sfm?.apiKey ? "••••••••" : "",
         hasKey: !!(settings.sfm?.apiKey),
+        project: settings.sfm?.project || "",
       },
       huggingface: {
         token: settings.huggingface?.token ? "••••••••" : "",
@@ -3020,7 +3021,7 @@ export async function registerRoutes(
   app.get("/api/sfm-key", async (req, res) => {
     const roomId = getRoomId(req);
     const settings = await getVaultSettings(roomId);
-    res.json({ apiKey: settings.sfm?.apiKey || "" });
+    res.json({ apiKey: settings.sfm?.apiKey || "", project: settings.sfm?.project || "" });
   });
 
   // اختبار اتصال Sillar SFM عبر السيرفر (يتجنب CORS)
@@ -3177,6 +3178,7 @@ export async function registerRoutes(
     if (sfm) {
       updatePayload.sfm = {
         apiKey: sfm.apiKey === "••••••••" ? current.sfm.apiKey : (sfm.apiKey || ""),
+        project: sfm.project ?? current.sfm?.project ?? "",
       };
     }
     if (huggingface) {
