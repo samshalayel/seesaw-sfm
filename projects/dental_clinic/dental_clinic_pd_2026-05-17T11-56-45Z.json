@@ -1,0 +1,584 @@
+{
+  "nodes": [
+    {
+      "id": "group-pd-20260517-dental_clinic",
+      "type": "group",
+      "data": { "label": "PD — Problem Discovery" },
+      "position": { "x": 120, "y": -600 },
+      "width": 2000,
+      "height": 1800,
+      "style": { "width": 2000, "height": 1800, "zIndex": -1 }
+    },
+    {
+      "id": "pd-summary-1",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Problem Summary",
+        "description": "قصة الألم الأصلية كما أعطاها المستخدم — بدون تعديل أو اختصار أو تفسير",
+        "points": [
+          "عيادة أسنان صغيرة فيها 3 أطباء.",
+          "المرضى يتصلون بالتلفون لحجز مواعيد.",
+          "الموظفة تكتب الحجوزات على ورقة.",
+          "كل يوم يصير لخبطة في المواعيد والأخطاء.",
+          "الدكتور يضيع وقته يسأل عن المواعيد." 
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من قصة الألم"
+          },
+          {
+            "point_index": 1,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من قصة الألم"
+          },
+          {
+            "point_index": 2,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من قصة الألم"
+          },
+          {
+            "point_index": 3,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من قصة الألم"
+          },
+          {
+            "point_index": 4,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من قصة الألم"
+          }
+        ]
+      },
+      "position": { "x": 40, "y": 80 },
+      "width": 320,
+      "height": 280,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-actors-2",
+      "type": "pd-actors-node",
+      "data": {
+        "label": "Actors",
+        "description": "الأطراف المتأثرة بالمشكلة — من يعاني ومن يتأثر",
+        "points": [
+          "المرضى — يعانون بسبب تداخل المواعيد والأخطاء.",
+          "الأطباء — يضيعون وقتهم في الاستفسار عن المواعيد.",
+          "الموظفة — تتعرض للضغط بسبب الأخطاء المتكررة."
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "stakeholder_statement",
+            "confidence": 0.90,
+            "derived_from": ["pd-summary-1"],
+            "validation_status": "human_pending",
+            "reasoning": "مذكور في القصة"
+          },
+          {
+            "point_index": 1,
+            "source": "stakeholder_statement",
+            "confidence": 0.90,
+            "derived_from": ["pd-summary-1"],
+            "validation_status": "human_pending",
+            "reasoning": "مذكور في القصة"
+          },
+          {
+            "point_index": 2,
+            "source": "stakeholder_statement",
+            "confidence": 0.90,
+            "derived_from": ["pd-summary-1"],
+            "validation_status": "human_pending",
+            "reasoning": "مذكور في القصة"
+          }
+        ]
+      },
+      "position": { "x": 420, "y": 80 },
+      "width": 300,
+      "height": 240,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-goals-3",
+      "type": "pd-goals-node",
+      "data": {
+        "label": "Goals",
+        "description": "ماذا نريد تحقيقه — بدون ذكر كيف. أهداف غير تقنية.",
+        "points": [
+          "توفير وضوح في المواعيد لجميع الأطراف.",
+          "تقليل الأخطاء في حجز المواعيد.",
+          "تحسين تجربة المرضى وتجنب إزعاجهم." 
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.85,
+            "derived_from": ["pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس نقطة الألم"
+          },
+          {
+            "point_index": 1,
+            "source": "ai_inference",
+            "confidence": 0.85,
+            "derived_from": ["pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس نقطة الألم"
+          },
+          {
+            "point_index": 2,
+            "source": "ai_inference",
+            "confidence": 0.85,
+            "derived_from": ["pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس نقطة الألم"
+          }
+        ]
+      },
+      "position": { "x": 760, "y": 80 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-pain-4",
+      "type": "pd-pain-points-node",
+      "data": {
+        "label": "Pain Points",
+        "description": "مشاكل محددة وصريحة من القصة — بكلمات المستخدم",
+        "points": [
+          "حدوث تداخل في المواعيد.",
+          "تسجيل مواعيد خاطئة.",
+          "فقدان الأوقات بسبب الاستفسارات المتكررة.",
+          "استياء المرضى بسبب الأخطاء."
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من القصة"
+          },
+          {
+            "point_index": 1,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من القصة"
+          },
+          {
+            "point_index": 2,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من القصة"
+          },
+          {
+            "point_index": 3,
+            "source": "stakeholder_statement",
+            "confidence": 0.95,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "مباشرة من القصة"
+          }
+        ]
+      },
+      "position": { "x": 1120, "y": 80 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-constraints-5",
+      "type": "pd-constraints-node",
+      "data": {
+        "label": "Constraints",
+        "description": "ما لا يجب لمسه أو تجاوزه — حدود صلبة",
+        "points": [
+          "الميزانية محدودة لتحسين الوضع."
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "domain_knowledge",
+            "confidence": 0.75,
+            "derived_from": [],
+            "validation_status": "human_pending",
+            "reasoning": "معرفة عامة عن المجال"
+          }
+        ]
+      },
+      "position": { "x": 40, "y": 420 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-scope-6",
+      "type": "pd-scope-node",
+      "data": {
+        "label": "Scope",
+        "description": "نطاق المشكلة — ماذا نريد تحقيقه (desired outcomes) وماذا نؤجل",
+        "inScope": [
+          "تقليل تداخل المواعيد.",
+          "توفير رؤية واضحة للجميع حيال المواعيد.",
+          "تحسين التواصل بين الأطراف."
+        ],
+        "outScope": [
+          "تطوير تقنية حديثة للحجز.",
+          "توفير برنامج خاص لإدارة المواعيد.",
+          "تدريب الموظفة على استخدام أدوات جديدة."
+        ],
+        "scope_provenance": [
+          {
+            "scope_type": "inScope",
+            "item_index": 0,
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.85,
+            "derived_from": ["pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "مشتق من الأهداف ونقاط الألم"
+          },
+          {
+            "scope_type": "inScope",
+            "item_index": 1,
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.85,
+            "derived_from": ["pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "مشتق من الأهداف ونقاط الألم"
+          },
+          {
+            "scope_type": "inScope",
+            "item_index": 2,
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.85,
+            "derived_from": ["pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "مشتق من الأهداف ونقاط الألم"
+          },
+          {
+            "scope_type": "outScope",
+            "item_index": 0,
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.78,
+            "derived_from": ["pd-constraints-5"],
+            "validation_status": "human_pending",
+            "reasoning": "قرار تأجيل"
+          },
+          {
+            "scope_type": "outScope",
+            "item_index": 1,
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.78,
+            "derived_from": ["pd-constraints-5"],
+            "validation_status": "human_pending",
+            "reasoning": "قرار تأجيل"
+          },
+          {
+            "scope_type": "outScope",
+            "item_index": 2,
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.78,
+            "derived_from": ["pd-constraints-5"],
+            "validation_status": "human_pending",
+            "reasoning": "قرار تأجيل"
+          }
+        ]
+      },
+      "position": { "x": 420, "y": 420 },
+      "width": 320,
+      "height": 300,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-signals-7",
+      "type": "pd-signals-node",
+      "data": {
+        "label": "Success Signals",
+        "description": "مؤشرات نجاح سلوكية وقابلة للملاحظة — بدون نسب مخترعة",
+        "points": [
+          "لا تداخل في المواعيد.",
+          "لا أخطاء في تسجيل المواعيد.",
+          "زيادة رضا المرضى عن الخدمة."
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.80,
+            "derived_from": ["pd-goals-3", "pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس نقطة الألم"
+          },
+          {
+            "point_index": 1,
+            "source": "ai_inference",
+            "confidence": 0.80,
+            "derived_from": ["pd-goals-3", "pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس نقطة الألم"
+          },
+          {
+            "point_index": 2,
+            "source": "ai_inference",
+            "confidence": 0.80,
+            "derived_from": ["pd-goals-3", "pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس نقطة الألم"
+          }
+        ]
+      },
+      "position": { "x": 760, "y": 420 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-unknowns-8",
+      "type": "pd-unknowns-node",
+      "data": {
+        "label": "Unknowns & Clarifying Questions",
+        "description": "أسئلة مفتوحة: معلوماتية + حدودية (boundary enforcement)",
+        "points": [
+          "كم عدد المرضى الذين يتصلون يوميًا لحجز المواعيد؟",
+          "هل هناك أوقات محددة يحدث فيها تداخل أكبر؟",
+          "ما أسوأ شيء يحدث لو لم نحل هذه المشكلة؟",
+          "هل كانت هناك محاولات سابقة لحل المشكلة؟"
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.70,
+            "derived_from": ["pd-summary-1"],
+            "validation_status": "human_pending",
+            "reasoning": "سؤال لتحديد حجم المشكلة"
+          },
+          {
+            "point_index": 1,
+            "source": "ai_inference",
+            "confidence": 0.70,
+            "derived_from": ["pd-summary-1"],
+            "validation_status": "human_pending",
+            "reasoning": "سؤال لتحديد حجم المشكلة"
+          },
+          {
+            "point_index": 2,
+            "source": "ai_inference",
+            "confidence": 0.70,
+            "derived_from": ["pd-summary-1"],
+            "validation_status": "human_pending",
+            "reasoning": "سؤال لتحديد حجم المشكلة"
+          },
+          {
+            "point_index": 3,
+            "source": "ai_inference",
+            "confidence": 0.70,
+            "derived_from": ["pd-summary-1"],
+            "validation_status": "human_pending",
+            "reasoning": "سؤال لتحديد حجم المشكلة"
+          }
+        ]
+      },
+      "position": { "x": 1120, "y": 420 },
+      "width": 320,
+      "height": 260,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-insight-9",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Problem Insight",
+        "description": "الجذر العميق: لماذا المشكلة موجودة أصلاً — بلغة المشكلة لا لغة المعمارية",
+        "points": [
+          "لا يوجد مصدر موحد للمعلومات حول المواعيد.",
+          "التواصل غير الفعال بين الأطباء والموظفة.",
+          "كل طرف يعتمد على بيانات متفرقة."
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.82,
+            "derived_from": ["pd-summary-1", "pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "استنتاج: تداخل المواعيد + أخطاء الكتابة = لا مصدر موحد"
+          },
+          {
+            "point_index": 1,
+            "source": "ai_inference",
+            "confidence": 0.75,
+            "derived_from": ["pd-actors-2", "pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "استنتاج: الأطباء يسألون + الموظفة تعاني = تواصل غير فعال"
+          },
+          {
+            "point_index": 2,
+            "source": "ai_inference",
+            "confidence": 0.80,
+            "derived_from": ["pd-summary-1", "pd-actors-2"],
+            "validation_status": "human_pending",
+            "reasoning": "استنتاج: 3 أطراف بمعلومات مختلفة = بيانات متفرقة"
+          }
+        ]
+      },
+      "position": { "x": 40, "y": 780 },
+      "width": 320,
+      "height": 220,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-outcome-10",
+      "type": "pd-goals-node",
+      "data": {
+        "label": "Desired Outcome",
+        "description": "كيف يبدو العالم بعد حل المشكلة — بدون ذكر الحل نفسه",
+        "points": [
+          "المواعيد مرتبة وواضحة لكل الأطراف.",
+          "المرضى راضون عن الخدمة ولا يحدث تداخل.",
+          "تحسين العلاقات بين الأطباء والموظفة." 
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.82,
+            "derived_from": ["pd-goals-3", "pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس الألم الرئيسي"
+          },
+          {
+            "point_index": 1,
+            "source": "ai_inference",
+            "confidence": 0.82,
+            "derived_from": ["pd-goals-3", "pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس الألم الرئيسي"
+          },
+          {
+            "point_index": 2,
+            "source": "ai_inference",
+            "confidence": 0.82,
+            "derived_from": ["pd-goals-3", "pd-pain-4"],
+            "validation_status": "human_pending",
+            "reasoning": "عكس الألم الرئيسي"
+          }
+        ]
+      },
+      "position": { "x": 420, "y": 780 },
+      "width": 320,
+      "height": 220,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "pd-direction-11",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Strategic Direction",
+        "description": "إلى أين نتجه (WHERE) — بدون تحديد كيف (HOW)",
+        "points": [
+          "توحيد المعلومات حول المواعيد.",
+          "تحسين الشفافية بين الأطراف."
+        ],
+        "provenance": [
+          {
+            "point_index": 0,
+            "source": "ai_inference",
+            "confidence": 0.80,
+            "derived_from": ["pd-insight-9", "pd-outcome-10"],
+            "validation_status": "human_pending",
+            "reasoning": "استنتاج من الجذر والنتيجة المطلوبة"
+          }
+        ]
+      },
+      "position": { "x": 760, "y": 780 },
+      "width": 320,
+      "height": 220,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "gate-problem-12",
+      "type": "gate-problem",
+      "data": {
+        "label": "PD Lock Gate ⏳",
+        "description": "لا يمكن الانتقال إلى S0 قبل اعتماد المشكلة من الإنسان وإغلاق كل الأسئلة المفتوحة",
+        "gateStatus": "pending_human_review",
+        "decisionAuthority": "Human Only",
+        "gateChecklist": [
+          "Summary يعكس قصة الألم الأصلية بدون تحريف",
+          "الأطراف محددة بأسمائهم وأدوارهم",
+          "الأهداف غير تقنية ولا تصف حلولاً",
+          "نقاط الألم صريحة ومن وجهة نظر المستخدم",
+          "inScope يصف desired outcomes لا ميزات تقنية",
+          "outScope يوضح ما يُؤجل صراحة",
+          "مؤشرات النجاح سلوكية وبدون أرقام مخترعة",
+          "لا يوجد تهريب حلول في أي نود",
+          "Unknowns تتضمن أسئلة حدودية (boundary)",
+          "Insight يصف جذر المشكلة لا غياب حل",
+          "كل الأسئلة المفتوحة تحتاج إجابة من الإنسان",
+          "كل نود فيه provenance[] مع عدد يساوي points[]"
+        ]
+      },
+      "position": { "x": 350, "y": 1100 },
+      "width": 700,
+      "height": 300,
+      "parentId": "group-pd-20260517-dental_clinic",
+      "extent": "parent"
+    }
+  ],
+  "edges": [
+    {"id": "e-1-2", "type": "custom", "source": "pd-summary-1", "target": "pd-actors-2"},
+    {"id": "e-2-3", "type": "custom", "source": "pd-actors-2", "target": "pd-goals-3"},
+    {"id": "e-3-4", "type": "custom", "source": "pd-goals-3", "target": "pd-pain-4"},
+    {"id": "e-5-6", "type": "custom", "source": "pd-constraints-5", "target": "pd-scope-6"},
+    {"id": "e-6-7", "type": "custom", "source": "pd-scope-6", "target": "pd-signals-7"},
+    {"id": "e-7-8", "type": "custom", "source": "pd-signals-7", "target": "pd-unknowns-8"},
+    {"id": "e-4-9", "type": "custom", "source": "pd-pain-4", "target": "pd-insight-9"},
+    {"id": "e-8-10", "type": "custom", "source": "pd-unknowns-8", "target": "pd-outcome-10"},
+    {"id": "e-9-11", "type": "custom", "source": "pd-insight-9", "target": "pd-direction-11"},
+    {"id": "e-10-11", "type": "custom", "source": "pd-outcome-10", "target": "pd-direction-11"},
+    {"id": "e-11-gate", "type": "custom", "source": "pd-direction-11", "target": "gate-problem-12"},
+    {"id": "e-insight-gate", "type": "custom", "source": "pd-insight-9", "target": "gate-problem-12"}
+  ],
+  "evidence": [],
+  "exportedAt": "2026-05-17T11:56:45.000Z"
+}
