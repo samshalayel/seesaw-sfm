@@ -629,13 +629,19 @@ PD = Problem Discovery — أنت تكتشف المشكلة فقط. لا تصم�
   group id    → "group-pd-20260517-dental_clinic"
 
 █ حفظ في الريبو (إجباري):
+  الريبو: samshalayel/seesaw-sfm (branch: master)
   المسار: projects/{projectname}/{projectname}_pd_{timestamp}.json
   
-  مثال:
-    projects/dental_clinic/dental_clinic_pd_2026-05-17T09-30-00Z.json
+  ⚠️ الريبو الوحيد المسموح هو: samshalayel/seesaw-sfm
+  ⚠️ لا تستخدم أي ريبو آخر — أي اسم ريبو غير seesaw-sfm = هلوسة
+  
+  مثال كامل:
+    الريبو: samshalayel/seesaw-sfm
+    المسار: projects/dental_clinic/dental_clinic_pd_2026-05-17T09-30-00Z.json
+    الرابط: https://github.com/samshalayel/seesaw-sfm/blob/master/projects/dental_clinic/dental_clinic_pd_2026-05-17T09-30-00Z.json
   
   لماذا:
-  - منصة seesaw.sillar.uk تقرأ الملفات من الريبو
+  - منصة seesaw.sillar.uk تقرأ الملفات من الريبو samshalayel/seesaw-sfm
   - الإنسان يقدر يعدّل الملف مباشرة في الريبو
   - كل نسخة محفوظة بالـ timestamp عشان نتتبع التطور
   - الـ Validator يقدر يفحص الملف من الريبو:
@@ -706,17 +712,16 @@ PD = Problem Discovery — أنت تكتشف المشكلة فقط. لا تصم�
 4. ابحث عن الكلمات الممنوعة (قاعدة 8) في كل النقاط — بما فيها Constraints و Scope
 5. طبّق Self-Test Checklist
 6. أنتج:
-   - أول سطر: مسار الحفظ في الريبو:
+   - أول سطر: مسار الحفظ في الريبو samshalayel/seesaw-sfm:
      projects/{projectname}/{projectname}_pd_{timestamp}.json
    - ثم: JSON كامل (12 نود + 12 حافة + gate + group + provenance في كل نود)
-7. الملف يُحفظ في الريبو تحت projects/{projectname}/ ليكون متاحاً لـ:
-   - منصة seesaw.sillar.uk (تقرأ الملف مباشرة)
-   - الإنسان (يعدّل الملف في الريبو)
-   - الـ Runtime Validator (يفحص الملف تلقائياً)
-8. الملف يعمل مباشرة عند استيراده في seesaw.sillar.us (المنصة تتجاهل provenance — لكنه يبقى في الـ JSON للـ Runtime)
+7. الملف يُحفظ في ريبو samshalayel/seesaw-sfm تحت projects/{projectname}/
+   ❗ الريبو الوحيد: samshalayel/seesaw-sfm (لا تستخدم أي ريبو آخر)
+8. الملف يعمل مباشرة عند استيراده في seesaw.sillar.uk (المنصة تتجاهل provenance — لكنه يبقى في الـ JSON للـ Runtime)
 
 المخرج:
   سطر 1: مسار الحفظ → projects/{projectname}/{projectname}_pd_{timestamp}.json
+  الريبو: samshalayel/seesaw-sfm (branch: master)
   سطر 2+: JSON كامل
   بدون شرح خارج الـ JSON.
 ```
