@@ -2412,53 +2412,26 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 	// ── روبوتات ومكاتب في وضع gallery ────────────────────────────────────────
 	if (mode === 'gallery') {
 		const stations = [
-			// مكتب وحيد: وسط الغرفة تقريباً، ظهره للجدار الشمالي (الفاصل)
-			// بعيد عن الباب الشمالي — واجهته تستقبل الداخل من الجنوب
-			{ x: 0, z: -halfL * 0.25, ry: Math.PI, color: 0x4fc3f7 },
+			// مكتب 1: أمام الجدار الفاصل (الجنوب) — روبوت ظهره للجنوب يواجه الفاصل
+			{ x: 0, z:  halfL * 0.15, ry: 0,        color: 0x4fc3f7 },
+			// مكتب 2: خلف الجدار الفاصل (الشمال) — روبوت ظهره للشمال يواجه الفاصل
+			{ x: 0, z: -halfL * 0.15, ry: Math.PI,   color: 0x00ff88 },
 		]
 		for (const st of stations) {
-			// نضع المكتب والروبوت في group واحد حتى يتشاركا نفس المحور المحلي
 			const station = new THREE.Group()
 			station.position.set(st.x, 0, st.z)
 			station.rotation.y = st.ry
 			group.add(station)
 
-			// المكتب في مركز الـ station
 			const desk = buildOfficeDesk()
 			station.add(desk)
 
-			// الروبوت: خلف المكتب (local +z = باتجاه الجدار)
-			// ويدور 180° ليواجه الشاشة (ظهره للجدار، وجهه للغرفة)
 			const robot = buildOfficeRobot(st.color)
 			robot.position.set(0, 0, 0.72)
 			robot.rotation.y = Math.PI
 			station.add(robot)
 		}
-
-		// ── كنبة واحدة: الجدار الشرقي جنوب الجدار الفاصل ────────────────────────
-		const couchWalls = [
-			{ px: halfW - 1.2, pz: halfL * 0.4, ry: Math.PI / 2 }, // شرق جنوبي — بعيدة عن الجدار الوسطي
-		]
-		_gltfLoader.load(
-			'/models/couch.glb',
-			(gltf) => {
-				for (const w of couchWalls) {
-					const couch = gltf.scene.clone()
-					couch.scale.set(1.1, 1.1, 1.1)
-					couch.position.set(w.px, 0, w.pz)
-					couch.rotation.y = w.ry
-					couch.traverse((child) => {
-						if (child.isMesh) {
-							child.castShadow    = true
-							child.receiveShadow = true
-						}
-					})
-					group.add(couch)
-				}
-			},
-			undefined,
-			(err) => console.warn('[museum] couch load failed', err)
-		)
+		// لا كنبة
 	}
 
 	return {
