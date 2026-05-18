@@ -2408,17 +2408,22 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 			{ x: -halfW * 0.5, z:  halfL * 0.38, ry:  Math.PI * 0.82, color: 0x00ff88 },
 		]
 		for (const st of stations) {
-			// المكتب — في نفس مكانه من Room.tsx
-			const desk = buildOfficeDesk()
-			desk.position.set(st.x, 0, st.z)
-			desk.rotation.y = st.ry
-			group.add(desk)
+			// نضع المكتب والروبوت في group واحد حتى يتشاركا نفس المحور المحلي
+			const station = new THREE.Group()
+			station.position.set(st.x, 0, st.z)
+			station.rotation.y = st.ry
+			group.add(station)
 
-			// الروبوت — نفس x,z لكن y=0 (الكرسي يرفعه)
+			// المكتب في مركز الـ station
+			const desk = buildOfficeDesk()
+			station.add(desk)
+
+			// الروبوت: خلف المكتب بـ 0.72 وحدة (local +z)
+			// ويدور 180° ليواجه الشاشة (التي عند local -z)
 			const robot = buildOfficeRobot(st.color)
-			robot.position.set(st.x, 0, st.z)
-			robot.rotation.y = st.ry
-			group.add(robot)
+			robot.position.set(0, 0, 0.72)
+			robot.rotation.y = Math.PI
+			station.add(robot)
 		}
 	}
 
@@ -2580,7 +2585,7 @@ function buildOfficerChair(color = 0x4fc3f7) {
 // ── روبوت مكتبي (ترجمة Robot.tsx) ─────────────────────────────────────────────
 function buildOfficeRobot(color = 0x4fc3f7) {
 	const g = new THREE.Group()
-	g.scale.set(0.62, 0.62, 0.62)  // حجم مناسب للمتحف
+	g.scale.set(0.82, 0.82, 0.82)  // حجم مناسب للمتحف
 
 	const hex = color
 	const matBody   = new THREE.MeshStandardMaterial({ color: 0x2e2e3a, roughness: 0.25, metalness: 0.75 })
