@@ -2412,12 +2412,9 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 	// ── روبوتات ومكاتب في وضع gallery ────────────────────────────────────────
 	if (mode === 'gallery') {
 		const stations = [
-			// مكتب 1: الجدار الشمالي — الواجهة أمام الداخل من الجنوب
-			// ry = π  ←  local+Z يشير للشمال، الروبوت ظهره للجدار الشمالي ووجهه للجنوب
-			{ x: 0,            z: -halfL + 1.4, ry: Math.PI,      color: 0x4fc3f7 },
-			// مكتب 2: الجدار الشرقي — مستقيم (ليس مائلاً)
-			// ry = π/2 ← local+Z يشير للشرق، الروبوت ظهره للجدار الشرقي ووجهه للغرب
-			{ x:  halfW - 1.4, z: 0,            ry: Math.PI / 2,  color: 0x00ff88 },
+			// مكتب وحيد: الجدار الشمالي (الجدار الفاصل) — مركز الغرفة
+			// ظهر المكتب ملاصق للجدار الشمالي، واجهته تستقبل الداخل من الجنوب
+			{ x: 0, z: -halfL + 1.4, ry: Math.PI, color: 0x4fc3f7 },
 		]
 		for (const st of stations) {
 			// نضع المكتب والروبوت في group واحد حتى يتشاركا نفس المحور المحلي
@@ -2438,9 +2435,9 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 			station.add(robot)
 		}
 
-		// ── كنبة واحدة فقط (الجدار الجنوبي — منطقة الاستقبال) ─────────────────
+		// ── كنبة واحدة: الجدار الشرقي (مكان المكتب الثاني سابقاً) ──────────────
 		const couchWalls = [
-			{ px: halfW * 0.45, pz: halfL - 1.2, ry: Math.PI }, // جنوب شرق
+			{ px: halfW - 1.2, pz: 0, ry: -Math.PI / 2 }, // شرق — تواجه الغرب
 		]
 		_gltfLoader.load(
 			'/models/couch.glb',
