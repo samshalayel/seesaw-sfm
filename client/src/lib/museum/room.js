@@ -1,9 +1,17 @@
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
 import { clamp, roundTo, configureGalleryTexture, isSupportedImageUrl } from './helper.js'
 import { buildLobbyRoom } from './room/lobby.js'
 import { addDoor as addDoorToRoom } from './room/doors.js'
 import { addSlot as addSlotToRoom } from './room/slots.js'
 import { getSharedRoomMaterialTextures, labelFromImageUrl, makePlaqueTexture } from './room/textures.js'
+
+// ── GLTFLoader مشترك مع DRACOLoader ─────────────────────────────────────────
+const _dracoLoader = new DRACOLoader()
+_dracoLoader.setDecoderPath('/draco/')
+const _gltfLoader = new GLTFLoader()
+_gltfLoader.setDRACOLoader(_dracoLoader)
 
 export function buildRoom({ width, length, height, wallThickness = 0.2, mode = 'gallery', lobby = {}, gallery = {} }) {
 	const group = new THREE.Group()
@@ -2425,6 +2433,24 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 			robot.rotation.y = Math.PI
 			station.add(robot)
 		}
+
+		// ── كنبة في زاوية الغرفة ────────────────────────────────────────────────
+		_gltfLoader.load('/models/couch.glb', (gltf) => {
+			const couch = gltf.scene
+			// ضبط الحجم والموضع في زاوية خلفية
+			couch.scale.set(1.1, 1.1, 1.1)
+			couch.position.set(-halfW + 2.2, 0, -halfL + 2.0)
+			couch.rotation.y = Math.PI * 0.25
+			couch.traverse((child) => {
+				if (child.isMesh) {
+					child.castShadow    = true
+					child.receiveShadow = true
+				}
+			})
+			group.add(couch)
+		}, undefined, (err) => {
+			console.warn('[museum] couch load failed', err)
+		})
 	}
 
 	return {
