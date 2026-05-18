@@ -7,9 +7,9 @@ import { addDoor as addDoorToRoom } from './room/doors.js'
 import { addSlot as addSlotToRoom } from './room/slots.js'
 import { getSharedRoomMaterialTextures, labelFromImageUrl, makePlaqueTexture } from './room/textures.js'
 
-// ── GLTFLoader مشترك مع DRACOLoader ─────────────────────────────────────────
+// ── GLTFLoader مشترك مع DRACOLoader (CDN) ────────────────────────────────────
 const _dracoLoader = new DRACOLoader()
-_dracoLoader.setDecoderPath('/draco/')
+_dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/')
 const _gltfLoader = new GLTFLoader()
 _gltfLoader.setDRACOLoader(_dracoLoader)
 
@@ -2435,22 +2435,35 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 		}
 
 		// ── كنبة في زاوية الغرفة ────────────────────────────────────────────────
-		_gltfLoader.load('/models/couch.glb', (gltf) => {
-			const couch = gltf.scene
-			// ضبط الحجم والموضع في زاوية خلفية
-			couch.scale.set(1.1, 1.1, 1.1)
-			couch.position.set(-halfW + 2.2, 0, -halfL + 2.0)
-			couch.rotation.y = Math.PI * 0.25
-			couch.traverse((child) => {
-				if (child.isMesh) {
-					child.castShadow    = true
-					child.receiveShadow = true
-				}
-			})
-			group.add(couch)
-		}, undefined, (err) => {
-			console.warn('[museum] couch load failed', err)
-		})
+		console.log('[museum] loading couch.glb...')
+		_gltfLoader.load(
+			'/models/couch.glb',
+			(gltf) => {
+				console.log('[museum] couch loaded ✅', gltf.scene)
+				const couch = gltf.scene
+				couch.scale.set(1.1, 1.1, 1.1)
+				// زاوية شمال-غرب — داخل حدود الغرفة دائماً
+				couch.position.set(
+					Math.max(-halfW + 2.5, -halfW * 0.7),
+					0,
+					Math.max(-halfL + 2.5, -halfL * 0.7)
+				)
+				couch.rotation.y = Math.PI * 0.25
+				couch.traverse((child) => {
+					if (child.isMesh) {
+						child.castShadow    = true
+						child.receiveShadow = true
+					}
+				})
+				group.add(couch)
+			},
+			(xhr) => {
+				console.log('[museum] couch', Math.round(xhr.loaded / xhr.total * 100) + '%')
+			},
+			(err) => {
+				console.error('[museum] couch load FAILED', err)
+			}
+		)
 	}
 
 	return {
