@@ -2580,7 +2580,7 @@ function buildOfficerChair(color = 0x4fc3f7) {
 // ── روبوت مكتبي (ترجمة Robot.tsx) ─────────────────────────────────────────────
 function buildOfficeRobot(color = 0x4fc3f7) {
 	const g = new THREE.Group()
-	g.scale.set(1.35, 1.35, 1.35)  // نفس scale={1.35} من R3F
+	g.scale.set(0.62, 0.62, 0.62)  // حجم مناسب للمتحف
 
 	const hex = color
 	const matBody   = new THREE.MeshStandardMaterial({ color: 0x2e2e3a, roughness: 0.25, metalness: 0.75 })
