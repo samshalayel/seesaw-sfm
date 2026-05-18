@@ -6,6 +6,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useGame } from "@/lib/stores/useGame";
+import { useChat } from "@/lib/stores/useChat";
+import { ChatBubble } from "@/components/game/ChatBubble";
 
 // ─── Wikipedia helpers ────────────────────────────────────────────────────────
 async function fetchWikiData(title: string, signal?: AbortSignal) {
@@ -78,9 +80,11 @@ export function MuseumScene() {
   const engineRef  = useRef<any>(null);
   const abortRef   = useRef<AbortController | null>(null);
 
-  const [locked,       setLocked]       = useState(false);
-  const [loadingText,  setLoadingText]   = useState<string | null>("جاري تحميل المتحف…");
-  const [currentTitle, setCurrentTitle]  = useState<string | null>(null);
+  const [locked,        setLocked]        = useState(false);
+  const [loadingText,   setLoadingText]    = useState<string | null>("جاري تحميل المتحف…");
+  const [currentTitle,  setCurrentTitle]   = useState<string | null>(null);
+  const [nearRobotId,   setNearRobotId]    = useState<string | null>(null);
+  const isChatOpen = useChat((s) => s.isOpen);
 
   // ── init engine ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -142,6 +146,72 @@ export function MuseumScene() {
       document.body.classList.remove("locked");
     };
   }, []); // eslint-disable-line
+
+  // ── proximity check + F key ───────────────────────────────────────────────
+  useEffect(() => {
+    const INTERACT_RANGE = 4;
+
+    // حساب مواضع الروبوتات في الفضاء العالمي بناءً على أبعاد الغرفة
+    function getRobotPositions() {
+      const engine = engineRef.current;
+      if (!engine) return [];
+      const { halfL } = engine.getRoomDimensions();
+      return [
+        { id: "museum-robot-1", x: 0, z: halfL * 0.15 - 0.72 },  // station ry=π
+        { id: "museum-robot-2", x: 0, z: -halfL * 0.15 + 0.72 }, // station ry=0
+      ];
+    }
+
+    // proximity polling
+    let rafId: number;
+    function tick() {
+      const engine = engineRef.current;
+      if (engine && !useChat.getState().isOpen) {
+        const pos = engine.getPlayerPosition();
+        const robots = getRobotPositions();
+        let nearest: string | null = null;
+        let minDist = INTERACT_RANGE;
+        for (const r of robots) {
+          const d = Math.hypot(pos.x - r.x, pos.z - r.z);
+          if (d < minDist) { minDist = d; nearest = r.id; }
+        }
+        setNearRobotId(nearest);
+      } else {
+        setNearRobotId(null);
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+    rafId = requestAnimationFrame(tick);
+
+    // F key
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== "KeyF") return;
+      const chatState = useChat.getState();
+      if (chatState.isOpen) {
+        chatState.closeChat();
+        return;
+      }
+      const engine = engineRef.current;
+      if (!engine) return;
+      const pos = engine.getPlayerPosition();
+      const robots = getRobotPositions();
+      let nearest: string | null = null;
+      let minDist = INTERACT_RANGE;
+      for (const r of robots) {
+        const d = Math.hypot(pos.x - r.x, pos.z - r.z);
+        if (d < minDist) { minDist = d; nearest = r.id; }
+      }
+      if (nearest) {
+        document.exitPointerLock?.();
+        chatState.openChat(nearest);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   // ── load gallery ──────────────────────────────────────────────────────────
   const loadGallery = useCallback(async (title: string) => {
@@ -234,7 +304,7 @@ export function MuseumScene() {
       )}
 
       {/* hint — انقر للدخول */}
-      {!locked && (
+      {!locked && !isChatOpen && (
         <div style={{
           position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)",
           color: "rgba(255,255,255,0.45)", fontSize: 12, letterSpacing: 2,
@@ -243,6 +313,20 @@ export function MuseumScene() {
           backdropFilter: "blur(4px)",
         }}>
           انقر أي مكان للدخول · ESC للخروج
+        </div>
+      )}
+
+      {/* proximity hint — F للتحدث */}
+      {locked && nearRobotId && (
+        <div style={{
+          position: "absolute", bottom: 60, left: "50%", transform: "translateX(-50%)",
+          color: "#4fc3f7", fontSize: 13, letterSpacing: 1,
+          fontFamily: "Inter, sans-serif", pointerEvents: "none",
+          background: "rgba(0,0,0,0.6)", padding: "8px 22px", borderRadius: 20,
+          backdropFilter: "blur(6px)", border: "1px solid rgba(79,195,247,0.3)",
+          animation: "pulse 1.5s ease-in-out infinite",
+        }}>
+          🤖 اضغط <strong>[F]</strong> للتحدث
         </div>
       )}
 
@@ -273,6 +357,16 @@ export function MuseumScene() {
           📖 {currentTitle}
         </div>
       )}
+
+      {/* ChatBubble — نفس مكوّن المكتب الرئيسي */}
+      <ChatBubble />
+
+      <style>{`
+        @keyframes pulse {
+          0%,100% { opacity:1; transform:translateX(-50%) scale(1); }
+          50%      { opacity:.7; transform:translateX(-50%) scale(1.03); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -852,6 +852,12 @@ export function startYourEngines({
 	rafId = window.requestAnimationFrame(frame)
 
 	return {
+		getPlayerPosition() {
+			return { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+		},
+		getRoomDimensions() {
+			return { halfW, halfL }
+		},
 		setInteractionLocked(locked) {
 			interactionLocked = Boolean(locked)
 		},
