@@ -2435,14 +2435,11 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 		}
 
 		// ── كنبة في زاوية الغرفة ────────────────────────────────────────────────
-		console.log('[museum] loading couch.glb...')
 		_gltfLoader.load(
 			'/models/couch.glb',
 			(gltf) => {
-				console.log('[museum] couch loaded ✅', gltf.scene)
 				const couch = gltf.scene
 				couch.scale.set(1.1, 1.1, 1.1)
-				// زاوية شمال-غرب — داخل حدود الغرفة دائماً
 				couch.position.set(
 					Math.max(-halfW + 2.5, -halfW * 0.7),
 					0,
@@ -2457,12 +2454,8 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 				})
 				group.add(couch)
 			},
-			(xhr) => {
-				console.log('[museum] couch', Math.round(xhr.loaded / xhr.total * 100) + '%')
-			},
-			(err) => {
-				console.error('[museum] couch load FAILED', err)
-			}
+			undefined,
+			(err) => console.warn('[museum] couch load failed', err)
 		)
 	}
 
