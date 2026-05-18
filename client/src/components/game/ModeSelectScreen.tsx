@@ -82,6 +82,17 @@ export function ModeSelectScreen() {
           accentColor="#00ff88"
           onClick={() => setAppMode("pro")}
         />
+
+        {/* Showcase Card */}
+        <ModeCard
+          icon="✨"
+          title="عرض"
+          subtitle="Showcase"
+          description="مشهد سينمائي ثلاثي الأبعاد بتقنيات الإضاءة والجسيمات المتقدمة"
+          accentColor="#f59e0b"
+          badge="NEW"
+          onClick={() => setAppMode("showcase")}
+        />
       </div>
 
       {/* Footer hint */}
@@ -103,10 +114,11 @@ interface ModeCardProps {
   subtitle: string;
   description: string;
   accentColor: string;
+  badge?: string;
   onClick: () => void;
 }
 
-function ModeCard({ icon, title, subtitle, description, accentColor, onClick }: ModeCardProps) {
+function ModeCard({ icon, title, subtitle, description, accentColor, badge, onClick }: ModeCardProps) {
   return (
     <button
       onClick={onClick}
@@ -140,7 +152,17 @@ function ModeCard({ icon, title, subtitle, description, accentColor, onClick }: 
         el.style.transform = "translateY(0)";
       }}
     >
-      <span style={{ fontSize: 48, lineHeight: 1 }}>{icon}</span>
+      <div style={{ position: "relative", lineHeight: 1 }}>
+        <span style={{ fontSize: 48 }}>{icon}</span>
+        {badge && (
+          <span style={{
+            position: "absolute", top: -8, right: -28,
+            background: accentColor, color: "#000",
+            fontSize: 9, fontWeight: 800, padding: "2px 6px",
+            borderRadius: 4, letterSpacing: 1,
+          }}>{badge}</span>
+        )}
+      </div>
 
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: "#e0e8ff", marginBottom: 4 }}>

@@ -352,8 +352,8 @@ interface GameState {
   setCompanyInfo: (name: string, logo: string) => void;
   setEntranceBg:  (bg: string) => void;
   fetchCompanyInfo: () => void;
-  appMode: "classic" | "pro" | null;
-  setAppMode: (mode: "classic" | "pro") => void;
+  appMode: "classic" | "pro" | "showcase" | null;
+  setAppMode: (mode: "classic" | "pro" | "showcase") => void;
 }
 
 export const useGame = create<GameState>()(

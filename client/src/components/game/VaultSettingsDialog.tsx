@@ -122,6 +122,9 @@ export function VaultSettingsDialog() {
   const [clickupToken, setClickupToken] = useState("");
   const [clickupListId, setClickupListId] = useState("");
   const [clickupAssignee, setClickupAssignee] = useState("");
+  const [clickupLists, setClickupLists] = useState<{ id: string; name: string; space: string; folder?: string }[]>([]);
+  const [clickupListsLoading, setClickupListsLoading] = useState(false);
+  const [clickupListsError, setClickupListsError] = useState<string | null>(null);
 
   const [vpsHost, setVpsHost] = useState("");
   const [vpsPort, setVpsPort] = useState("22");
@@ -190,6 +193,19 @@ export function VaultSettingsDialog() {
       setHumanCopied(code);
       setTimeout(() => setHumanCopied(null), 2000);
     });
+  };
+
+  const fetchClickupLists = async () => {
+    setClickupListsLoading(true);
+    setClickupListsError(null);
+    try {
+      const r = await apiFetch("/api/clickup/lists");
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error || "فشل الجلب"); }
+      const lists = await r.json();
+      setClickupLists(lists);
+      if (lists.length === 0) setClickupListsError("لا توجد قوائم — تأكد من صحة التوكن");
+    } catch (e: any) { setClickupListsError("❌ " + e.message); }
+    setClickupListsLoading(false);
   };
 
   const importFromClickUp = async () => {
@@ -1351,7 +1367,7 @@ export function VaultSettingsDialog() {
                 ref={inputRef}
                 type="password"
                 value={clickupToken}
-                onChange={(e) => setClickupToken(e.target.value)}
+                onChange={(e) => { setClickupToken(e.target.value); setClickupLists([]); setClickupListsError(null); }}
                 onKeyDown={(e) => e.stopPropagation()}
                 placeholder="pk_xxxxxxxxxxxx"
                 style={inputStyle}
@@ -1359,14 +1375,47 @@ export function VaultSettingsDialog() {
             </div>
             <div>
               <label style={labelStyle}>List ID</label>
-              <input
-                type="text"
-                value={clickupListId}
-                onChange={(e) => setClickupListId(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder="123456789"
-                style={inputStyle}
-              />
+              {/* زر جلب القوائم */}
+              <button
+                onClick={fetchClickupLists}
+                disabled={clickupListsLoading || !clickupToken}
+                style={{
+                  width: "100%", padding: "8px 12px", marginBottom: 8,
+                  background: clickupListsLoading ? "rgba(79,195,247,0.05)" : "rgba(79,195,247,0.12)",
+                  border: "1px solid rgba(79,195,247,0.3)", borderRadius: 8,
+                  color: "#4fc3f7", cursor: clickupToken ? "pointer" : "not-allowed",
+                  fontSize: 13, opacity: clickupToken ? 1 : 0.5,
+                }}
+              >
+                {clickupListsLoading ? "⏳ جاري جلب القوائم..." : "🔍 جلب القوائم من ClickUp"}
+              </button>
+              {clickupListsError && (
+                <div style={{ color: "#f87171", fontSize: 12, marginBottom: 8 }}>{clickupListsError}</div>
+              )}
+              {/* dropdown إذا جُلبت القوائم */}
+              {clickupLists.length > 0 ? (
+                <select
+                  value={clickupListId}
+                  onChange={(e) => setClickupListId(e.target.value)}
+                  style={{ ...inputStyle, cursor: "pointer" }}
+                >
+                  <option value="">— اختر قائمة —</option>
+                  {clickupLists.map(l => (
+                    <option key={l.id} value={l.id}>
+                      {l.space}{l.folder ? ` › ${l.folder}` : ""} › {l.name} ({l.id})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={clickupListId}
+                  onChange={(e) => setClickupListId(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  placeholder="123456789 — أو اضغط جلب القوائم لاختيار"
+                  style={inputStyle}
+                />
+              )}
             </div>
             <div>
               <label style={labelStyle}>Assignee</label>

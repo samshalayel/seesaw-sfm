@@ -3573,6 +3573,39 @@ export async function registerRoutes(
     }
   });
 
+  // جلب كل القوائم المتاحة في ClickUp (لعرضها في dropdown)
+  app.get("/api/clickup/lists", async (req, res) => {
+    try {
+      const roomId = getRoomId(req);
+      const allLists: { id: string; name: string; space: string; folder?: string }[] = [];
+
+      // جلب الـ teams أولاً
+      const teams = await getTeams(roomId);
+      for (const team of teams) {
+        const spaces = await getSpaces(team.id, roomId);
+        for (const space of spaces) {
+          // القوائم داخل الفولدرات
+          const folders = await getFolders(space.id, roomId);
+          for (const folder of folders) {
+            const lists = await getLists(folder.id, roomId);
+            for (const list of lists) {
+              allLists.push({ id: list.id, name: list.name, space: space.name, folder: folder.name });
+            }
+          }
+          // القوائم بدون فولدر
+          const folderless = await getFolderlessLists(space.id, roomId);
+          for (const list of folderless) {
+            allLists.push({ id: list.id, name: list.name, space: space.name });
+          }
+        }
+      }
+
+      res.json(allLists);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Playlist ─────────────────────────────────────────────────────────────
   app.get("/api/playlist", async (req, res) => {
     try {
