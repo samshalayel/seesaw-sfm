@@ -78,9 +78,9 @@ export function MuseumScene() {
   const engineRef  = useRef<any>(null);
   const abortRef   = useRef<AbortController | null>(null);
 
-  const [overlayVisible, setOverlayVisible] = useState(true);
-  const [loadingText,    setLoadingText]     = useState<string | null>(null);
-  const [currentTitle,   setCurrentTitle]    = useState<string | null>(null);
+  const [locked,       setLocked]       = useState(false);
+  const [loadingText,  setLoadingText]   = useState<string | null>("جاري تحميل المتحف…");
+  const [currentTitle, setCurrentTitle]  = useState<string | null>(null);
 
   // ── init engine ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -97,13 +97,20 @@ export function MuseumScene() {
 
       engineRef.current = startYourEngines({
         canvas: canvasRef.current,
-        roomMode: "lobby",
-        roomSeedTitle: "Lobby",
-        lobbyCategories: getLobbyCategories(),
+        roomMode: "gallery",
+        roomSeedTitle: "Wikipedia",
+        galleryEntryWall: "south",
+        galleryTitle: "",
+        galleryDescription: "",
+        galleryMainThumbnailUrl: null,
+        galleryPhotos: [],
+        galleryLongExtract: "",
+        galleryRelatedTitles: [],
+        galleryTrail: [],
         roomSpawn: { type: "fromWall", wall: "south" },
 
         onPointerLockChange(locked: boolean) {
-          setOverlayVisible(!locked);
+          setLocked(locked);
           document.body.classList.toggle("locked", locked);
         },
 
@@ -123,7 +130,9 @@ export function MuseumScene() {
       });
     }
 
-    boot();
+    boot().then(() => {
+      if (!stopped) loadRandom();
+    });
 
     return () => {
       stopped = true;
@@ -171,17 +180,6 @@ export function MuseumScene() {
     setLoadingText(null);
   }, []);
 
-  const goLobby = useCallback(() => {
-    abortRef.current?.abort();
-    setCurrentTitle(null);
-    setLoadingText(null);
-    engineRef.current?.setRoom?.({
-      roomMode: "lobby",
-      lobbyCategories: getLobbyCategories(),
-      spawn: { type: "fromWall", wall: "south" },
-    });
-  }, []);
-
   const loadRandom = useCallback(async () => {
     try {
       const lang = localStorage.getItem("linkwalk:language:v1") || "en";
@@ -191,143 +189,88 @@ export function MuseumScene() {
     } catch { /* ignore */ }
   }, [loadGallery]);
 
-  // ── click-to-start ────────────────────────────────────────────────────────
-  function handleStart() {
-    canvasRef.current?.requestPointerLock();
-  }
+  const goLobby = useCallback(() => {
+    // لا lobby — نحمّل مقالة عشوائية بدلاً منها
+    loadRandom();
+  }, [loadRandom]);
 
   return (
-    <div style={{ width: "100vw", height: "100vh", background: "#05030a", position: "relative", overflow: "hidden" }}>
-
+    <div
+      style={{ width: "100vw", height: "100vh", background: "#05030a", position: "relative", overflow: "hidden" }}
+      onClick={() => { if (!locked) canvasRef.current?.requestPointerLock(); }}
+    >
       {/* Canvas يشغّله محرك linkwalk مباشرة */}
       <canvas
         ref={canvasRef}
         id="museum-scene"
-        style={{ width: "100%", height: "100%", display: "block" }}
+        style={{ width: "100%", height: "100%", display: "block", cursor: locked ? "none" : "pointer" }}
       />
 
-      {/* HUD — crosshair */}
-      <div style={{
-        position: "absolute", top: "50%", left: "50%",
-        transform: "translate(-50%, -50%)",
-        pointerEvents: "none",
-      }}>
+      {/* زر الرجوع — دائماً ظاهر */}
+      <button
+        onClick={e => { e.stopPropagation(); document.exitPointerLock?.(); setAppMode("classic"); }}
+        style={{
+          position: "absolute", top: 16, right: 20,
+          background: "rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.13)",
+          color: "rgba(255,255,255,0.55)", padding: "6px 16px", borderRadius: 8,
+          cursor: "pointer", fontSize: 12, fontFamily: "Inter, sans-serif", letterSpacing: 1,
+          backdropFilter: "blur(6px)",
+          zIndex: 10,
+        }}
+      >
+        ← المكتب
+      </button>
+
+      {/* crosshair */}
+      {locked && (
         <div style={{
-          width: 18, height: 18, position: "relative",
-          opacity: overlayVisible ? 0 : 0.7,
-          transition: "opacity 0.2s",
+          position: "absolute", top: "50%", left: "50%",
+          transform: "translate(-50%, -50%)",
+          pointerEvents: "none", width: 18, height: 18,
         }}>
           <div style={{ position: "absolute", top: 8, left: 0, right: 0, height: 2, background: "#4fc3f7", borderRadius: 1 }} />
           <div style={{ position: "absolute", left: 8, top: 0, bottom: 0, width: 2, background: "#4fc3f7", borderRadius: 1 }} />
         </div>
-      </div>
+      )}
+
+      {/* hint — انقر للدخول */}
+      {!locked && (
+        <div style={{
+          position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)",
+          color: "rgba(255,255,255,0.45)", fontSize: 12, letterSpacing: 2,
+          fontFamily: "Inter, sans-serif", pointerEvents: "none",
+          background: "rgba(0,0,0,0.3)", padding: "6px 18px", borderRadius: 20,
+          backdropFilter: "blur(4px)",
+        }}>
+          انقر أي مكان للدخول · ESC للخروج
+        </div>
+      )}
 
       {/* Loading indicator */}
       {loadingText && (
         <div style={{
-          position: "absolute", bottom: 80, left: "50%", transform: "translateX(-50%)",
+          position: "absolute", bottom: 72, left: "50%", transform: "translateX(-50%)",
           color: "#4fc3f7", fontSize: 13, letterSpacing: 1,
           fontFamily: "Inter, sans-serif",
           background: "rgba(0,0,0,0.5)",
           padding: "8px 20px", borderRadius: 8,
           backdropFilter: "blur(8px)",
+          pointerEvents: "none",
         }}>
           ⏳ {loadingText}
         </div>
       )}
 
       {/* Current article label */}
-      {currentTitle && !overlayVisible && (
+      {currentTitle && locked && (
         <div style={{
           position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)",
-          color: "rgba(255,255,255,0.6)", fontSize: 12, letterSpacing: 2,
-          fontFamily: "Inter, sans-serif",
-          textTransform: "uppercase",
-          pointerEvents: "none",
+          color: "rgba(255,255,255,0.55)", fontSize: 11, letterSpacing: 2,
+          fontFamily: "Inter, sans-serif", textTransform: "uppercase",
+          pointerEvents: "none", background: "rgba(0,0,0,0.3)",
+          padding: "4px 14px", borderRadius: 12,
         }}>
           📖 {currentTitle}
-        </div>
-      )}
-
-      {/* Overlay — شاشة البداية */}
-      {overlayVisible && (
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "space-between",
-          background: "rgba(5,3,10,0.88)",
-          backdropFilter: "blur(4px)",
-        }}>
-          {/* header */}
-          <div style={{
-            width: "100%", display: "flex", justifyContent: "space-between",
-            alignItems: "center", padding: "20px 28px",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <img src="/images/sillar_icon.png" alt=""
-                style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }}
-                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
-              <span style={{ fontSize: 22, fontWeight: 700, color: "#e0e8ff", letterSpacing: 3, fontFamily: "Inter, sans-serif" }}>
-                SILLAR
-              </span>
-            </div>
-            <button
-              onClick={() => setAppMode("classic")}
-              style={{
-                background: "transparent", border: "1px solid rgba(255,255,255,0.15)",
-                color: "rgba(255,255,255,0.5)", padding: "6px 16px", borderRadius: 8,
-                cursor: "pointer", fontSize: 12, fontFamily: "Inter, sans-serif", letterSpacing: 1,
-              }}
-            >
-              ← العودة للمكتب
-            </button>
-          </div>
-
-          {/* center */}
-          <div
-            onClick={handleStart}
-            style={{
-              textAlign: "center", cursor: "pointer", padding: "48px 40px",
-              border: "1px solid rgba(79,195,247,0.2)",
-              borderRadius: 20,
-              background: "rgba(79,195,247,0.04)",
-              backdropFilter: "blur(8px)",
-              transition: "all 0.2s",
-              maxWidth: 480,
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(79,195,247,0.09)";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(79,195,247,0.4)";
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(79,195,247,0.04)";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(79,195,247,0.2)";
-            }}
-          >
-            <div style={{ fontSize: 52, marginBottom: 16 }}>🏛️</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: "#e0e8ff", letterSpacing: 4, fontFamily: "Inter, sans-serif", marginBottom: 10 }}>
-              VIRTUAL MUSEUM
-            </div>
-            <div style={{ fontSize: 13, color: "#4fc3f7", letterSpacing: 2, fontFamily: "Inter, sans-serif", marginBottom: 24, opacity: 0.8 }}>
-              ويكيبيديا · متحف ثلاثي الأبعاد · روبوتات AI
-            </div>
-            <div style={{ fontSize: 15, color: "#e0e8ff", fontFamily: "Inter, sans-serif", marginBottom: 8 }}>
-              انقر للدخول
-            </div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "Inter, sans-serif", letterSpacing: 1 }}>
-              WASD تحرك · Mouse نظر · SPACE قفز · ESC خروج
-            </div>
-          </div>
-
-          {/* footer */}
-          <div style={{
-            padding: "20px 0",
-            color: "rgba(255,255,255,0.2)", fontSize: 10, letterSpacing: 3,
-            fontFamily: "Inter, sans-serif", textTransform: "uppercase",
-          }}>
-            Powered by Three.js + Wikipedia API
-          </div>
         </div>
       )}
     </div>
