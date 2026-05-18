@@ -2403,19 +2403,21 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 
 	// ── روبوتات ومكاتب في وضع gallery ────────────────────────────────────────
 	if (mode === 'gallery') {
-		const robotPositions = [
-			{ x:  halfW * 0.55, z: -halfL * 0.45, ry: -Math.PI * 0.15 },
-			{ x: -halfW * 0.55, z:  halfL * 0.45, ry:  Math.PI * 0.85 },
+		const stations = [
+			{ x:  halfW * 0.5, z: -halfL * 0.38, ry: -Math.PI * 0.18, color: 0x4fc3f7 },
+			{ x: -halfW * 0.5, z:  halfL * 0.38, ry:  Math.PI * 0.82, color: 0x00ff88 },
 		]
-		for (const rp of robotPositions) {
+		for (const st of stations) {
+			// المكتب — في نفس مكانه من Room.tsx
 			const desk = buildOfficeDesk()
-			desk.position.set(rp.x, 0, rp.z)
-			desk.rotation.y = rp.ry
+			desk.position.set(st.x, 0, st.z)
+			desk.rotation.y = st.ry
 			group.add(desk)
 
-			const robot = buildOfficeRobot()
-			robot.position.set(rp.x, 1.35, rp.z - 0.0)
-			robot.rotation.y = rp.ry + Math.PI
+			// الروبوت — نفس x,z لكن y=0 (الكرسي يرفعه)
+			const robot = buildOfficeRobot(st.color)
+			robot.position.set(st.x, 0, st.z)
+			robot.rotation.y = st.ry
 			group.add(robot)
 		}
 	}
@@ -2437,174 +2439,230 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 	}
 }
 
-// ── بناء مكتب مكتبي ────────────────────────────────────────────────────────────
+// ── helpers ─────────────────────────────────────────────────────────────────────
+function _mesh(geo, mat, parent, px = 0, py = 0, pz = 0, rx = 0, ry = 0, rz = 0) {
+	const m = new THREE.Mesh(geo, mat)
+	m.position.set(px, py, pz)
+	if (rx || ry || rz) m.rotation.set(rx, ry, rz)
+	parent.add(m)
+	return m
+}
+function _box(w, h, d, mat, parent, px, py, pz, rx, ry, rz) {
+	return _mesh(new THREE.BoxGeometry(w, h, d), mat, parent, px, py, pz, rx, ry, rz)
+}
+function _sph(r, mat, parent, px, py, pz) {
+	return _mesh(new THREE.SphereGeometry(r, 12, 12), mat, parent, px, py, pz)
+}
+function _cyl(rt, rb, h, seg, mat, parent, px, py, pz) {
+	return _mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat, parent, px, py, pz)
+}
+function _plane(w, h, mat, parent, px, py, pz) {
+	return _mesh(new THREE.PlaneGeometry(w, h), mat, parent, px, py, pz)
+}
+
+// ── مكتب تنفيذي (ترجمة Desk.tsx) ──────────────────────────────────────────────
 function buildOfficeDesk() {
 	const g = new THREE.Group()
 
-	const deskMat = new THREE.MeshStandardMaterial({ color: 0x2a1f14, metalness: 0.2, roughness: 0.7 })
-	const legMat  = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, metalness: 0.8, roughness: 0.2 })
-	const screenMat = new THREE.MeshStandardMaterial({ color: 0x050a14, emissive: 0x0a2a4a, emissiveIntensity: 0.8, metalness: 0.5, roughness: 0.3 })
-	const glowMat  = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 2.5, metalness: 1, roughness: 0 })
+	const matWood    = new THREE.MeshStandardMaterial({ color: 0x1c0f07, roughness: 0.25, metalness: 0.05 })
+	const matWoodTop = new THREE.MeshStandardMaterial({ color: 0x2b1507, roughness: 0.15, metalness: 0.08 })
+	const matChrome  = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.05, metalness: 0.98 })
+	const matGlass   = new THREE.MeshStandardMaterial({ color: 0x8ecae6, roughness: 0,    metalness: 0.1, transparent: true, opacity: 0.18 })
+	const matDark    = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.3,  metalness: 0.6 })
+	const matScreen  = new THREE.MeshStandardMaterial({ color: 0x0d1b2a, emissive: 0x4fc3f7, emissiveIntensity: 0.6, roughness: 0.1 })
+	const matFrame   = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.15, metalness: 0.92 })
+	const matKb      = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4,  metalness: 0.5 })
+	const matKbGlow  = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, emissive: 0x4fc3f7, emissiveIntensity: 0.08, roughness: 0.5 })
+	const matMetal   = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.2,  metalness: 0.9 })
 
-	// سطح المكتب
-	const topG = new THREE.BoxGeometry(1.6, 0.06, 0.85)
-	const top  = new THREE.Mesh(topG, deskMat)
-	top.position.set(0, 1.35, 0)
-	g.add(top)
+	// ── سطح الطاولة الرئيسي ──
+	_box(2.2, 0.055, 1.05, matWoodTop, g,  0,    0.76,  0)
+	// حوافه المعدنية
+	_box(2.2, 0.02, 0.012, matChrome, g,  0,    0.74,  0.525)
+	_box(2.2, 0.02, 0.012, matChrome, g,  0,    0.74, -0.525)
+	_box(0.012, 0.02, 1.05, matChrome, g, -1.1, 0.74,  0)
+	_box(0.012, 0.02, 1.05, matChrome, g,  1.1, 0.74,  0)
+	// طبقة زجاج
+	_box(2.18, 0.008, 1.03, matGlass,  g,  0,    0.79,  0)
 
-	// أرجل المكتب (4 أركان)
-	const legG = new THREE.BoxGeometry(0.06, 1.35, 0.06)
-	for (const [sx, sz] of [[-0.74, -0.38], [0.74, -0.38], [-0.74, 0.38], [0.74, 0.38]]) {
-		const leg = new THREE.Mesh(legG, legMat)
-		leg.position.set(sx, 0.675, sz)
-		g.add(leg)
+	// ── القاعدة اليسرى (أدراج) ──
+	_box(0.48, 0.72, 0.95, matWood,   g, -0.85, 0.36, 0)
+	_box(0.16, 0.018, 0.018, matChrome, g, -0.62, 0.56, 0.48)
+	_box(0.16, 0.018, 0.018, matChrome, g, -0.62, 0.30, 0.48)
+	_box(0.478, 0.006, 0.006, matDark,  g, -0.85, 0.43, 0.478)
+
+	// ── القاعدة اليمنى (أرفف) ──
+	_box(0.48, 0.72, 0.95, matWood,   g,  0.85, 0.36, 0)
+	_box(0.46, 0.012, 0.93, matWood,  g,  0.85, 0.48, 0)
+
+	// ── اللوحة الخلفية ──
+	_box(1.12, 0.72, 0.018, matWood,  g,  0,    0.36, -0.47)
+
+	// ── أرجل كروم وسطية ──
+	for (const x of [-0.3, 0.3]) {
+		_box(0.025, 0.72, 0.025, matChrome, g, x, 0.36, 0.4)
+		_box(0.025, 0.03, 0.22,  matChrome, g, x, 0.015, 0.4)
 	}
 
-	// شاشة
-	const scrG = new THREE.BoxGeometry(0.85, 0.52, 0.04)
-	const scr  = new THREE.Mesh(scrG, screenMat)
-	scr.position.set(0, 1.73, -0.3)
-	scr.rotation.x = 0.12
-	g.add(scr)
+	// ── قواعد أرضية ──
+	_box(0.46, 0.024, 0.9, matDark, g, -0.85, 0.012, 0)
+	_box(0.46, 0.024, 0.9, matDark, g,  0.85, 0.012, 0)
 
-	// إطار الشاشة
-	const frameG = new THREE.BoxGeometry(0.88, 0.55, 0.025)
-	const frameM = new THREE.MeshStandardMaterial({ color: 0x111122, metalness: 0.9, roughness: 0.1 })
-	const frame  = new THREE.Mesh(frameG, frameM)
-	frame.position.set(0, 1.73, -0.322)
-	frame.rotation.x = 0.12
-	g.add(frame)
+	// ── شاشة ──
+	const mon = new THREE.Group()
+	mon.position.set(0, 1.02, -0.22)
+	g.add(mon)
+	_box(0.85, 0.52, 0.028, matFrame,  mon, 0, 0, 0)
+	_plane(0.78, 0.45, matScreen,       mon, 0, 0.005, 0.016)
+	_box(0.06, 0.16, 0.04, matMetal,   mon, 0, -0.3, 0.01)
+	_box(0.28, 0.016, 0.14, matMetal,  mon, 0, -0.39, 0.04)
+	// ضوء الشاشة
+	const monLight = new THREE.PointLight(0x4fc3f7, 0.5, 1.8, 2)
+	monLight.position.set(0, 0, 0.35)
+	mon.add(monLight)
 
-	// خط ضوئي أسفل الشاشة
-	const glowG = new THREE.BoxGeometry(0.7, 0.018, 0.018)
-	const glow  = new THREE.Mesh(glowG, glowMat)
-	glow.position.set(0, 1.475, -0.282)
-	g.add(glow)
+	// ── كيبورد ──
+	const kb = new THREE.Group()
+	kb.position.set(0, 0.78, 0.12)
+	g.add(kb)
+	_box(0.5, 0.018, 0.17, matKb,     kb, 0, 0, 0)
+	_plane(0.46, 0.14, matKbGlow,     kb, 0, 0.012, 0)
 
-	// لابتوب صغير على الجانب
-	const lapG = new THREE.BoxGeometry(0.38, 0.025, 0.28)
-	const lapM = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, metalness: 0.85, roughness: 0.15 })
-	const lap  = new THREE.Mesh(lapG, lapM)
-	lap.position.set(-0.5, 1.385, 0.08)
-	g.add(lap)
+	// ضوء خافت تحت السطح
+	const deskLight = new THREE.PointLight(0xffedd5, 0.3, 1.8, 2)
+	deskLight.position.set(0, 0.65, 0)
+	g.add(deskLight)
 
-	// قاعدة الشاشة
-	const standG = new THREE.BoxGeometry(0.22, 0.28, 0.04)
-	const stand  = new THREE.Mesh(standG, legMat)
-	stand.position.set(0, 1.52, -0.27)
-	stand.rotation.x = 0.12
-	g.add(stand)
+	return g
+}
 
-	// كرسي
-	const chairSeat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.06, 0.55), new THREE.MeshStandardMaterial({ color: 0x111118, metalness: 0.3, roughness: 0.8 }))
-	chairSeat.position.set(0, 1.1, 0.52)
-	g.add(chairSeat)
-	const chairBack = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.55, 0.06), new THREE.MeshStandardMaterial({ color: 0x111118, metalness: 0.3, roughness: 0.8 }))
-	chairBack.position.set(0, 1.4, 0.77)
-	chairBack.rotation.x = 0.1
-	g.add(chairBack)
-	const chairLegG = new THREE.BoxGeometry(0.05, 1.1, 0.05)
-	for (const [sx, sz] of [[-0.24, 0.28], [0.24, 0.28], [-0.24, 0.76], [0.24, 0.76]]) {
-		const cl = new THREE.Mesh(chairLegG, legMat)
-		cl.position.set(sx, 0.55, sz)
-		g.add(cl)
+// ── كرسي مكتبي فاخر (ترجمة OfficerChair من Robot.tsx) ────────────────────────
+function buildOfficerChair(color = 0x4fc3f7) {
+	const g = new THREE.Group()
+
+	const matSeat  = new THREE.MeshStandardMaterial({ color: 0x1e1e2e, roughness: 0.5, metalness: 0.1 })
+	const matMetal = new THREE.MeshStandardMaterial({ color: 0x555566, metalness: 0.85, roughness: 0.15 })
+	const matFrame = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, metalness: 0.8,  roughness: 0.2 })
+	const matWheel = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 })
+	const matAccent = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, roughness: 0.2 })
+	const matStripe = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.2 })
+
+	// ── مسند الظهر ──
+	_box(0.46, 0.62, 0.06, matSeat,   g, 0,  1.02, -0.24)
+	_box(0.46, 0.04, 0.06, matAccent, g, 0,  1.34, -0.24)
+	_box(0.36, 0.03, 0.055, matStripe,g, 0,  0.72, -0.22)
+
+	// ── المقعد ──
+	_box(0.50, 0.055, 0.48, matSeat,  g, 0,  0.50,  0.04)
+
+	// ── مسندا الذراعين ──
+	for (const s of [-1, 1]) {
+		_box(0.025, 0.36, 0.025, matMetal, g, s * 0.27, 0.44, -0.05)
+		_box(0.04,  0.022, 0.22, matSeat,  g, s * 0.27, 0.62,  0.07)
+	}
+
+	// ── العمود الهيدروليكي ──
+	_cyl(0.035, 0.042, 0.44, 10, matMetal, g, 0, 0.25, 0)
+
+	// ── القاعدة النجمية (5 أذرع) ──
+	for (let i = 0; i < 5; i++) {
+		const angle = (i / 5) * Math.PI * 2
+		const arm = new THREE.Group()
+		arm.rotation.y = angle
+		g.add(arm)
+		_box(0.38, 0.03, 0.055, matFrame, arm, 0.22, 0.03, 0)
+		_cyl(0.028, 0.028, 0.055, 8, matWheel, arm, 0.40, 0.04, 0)
 	}
 
 	return g
 }
 
-// ── بناء روبوت مكتبي ───────────────────────────────────────────────────────────
-function buildOfficeRobot() {
+// ── روبوت مكتبي (ترجمة Robot.tsx) ─────────────────────────────────────────────
+function buildOfficeRobot(color = 0x4fc3f7) {
 	const g = new THREE.Group()
+	g.scale.set(1.35, 1.35, 1.35)  // نفس scale={1.35} من R3F
 
-	const bodyMat  = new THREE.MeshStandardMaterial({ color: 0x0d1f35, emissive: 0x0a2a4a, emissiveIntensity: 0.25, metalness: 0.95, roughness: 0.08 })
-	const jointMat = new THREE.MeshStandardMaterial({ color: 0x1a3a5c, emissive: 0x1a6080, emissiveIntensity: 0.35, metalness: 1, roughness: 0.05 })
-	const glowB    = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 2.0, metalness: 1, roughness: 0 })
-	const glowG    = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 2.2, metalness: 1, roughness: 0 })
-	const eyeMat   = new THREE.MeshStandardMaterial({ color: 0x00cfff, emissive: 0x00cfff, emissiveIntensity: 2.0 })
-	const visorMat = new THREE.MeshStandardMaterial({ color: 0x001a33, emissive: 0x00cfff, emissiveIntensity: 0.6, transparent: true, opacity: 0.82 })
+	const hex = color
+	const matBody   = new THREE.MeshStandardMaterial({ color: 0x2e2e3a, roughness: 0.25, metalness: 0.75 })
+	const matPlate  = new THREE.MeshStandardMaterial({ color: 0x3a3a4a, roughness: 0.2,  metalness: 0.8 })
+	const matAccent = new THREE.MeshStandardMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.45, roughness: 0.1, metalness: 0.3 })
+	const matDark   = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.35, metalness: 0.6 })
+	const matFace   = new THREE.MeshStandardMaterial({ color: 0x040d18, emissive: 0x0a1628, emissiveIntensity: 0.9, roughness: 0.05 })
+	const matEye    = new THREE.MeshStandardMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.7, roughness: 0.05 })
+	const matMouth  = new THREE.MeshStandardMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.5 })
+	const matAnt    = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9, roughness: 0.1 })
+	const matAntTip = new THREE.MeshStandardMaterial({ color: hex, emissive: hex, emissiveIntensity: 1.0 })
 
-	const s = 0.72 // scale factor
+	// ── كرسي ──
+	const chair = buildOfficerChair(hex)
+	g.add(chair)
 
-	function box(w, h, d, mat, px, py, pz) {
-		const m = new THREE.Mesh(new THREE.BoxGeometry(w*s, h*s, d*s), mat)
-		m.position.set(px*s, py*s, pz*s)
-		g.add(m)
-		return m
+	// ── جسم الروبوت (يبدأ من y=0.65) ──
+	const body = new THREE.Group()
+	body.position.set(0, 0.65, 0)
+	g.add(body)
+
+	// الخصر
+	_cyl(0.14, 0.18, 0.18, 12, matDark, body, 0, 0.30, 0)
+
+	// الجذع
+	_box(0.42, 0.38, 0.28, matBody,  body, 0, 0.52, 0)
+	_box(0.32, 0.26, 0.008, matPlate, body, 0, 0.54, 0.142)
+	_box(0.28, 0.018, 0.006, matAccent, body, 0, 0.62, 0.15)
+	_box(0.20, 0.012, 0.006, matAccent, body, 0, 0.44, 0.15)
+	_box(0.008, 0.3, 0.24, matAccent, body, -0.21, 0.52, 0)
+	_box(0.008, 0.3, 0.24, matAccent, body,  0.21, 0.52, 0)
+
+	// الكتفان
+	for (const side of [-1, 1]) {
+		_sph(0.085, matPlate, body, side * 0.27, 0.64, 0)
+		const tor = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.012, 6, 16), matAccent)
+		tor.position.set(side * 0.27, 0.72, 0)
+		body.add(tor)
 	}
-	function sph(r, mat, px, py, pz) {
-		const m = new THREE.Mesh(new THREE.SphereGeometry(r*s, 12, 12), mat)
-		m.position.set(px*s, py*s, pz*s)
-		g.add(m)
-		return m
-	}
-	function cyl(rt, rb, h, mat, px, py, pz) {
-		const m = new THREE.Mesh(new THREE.CylinderGeometry(rt*s, rb*s, h*s, 10), mat)
-		m.position.set(px*s, py*s, pz*s)
-		g.add(m)
-		return m
-	}
 
-	// جذع
-	box(1.1, 1.4, 0.65, bodyMat, 0, 0, 0)
-	// خطوط ضوئية على الجذع
-	box(0.04, 1.0, 0.07, glowB, -0.52, 0.05, 0.3)
-	box(0.04, 1.0, 0.07, glowB,  0.52, 0.05, 0.3)
-	box(0.9, 0.03, 0.07, glowG, 0, 0.2, 0.33)
-	box(0.9, 0.03, 0.07, glowG, 0,-0.15, 0.33)
-	// نواة
-	const coreM = new THREE.Mesh(new THREE.OctahedronGeometry(0.17*s), new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 2.2, metalness: 1, roughness: 0, transparent: true, opacity: 0.9 }))
-	coreM.position.set(0, 0.05*s, 0.33*s)
-	g.add(coreM)
-	// لوحة صدر
-	box(0.55, 0.28, 0.02, new THREE.MeshStandardMaterial({ color: 0x071428, emissive: 0x0a3060, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.2 }), 0,-0.35, 0.34)
-	for (const dx of [-0.15, 0, 0.15]) sph(0.04, glowG, dx, -0.35, 0.36)
+	// ── الذراع الأيسر ──
+	const armL = new THREE.Group()
+	armL.position.set(-0.33, 0.52, 0)
+	body.add(armL)
+	_box(0.10, 0.34, 0.10, matBody,  armL, 0, 0, 0)
+	_box(0.09, 0.22, 0.09, matPlate, armL, 0, -0.28, 0.02)
+	_box(0.11, 0.10, 0.08, matDark,  armL, -0.008, -0.44, 0)
 
-	// رقبة
-	cyl(0.18, 0.22, 0.25, jointMat, 0, 0.82, 0)
-	box(0.28, 0.04, 0.04, glowB, 0, 0.82, 0.17)
+	// ── الذراع الأيمن ──
+	const armR = new THREE.Group()
+	armR.position.set(0.33, 0.69, 0)
+	body.add(armR)
+	_box(0.10, 0.34, 0.10, matBody,  armR, 0, -0.17, 0)
+	_box(0.09, 0.22, 0.09, matPlate, armR, 0, -0.45, 0.02)
+	_box(0.11, 0.10, 0.08, matDark,  armR, 0.008, -0.61, 0)
 
-	// رأس
-	box(0.92, 0.78, 0.72, bodyMat, 0, 1.25, 0)
-	// visor
-	box(0.72, 0.36, 0.06, visorMat, 0, 1.27, 0.34)
+	// ── الرقبة ──
+	_cyl(0.07, 0.10, 0.14, 10, matDark, body, 0, 0.78, 0)
+
+	// ── الرأس ──
+	const head = new THREE.Group()
+	head.position.set(0, 0.98, 0)
+	body.add(head)
+
+	_box(0.32, 0.28, 0.28, matBody, head, 0, 0, 0)
+	// شاشة الوجه
+	_plane(0.24, 0.18, matFace,  head, 0, 0.01, 0.142)
 	// عيون
-	sph(0.09, eyeMat, -0.18, 1.31, 0.38)
-	sph(0.09, eyeMat,  0.18, 1.31, 0.38)
+	_plane(0.065, 0.055, matEye, head, -0.07, 0.03, 0.145)
+	_plane(0.065, 0.055, matEye, head,  0.07, 0.03, 0.145)
 	// فم
-	box(0.42, 0.05, 0.04, glowG, 0, 1.05, 0.37)
-	// خطوط رأس
-	box(0.04, 0.55, 0.06, glowB, -0.44, 1.25, 0.28)
-	box(0.04, 0.55, 0.06, glowB,  0.44, 1.25, 0.28)
+	_plane(0.10, 0.012, matMouth, head, 0, -0.065, 0.143)
+	// أشرطة جانبية
+	_box(0.008, 0.22, 0.24, matAccent, head, -0.162, 0, 0)
+	_box(0.008, 0.22, 0.24, matAccent, head,  0.162, 0, 0)
 	// هوائي
-	cyl(0.025, 0.025, 0.38, jointMat, 0.28, 1.8, 0)
-	sph(0.06, glowG, 0.28, 2.0, 0)
-	// شريط أعلى الرأس
-	box(0.7, 0.04, 0.06, new THREE.MeshStandardMaterial({ color: 0xa78bfa, emissive: 0xa78bfa, emissiveIntensity: 1.8, metalness: 1, roughness: 0 }), 0, 1.63, 0.3)
-
-	// ذراعان (وضع جلوس — أمام)
-	// يسار
-	sph(0.22, jointMat, -0.72, 0.5, 0)
-	box(0.24, 0.52, 0.22, bodyMat, -0.79, 0.22, 0)
-	box(0.04, 0.38, 0.04, glowB, -0.91, 0.22, 0.1)
-	sph(0.14, jointMat, -0.79, -0.06, 0)
-	// ساعد متجه للأمام (على المكتب)
-	box(0.2, 0.18, 0.52, bodyMat, -0.79, -0.1, -0.28)
-	box(0.26, 0.16, 0.22, jointMat, -0.79, -0.12, -0.55)
-	box(0.22, 0.04, 0.04, glowG, -0.79, -0.04, -0.4)
-
-	// يمين
-	sph(0.22, jointMat, 0.72, 0.5, 0)
-	box(0.24, 0.52, 0.22, bodyMat, 0.79, 0.22, 0)
-	box(0.04, 0.38, 0.04, glowB, 0.91, 0.22, 0.1)
-	sph(0.14, jointMat, 0.79, -0.06, 0)
-	box(0.2, 0.18, 0.52, bodyMat, 0.79, -0.1, -0.28)
-	box(0.26, 0.16, 0.22, jointMat, 0.79, -0.12, -0.55)
-	box(0.22, 0.04, 0.04, glowG, 0.79, -0.04, -0.4)
-
-	// حوض
-	box(0.9, 0.22, 0.58, bodyMat, 0,-0.82, 0)
-	box(0.75, 0.04, 0.06, new THREE.MeshStandardMaterial({ color: 0xa78bfa, emissive: 0xa78bfa, emissiveIntensity: 1.8, metalness: 1, roughness: 0 }), 0,-0.72, 0.3)
+	_cyl(0.008, 0.008, 0.18, 6, matAnt,    head, 0, 0.20, 0)
+	_sph(0.022, matAntTip, head, 0, 0.31, 0)
+	// ضوء الوجه
+	const faceLight = new THREE.PointLight(hex, 0.6, 1.4, 2)
+	faceLight.position.set(0, 0, 0.4)
+	head.add(faceLight)
 
 	return g
 }
