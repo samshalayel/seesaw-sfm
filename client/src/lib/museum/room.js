@@ -2414,8 +2414,8 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 		const stations = [
 			// مكتب 1: جنوب الفاصل — ظهر الروبوت للفاصل، وجهه للجنوب (نحو اللاعب)
 			{ x: 0, z:  halfL * 0.15, ry: Math.PI,  color: 0x4fc3f7 },
-			// مكتب 2: شمال الفاصل — ظهر الروبوت للشمال، وجهه للجنوب (نحو اللاعب)
-			{ x: 0, z: -halfL * 0.15, ry: Math.PI,  color: 0x00ff88 },
+			// مكتب 2: شمال الفاصل — مقلوب ليواجه اللاعب
+			{ x: 0, z: -halfL * 0.15, ry: 0,        color: 0x00ff88 },
 		]
 		for (const st of stations) {
 			const station = new THREE.Group()
