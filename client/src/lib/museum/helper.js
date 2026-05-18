@@ -1,0 +1,104 @@
+import * as THREE from 'three'
+
+export function hashStringToUint32(str) {
+	let h = 2166136261
+	for (let i = 0; i < str.length; i += 1) {
+		h ^= str.charCodeAt(i)
+		h = Math.imul(h, 16777619)
+	}
+	return h >>> 0
+}
+
+export function mulberry32(seed) {
+	let a = seed >>> 0
+	return function rand() {
+		a |= 0
+		a = (a + 0x6d2b79f5) | 0
+		let t = Math.imul(a ^ (a >>> 15), 1 | a)
+		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+	}
+}
+
+export function clamp(value, min, max) {
+	return Math.max(min, Math.min(max, value))
+}
+
+export function roundTo(value, step) {
+	return Math.round(value / step) * step
+}
+
+export function randRange(rand, min, max) {
+	return min + (max - min) * rand()
+}
+
+export function makeOutlineRect({ width, height, center, normal, color = 0xffffff, opacity = 0.65 }) {
+	const geo = new THREE.PlaneGeometry(width, height)
+	const edges = new THREE.EdgesGeometry(geo)
+	geo.dispose()
+
+	const safeOpacity = typeof opacity === 'number' && Number.isFinite(opacity) ? Math.max(0, Math.min(1, opacity)) : 0.65
+	const mat = new THREE.LineBasicMaterial({
+		color,
+		transparent: safeOpacity < 1,
+		opacity: safeOpacity,
+	})
+	const lines = new THREE.LineSegments(edges, mat)
+	const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal.clone().normalize())
+	lines.quaternion.copy(quat)
+	lines.position.copy(center)
+
+	return { object: lines, disposables: [edges, mat] }
+}
+
+export function configureGalleryTexture(tex) {
+	if (!tex) return tex
+	tex.generateMipmaps = false
+	tex.minFilter = THREE.LinearFilter
+	tex.magFilter = THREE.LinearFilter
+	tex.needsUpdate = true
+	return tex
+}
+
+export function setBodyClickableCursor(isClickable) {
+	if (typeof document === 'undefined') return
+	const body = document.body
+	if (!body || !body.classList) return
+	body.classList.toggle('cursor-clickable', Boolean(isClickable))
+}
+
+export function seededRand(seed) {
+	let s = (seed >>> 0) || 1
+	return function rand() {
+		s ^= s << 13
+		s ^= s >>> 17
+		s ^= s << 5
+		return (s >>> 0) / 0xffffffff
+	}
+}
+
+export function isSupportedImageUrl(url) {
+	const raw = typeof url === 'string' ? url.trim() : ''
+	if (!raw) return false
+
+	const blocked = new Set(['ogv', 'oga', 'ogg', 'webm', 'mp4', 'm4v', 'mp3', 'wav', 'flac', 'pdf', 'djvu', 'tif', 'tiff'])
+	const allowed = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg'])
+
+	try {
+		const u = new URL(raw)
+		const file = (u.pathname.split('/').pop() ?? '').split('?')[0]
+		const m = file.match(/\.([a-z0-9]+)$/i)
+		const ext = m?.[1] ? String(m[1]).toLowerCase() : ''
+		if (!ext) return true
+		if (blocked.has(ext)) return false
+		return allowed.has(ext)
+	} catch {
+		const file = raw.split('/').pop() ?? raw
+		const clean = (file.split('?')[0] ?? file).trim()
+		const m = clean.match(/\.([a-z0-9]+)$/i)
+		const ext = m?.[1] ? String(m[1]).toLowerCase() : ''
+		if (!ext) return true
+		if (blocked.has(ext)) return false
+		return allowed.has(ext)
+	}
+}

@@ -1,0 +1,335 @@
+/**
+ * MuseumScene.tsx
+ * متحف ويكيبيديا ثلاثي الأبعاد مع روبوتات ومكاتب مكتبية
+ * مبني على linkwalk (Three.js vanilla) داخل React wrapper
+ */
+
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useGame } from "@/lib/stores/useGame";
+
+// ─── Wikipedia helpers ────────────────────────────────────────────────────────
+async function fetchWikiData(title: string, signal?: AbortSignal) {
+  try {
+    const lang = localStorage.getItem("linkwalk:language:v1") || "en";
+    const base = `https://${lang}.wikipedia.org`;
+    const summaryUrl = `${base}/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+    const res = await fetch(summaryUrl, { signal });
+    if (!res.ok) throw new Error("wiki fetch failed");
+    const data = await res.json();
+
+    // photos via action API
+    const params = new URLSearchParams({
+      action: "query", titles: title, prop: "images",
+      imlimit: "20", format: "json", origin: "*",
+    });
+    const imgRes = await fetch(`${base}/w/api.php?${params}`, { signal });
+    const imgData = await imgRes.json();
+    const pages = imgData?.query?.pages ?? {};
+    const rawImages: string[] = [];
+    for (const page of Object.values(pages) as any[]) {
+      for (const img of page?.images ?? []) {
+        const n = img?.title?.replace("File:", "") ?? "";
+        if (n && !n.match(/\.(svg|ogv|ogg|webm)$/i)) {
+          rawImages.push(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(n)}?width=800`);
+        }
+      }
+    }
+
+    // related via links
+    const linksParams = new URLSearchParams({
+      action: "query", titles: title, prop: "links",
+      pllimit: "20", plnamespace: "0", format: "json", origin: "*",
+    });
+    const linksRes = await fetch(`${base}/w/api.php?${linksParams}`, { signal });
+    const linksData = await linksRes.json();
+    const relatedTitles: string[] = [];
+    for (const page of Object.values(linksData?.query?.pages ?? {}) as any[]) {
+      for (const link of page?.links ?? []) {
+        if (link?.title) relatedTitles.push(link.title);
+      }
+    }
+
+    return {
+      title: data.title ?? title,
+      extract: data.extract ?? "",
+      thumbnail: data.thumbnail?.source ?? null,
+      photos: rawImages.slice(0, 8),
+      related: relatedTitles.slice(0, 6),
+    };
+  } catch {
+    return { title, extract: "", thumbnail: null, photos: [], related: [] };
+  }
+}
+
+// lobby categories
+const LOBBY_CATEGORIES: Record<string, string[]> = {
+  en: ["Technology", "Science", "History", "Art", "Nature", "Space", "Music", "Philosophy", "Animals", "Culture", "Geography", "Painting"],
+  ar: ["تكنولوجيا", "علوم", "تاريخ", "فن", "طبيعة", "فضاء", "موسيقى", "فلسفة", "حيوانات", "ثقافة", "جغرافيا", "رسم"],
+};
+function getLobbyCategories() {
+  const lang = localStorage.getItem("linkwalk:language:v1") || "en";
+  return LOBBY_CATEGORIES[lang] ?? LOBBY_CATEGORIES.en;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+export function MuseumScene() {
+  const setAppMode = useGame((s) => s.setAppMode);
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const engineRef  = useRef<any>(null);
+  const abortRef   = useRef<AbortController | null>(null);
+
+  const [overlayVisible, setOverlayVisible] = useState(true);
+  const [loadingText,    setLoadingText]     = useState<string | null>(null);
+  const [currentTitle,   setCurrentTitle]    = useState<string | null>(null);
+
+  // ── init engine ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let stopped = false;
+
+    async function boot() {
+      // dynamic import — vanilla JS, no TS types needed
+      const { startYourEngines } = await import("@/lib/museum/engine.js") as any;
+
+      if (stopped || !canvasRef.current) return;
+
+      engineRef.current = startYourEngines({
+        canvas: canvasRef.current,
+        roomMode: "lobby",
+        roomSeedTitle: "Lobby",
+        lobbyCategories: getLobbyCategories(),
+        roomSpawn: { type: "fromWall", wall: "south" },
+
+        onPointerLockChange(locked: boolean) {
+          setOverlayVisible(!locked);
+          document.body.classList.toggle("locked", locked);
+        },
+
+        onRandomExhibitRequested() {
+          loadRandom();
+        },
+
+        onGoLobbyRequested() {
+          goLobby();
+        },
+
+        onDoorTrigger(door: any) {
+          if (door?.category)     { loadGallery(door.category);     return; }
+          if (door?.articleTitle) { loadGallery(door.articleTitle); return; }
+          if (door?.target === "lobby") goLobby();
+        },
+      });
+    }
+
+    boot();
+
+    return () => {
+      stopped = true;
+      abortRef.current?.abort();
+      engineRef.current?.stop?.();
+      engineRef.current = null;
+      document.body.classList.remove("locked");
+    };
+  }, []); // eslint-disable-line
+
+  // ── load gallery ──────────────────────────────────────────────────────────
+  const loadGallery = useCallback(async (title: string) => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    setLoadingText(`جاري تحميل: ${title}…`);
+    setCurrentTitle(title);
+
+    const data = await fetchWikiData(title, ctrl.signal);
+    if (ctrl.signal.aborted) return;
+
+    engineRef.current?.setRoom?.({
+      roomMode: "gallery",
+      roomSeedTitle: title,
+      galleryEntryWall: "south",
+      galleryTitle: data.title,
+      galleryDescription: data.extract,
+      galleryMainThumbnailUrl: data.thumbnail,
+      galleryPhotos: data.photos,
+      galleryLongExtract: data.extract,
+      galleryRelatedTitles: data.related,
+      galleryTrail: [],
+      spawn: { type: "fromWall", wall: "south" },
+    });
+
+    // update door labels after a short delay
+    setTimeout(() => {
+      data.related.forEach((t, i) => {
+        engineRef.current?.setDoorMeta?.(`seealso-${i}`, { articleTitle: t });
+        engineRef.current?.setDoorLabelOverride?.(`seealso-${i}`, t);
+      });
+    }, 300);
+
+    setLoadingText(null);
+  }, []);
+
+  const goLobby = useCallback(() => {
+    abortRef.current?.abort();
+    setCurrentTitle(null);
+    setLoadingText(null);
+    engineRef.current?.setRoom?.({
+      roomMode: "lobby",
+      lobbyCategories: getLobbyCategories(),
+      spawn: { type: "fromWall", wall: "south" },
+    });
+  }, []);
+
+  const loadRandom = useCallback(async () => {
+    try {
+      const lang = localStorage.getItem("linkwalk:language:v1") || "en";
+      const res  = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/random/summary`);
+      const data = await res.json();
+      if (data?.title) loadGallery(data.title);
+    } catch { /* ignore */ }
+  }, [loadGallery]);
+
+  // ── click-to-start ────────────────────────────────────────────────────────
+  function handleStart() {
+    canvasRef.current?.requestPointerLock();
+  }
+
+  return (
+    <div style={{ width: "100vw", height: "100vh", background: "#05030a", position: "relative", overflow: "hidden" }}>
+
+      {/* Canvas يشغّله محرك linkwalk مباشرة */}
+      <canvas
+        ref={canvasRef}
+        id="museum-scene"
+        style={{ width: "100%", height: "100%", display: "block" }}
+      />
+
+      {/* HUD — crosshair */}
+      <div style={{
+        position: "absolute", top: "50%", left: "50%",
+        transform: "translate(-50%, -50%)",
+        pointerEvents: "none",
+      }}>
+        <div style={{
+          width: 18, height: 18, position: "relative",
+          opacity: overlayVisible ? 0 : 0.7,
+          transition: "opacity 0.2s",
+        }}>
+          <div style={{ position: "absolute", top: 8, left: 0, right: 0, height: 2, background: "#4fc3f7", borderRadius: 1 }} />
+          <div style={{ position: "absolute", left: 8, top: 0, bottom: 0, width: 2, background: "#4fc3f7", borderRadius: 1 }} />
+        </div>
+      </div>
+
+      {/* Loading indicator */}
+      {loadingText && (
+        <div style={{
+          position: "absolute", bottom: 80, left: "50%", transform: "translateX(-50%)",
+          color: "#4fc3f7", fontSize: 13, letterSpacing: 1,
+          fontFamily: "Inter, sans-serif",
+          background: "rgba(0,0,0,0.5)",
+          padding: "8px 20px", borderRadius: 8,
+          backdropFilter: "blur(8px)",
+        }}>
+          ⏳ {loadingText}
+        </div>
+      )}
+
+      {/* Current article label */}
+      {currentTitle && !overlayVisible && (
+        <div style={{
+          position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)",
+          color: "rgba(255,255,255,0.6)", fontSize: 12, letterSpacing: 2,
+          fontFamily: "Inter, sans-serif",
+          textTransform: "uppercase",
+          pointerEvents: "none",
+        }}>
+          📖 {currentTitle}
+        </div>
+      )}
+
+      {/* Overlay — شاشة البداية */}
+      {overlayVisible && (
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "space-between",
+          background: "rgba(5,3,10,0.88)",
+          backdropFilter: "blur(4px)",
+        }}>
+          {/* header */}
+          <div style={{
+            width: "100%", display: "flex", justifyContent: "space-between",
+            alignItems: "center", padding: "20px 28px",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <img src="/images/sillar_icon.png" alt=""
+                style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }}
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+              <span style={{ fontSize: 22, fontWeight: 700, color: "#e0e8ff", letterSpacing: 3, fontFamily: "Inter, sans-serif" }}>
+                SILLAR
+              </span>
+            </div>
+            <button
+              onClick={() => setAppMode("classic")}
+              style={{
+                background: "transparent", border: "1px solid rgba(255,255,255,0.15)",
+                color: "rgba(255,255,255,0.5)", padding: "6px 16px", borderRadius: 8,
+                cursor: "pointer", fontSize: 12, fontFamily: "Inter, sans-serif", letterSpacing: 1,
+              }}
+            >
+              ← العودة للمكتب
+            </button>
+          </div>
+
+          {/* center */}
+          <div
+            onClick={handleStart}
+            style={{
+              textAlign: "center", cursor: "pointer", padding: "48px 40px",
+              border: "1px solid rgba(79,195,247,0.2)",
+              borderRadius: 20,
+              background: "rgba(79,195,247,0.04)",
+              backdropFilter: "blur(8px)",
+              transition: "all 0.2s",
+              maxWidth: 480,
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLElement).style.background = "rgba(79,195,247,0.09)";
+              (e.currentTarget as HTMLElement).style.borderColor = "rgba(79,195,247,0.4)";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.background = "rgba(79,195,247,0.04)";
+              (e.currentTarget as HTMLElement).style.borderColor = "rgba(79,195,247,0.2)";
+            }}
+          >
+            <div style={{ fontSize: 52, marginBottom: 16 }}>🏛️</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: "#e0e8ff", letterSpacing: 4, fontFamily: "Inter, sans-serif", marginBottom: 10 }}>
+              VIRTUAL MUSEUM
+            </div>
+            <div style={{ fontSize: 13, color: "#4fc3f7", letterSpacing: 2, fontFamily: "Inter, sans-serif", marginBottom: 24, opacity: 0.8 }}>
+              ويكيبيديا · متحف ثلاثي الأبعاد · روبوتات AI
+            </div>
+            <div style={{ fontSize: 15, color: "#e0e8ff", fontFamily: "Inter, sans-serif", marginBottom: 8 }}>
+              انقر للدخول
+            </div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "Inter, sans-serif", letterSpacing: 1 }}>
+              WASD تحرك · Mouse نظر · SPACE قفز · ESC خروج
+            </div>
+          </div>
+
+          {/* footer */}
+          <div style={{
+            padding: "20px 0",
+            color: "rgba(255,255,255,0.2)", fontSize: 10, letterSpacing: 3,
+            fontFamily: "Inter, sans-serif", textTransform: "uppercase",
+          }}>
+            Powered by Three.js + Wikipedia API
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

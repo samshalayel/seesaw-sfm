@@ -44,6 +44,7 @@ import { CameraButtons } from "./components/game/CameraButtons";
 import { CityBackground } from "./components/game/CityBackground";
 import { ModeSelectScreen } from "./components/game/ModeSelectScreen";
 import { ShowcaseScene } from "./components/game/ShowcaseScene";
+import { MuseumScene }   from "./components/game/MuseumScene";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { useGame, getRoomSlot, getModelColor, getHallWorkerPosition, getHallWorkerDeskPosition, getHallWorkerRotation, getHallWorkerDeskRotation, getHallWorkerColor, getModelRobotPosition, getMeetingLayout, getHumanSlot } from "./lib/stores/useGame";
 import { useChat } from "./lib/stores/useChat";
@@ -951,7 +952,8 @@ function App() {
 
   // شاشة اختيار وضع التشغيل — قبل كل شيء
   if (appMode === null) return <ModeSelectScreen />;
-  if (appMode === "showcase") return <ShowcaseScene />;
+  if (appMode === "showcase") return <MuseumScene />;
+  // ShowcaseScene محفوظة احتياطياً — if (appMode === "showcase-old") return <ShowcaseScene />;
 
   // لوحة الادمن
   if (phase === "admin") {
