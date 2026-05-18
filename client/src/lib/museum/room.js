@@ -2412,8 +2412,12 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 	// ── روبوتات ومكاتب في وضع gallery ────────────────────────────────────────
 	if (mode === 'gallery') {
 		const stations = [
-			{ x:  halfW * 0.5, z: -halfL * 0.38, ry: -Math.PI * 0.18, color: 0x4fc3f7 },
-			{ x: -halfW * 0.5, z:  halfL * 0.38, ry:  Math.PI * 0.82, color: 0x00ff88 },
+			// مكتب 1: الجدار الشمالي — الواجهة أمام الداخل من الجنوب
+			// ry = π  ←  local+Z يشير للشمال، الروبوت ظهره للجدار الشمالي ووجهه للجنوب
+			{ x: 0,            z: -halfL + 1.4, ry: Math.PI,      color: 0x4fc3f7 },
+			// مكتب 2: الجدار الشرقي — مستقيم (ليس مائلاً)
+			// ry = π/2 ← local+Z يشير للشرق، الروبوت ظهره للجدار الشرقي ووجهه للغرب
+			{ x:  halfW - 1.4, z: 0,            ry: Math.PI / 2,  color: 0x00ff88 },
 		]
 		for (const st of stations) {
 			// نضع المكتب والروبوت في group واحد حتى يتشاركا نفس المحور المحلي
@@ -2426,33 +2430,34 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 			const desk = buildOfficeDesk()
 			station.add(desk)
 
-			// الروبوت: خلف المكتب بـ 0.72 وحدة (local +z)
-			// ويدور 180° ليواجه الشاشة (التي عند local -z)
+			// الروبوت: خلف المكتب (local +z = باتجاه الجدار)
+			// ويدور 180° ليواجه الشاشة (ظهره للجدار، وجهه للغرفة)
 			const robot = buildOfficeRobot(st.color)
 			robot.position.set(0, 0, 0.72)
 			robot.rotation.y = Math.PI
 			station.add(robot)
 		}
 
-		// ── كنبة في زاوية الغرفة ────────────────────────────────────────────────
+		// ── كنبة واحدة فقط (الجدار الجنوبي — منطقة الاستقبال) ─────────────────
+		const couchWalls = [
+			{ px: halfW * 0.45, pz: halfL - 1.2, ry: Math.PI }, // جنوب شرق
+		]
 		_gltfLoader.load(
 			'/models/couch.glb',
 			(gltf) => {
-				const couch = gltf.scene
-				couch.scale.set(1.1, 1.1, 1.1)
-				couch.position.set(
-					Math.max(-halfW + 2.5, -halfW * 0.7),
-					0,
-					Math.max(-halfL + 2.5, -halfL * 0.7)
-				)
-				couch.rotation.y = Math.PI * 0.25
-				couch.traverse((child) => {
-					if (child.isMesh) {
-						child.castShadow    = true
-						child.receiveShadow = true
-					}
-				})
-				group.add(couch)
+				for (const w of couchWalls) {
+					const couch = gltf.scene.clone()
+					couch.scale.set(1.1, 1.1, 1.1)
+					couch.position.set(w.px, 0, w.pz)
+					couch.rotation.y = w.ry
+					couch.traverse((child) => {
+						if (child.isMesh) {
+							child.castShadow    = true
+							child.receiveShadow = true
+						}
+					})
+					group.add(couch)
+				}
 			},
 			undefined,
 			(err) => console.warn('[museum] couch load failed', err)
