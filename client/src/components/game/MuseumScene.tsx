@@ -128,7 +128,8 @@ export function MuseumScene() {
 
     boot().then(() => {
       if (!stopped) {
-        loadCustomRoom();
+        // delay صغير حتى يستقر الـ engine
+        setTimeout(() => { if (!stopped) loadCustomRoom(); }, 150);
       }
     });
 
@@ -223,10 +224,10 @@ export function MuseumScene() {
       roomMode: "gallery",
       roomSeedTitle: "Museum",
       galleryEntryWall: "south",
-      galleryTitle: "",            // لا عنوان ويكيبيديا
-      galleryDescription: "",      // لا نص
-      galleryMainThumbnailUrl: null, // لا صورة رئيسية
-      galleryPhotos: customPhotos, // فقط صورك المخصصة
+      galleryTitle: "",
+      galleryDescription: "",
+      galleryMainThumbnailUrl: customPhotos[0] ?? null, // أول صورة كـ thumbnail
+      galleryPhotos: customPhotos.slice(1),  // باقي الصور على الجدران
       galleryLongExtract: "",
       galleryRelatedTitles: [],
       galleryTrail: [],

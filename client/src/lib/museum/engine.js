@@ -497,11 +497,19 @@ export function startYourEngines({
 		return document.pointerLockElement === canvas
 	}
 
+	let ignoreMouseFrames = 0
+
 	function onMouseMove(e) {
 		if (!isPointerLocked()) return
+		// تجاهل أول 5 حركات بعد الـ lock لتفادي القفز المفاجئ
+		if (ignoreMouseFrames > 0) { ignoreMouseFrames--; return }
 
-		yaw -= e.movementX * mouseSensitivity
-		pitch -= e.movementY * mouseSensitivity
+		// clamp لتجنب القيم الضخمة المراكمة
+		const dx = Math.max(-80, Math.min(80, e.movementX))
+		const dy = Math.max(-80, Math.min(80, e.movementY))
+
+		yaw -= dx * mouseSensitivity
+		pitch -= dy * mouseSensitivity
 
 		const limit = Math.PI / 2 - 0.01
 		pitch = Math.max(-limit, Math.min(limit, pitch))
@@ -513,6 +521,9 @@ export function startYourEngines({
 	window.addEventListener('mousemove', onMouseMove)
 
 	function handlePointerLockChange() {
+		if (isPointerLocked()) {
+			ignoreMouseFrames = 8  // تجاهل أول 8 حركات عند كل lock جديد
+		}
 		if (typeof onPointerLockChange === 'function') {
 			onPointerLockChange(isPointerLocked())
 		}
