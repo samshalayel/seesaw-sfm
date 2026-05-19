@@ -128,8 +128,7 @@ export function MuseumScene() {
 
     boot().then(() => {
       if (!stopped) {
-        loadRandom();
-        setTimeout(() => applyStageLabels(), 1200); // بعد تحميل الغرفة
+        loadCustomRoom();
       }
     });
 
@@ -208,47 +207,35 @@ export function MuseumScene() {
     };
   }, []);
 
-  // ── load gallery ──────────────────────────────────────────────────────────
-  const loadGallery = useCallback(async (title: string) => {
-    abortRef.current?.abort();
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-
-    setLoadingText(`جاري تحميل: ${title}…`);
-    setCurrentTitle(title);
-
-    const data = await fetchWikiData(title, ctrl.signal);
-    if (ctrl.signal.aborted) return;
-
-    // صور مخصصة من لوحة التحكم تحل محل صور ويكيبيديا
-    const customPhotosRaw = localStorage.getItem("museum:wall-photos");
-    let galleryPhotos = data.photos;
-    if (customPhotosRaw) {
-      try {
-        const arr: string[] = JSON.parse(customPhotosRaw);
-        const filled = arr.filter((u: string) => u && u.trim());
-        if (filled.length > 0) galleryPhotos = filled;
-      } catch { /* ignore */ }
-    }
+  // ── تحميل الغرفة بالصور المخصصة فقط (بدون ويكيبيديا) ────────────────────
+  const loadCustomRoom = useCallback(() => {
+    // اقرأ الصور من لوحة التحكم
+    let customPhotos: string[] = [];
+    try {
+      const raw = localStorage.getItem("museum:wall-photos");
+      if (raw) {
+        const arr: string[] = JSON.parse(raw);
+        customPhotos = arr.filter((u: string) => u && u.trim());
+      }
+    } catch { /* ignore */ }
 
     engineRef.current?.setRoom?.({
       roomMode: "gallery",
-      roomSeedTitle: title,
+      roomSeedTitle: "Museum",
       galleryEntryWall: "south",
-      galleryTitle: data.title,
-      galleryDescription: data.extract,
-      galleryMainThumbnailUrl: data.thumbnail,
-      galleryPhotos,
-      galleryLongExtract: data.extract,
-      galleryRelatedTitles: [],   // لا عناوين مرتبطة — الأبواب S0-S6 فقط
+      galleryTitle: "",            // لا عنوان ويكيبيديا
+      galleryDescription: "",      // لا نص
+      galleryMainThumbnailUrl: null, // لا صورة رئيسية
+      galleryPhotos: customPhotos, // فقط صورك المخصصة
+      galleryLongExtract: "",
+      galleryRelatedTitles: [],
       galleryTrail: [],
       spawn: { type: "fromWall", wall: "south" },
     });
 
-    // اكتب S0-S6 على الأبواب وعطّل الدخول
     setTimeout(() => applyStageLabels(), 400);
-
     setLoadingText(null);
+    setCurrentTitle(null);
   }, []);
 
   // ── تسمية الأبواب S0-S6 وإلغاء التنقل ───────────────────────────────────
@@ -262,19 +249,6 @@ export function MuseumScene() {
     });
   }, []);
 
-  const loadRandom = useCallback(async () => {
-    try {
-      const lang = localStorage.getItem("linkwalk:language:v1") || "en";
-      const res  = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/random/summary`);
-      const data = await res.json();
-      if (data?.title) loadGallery(data.title);
-    } catch { /* ignore */ }
-  }, [loadGallery]);
-
-  const goLobby = useCallback(() => {
-    // لا lobby — نحمّل مقالة عشوائية بدلاً منها
-    loadRandom();
-  }, [loadRandom]);
 
   return (
     <div
