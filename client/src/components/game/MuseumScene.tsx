@@ -225,6 +225,17 @@ export function MuseumScene() {
     const data = await fetchWikiData(title, ctrl.signal);
     if (ctrl.signal.aborted) return;
 
+    // صور مخصصة من لوحة التحكم تحل محل صور ويكيبيديا
+    const customPhotosRaw = localStorage.getItem("museum:wall-photos");
+    let galleryPhotos = data.photos;
+    if (customPhotosRaw) {
+      try {
+        const arr: string[] = JSON.parse(customPhotosRaw);
+        const filled = arr.filter((u: string) => u && u.trim());
+        if (filled.length > 0) galleryPhotos = filled;
+      } catch { /* ignore */ }
+    }
+
     engineRef.current?.setRoom?.({
       roomMode: "gallery",
       roomSeedTitle: title,
@@ -232,7 +243,7 @@ export function MuseumScene() {
       galleryTitle: data.title,
       galleryDescription: data.extract,
       galleryMainThumbnailUrl: data.thumbnail,
-      galleryPhotos: data.photos,
+      galleryPhotos,
       galleryLongExtract: data.extract,
       galleryRelatedTitles: data.related,
       galleryTrail: [],
