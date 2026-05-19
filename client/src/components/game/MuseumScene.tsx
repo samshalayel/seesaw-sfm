@@ -120,24 +120,17 @@ export function MuseumScene() {
           document.body.classList.toggle("locked", locked);
         },
 
-        onRandomExhibitRequested() {
-          loadRandom();
-        },
-
-        onGoLobbyRequested() {
-          goLobby();
-        },
-
-        onDoorTrigger(door: any) {
-          if (door?.category)     { loadGallery(door.category);     return; }
-          if (door?.articleTitle) { loadGallery(door.articleTitle); return; }
-          if (door?.target === "lobby") goLobby();
-        },
+        onRandomExhibitRequested() { /* معطّل */ },
+        onGoLobbyRequested()       { /* معطّل */ },
+        onDoorTrigger()            { /* الأبواب معطّلة — S0-S6 للعرض فقط */ },
       });
     }
 
     boot().then(() => {
-      if (!stopped) loadRandom();
+      if (!stopped) {
+        loadRandom();
+        setTimeout(() => applyStageLabels(), 1200); // بعد تحميل الغرفة
+      }
     });
 
     return () => {
@@ -247,20 +240,26 @@ export function MuseumScene() {
       galleryMainThumbnailUrl: data.thumbnail,
       galleryPhotos,
       galleryLongExtract: data.extract,
-      galleryRelatedTitles: data.related,
+      galleryRelatedTitles: [],   // لا عناوين مرتبطة — الأبواب S0-S6 فقط
       galleryTrail: [],
       spawn: { type: "fromWall", wall: "south" },
     });
 
-    // update door labels after a short delay
-    setTimeout(() => {
-      data.related.forEach((t, i) => {
-        engineRef.current?.setDoorMeta?.(`seealso-${i}`, { articleTitle: t });
-        engineRef.current?.setDoorLabelOverride?.(`seealso-${i}`, t);
-      });
-    }, 300);
+    // اكتب S0-S6 على الأبواب وعطّل الدخول
+    setTimeout(() => applyStageLabels(), 400);
 
     setLoadingText(null);
+  }, []);
+
+  // ── تسمية الأبواب S0-S6 وإلغاء التنقل ───────────────────────────────────
+  const applyStageLabels = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const labels = ["S0","S1","S2","S3","S4","S5","S6"];
+    labels.forEach((label, i) => {
+      engine.setDoorMeta?.(`seealso-${i}`, { articleTitle: null, category: null, target: null });
+      engine.setDoorLabelOverride?.(`seealso-${i}`, label);
+    });
   }, []);
 
   const loadRandom = useCallback(async () => {
