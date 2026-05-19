@@ -32,7 +32,9 @@ async function fetchWikiData(title: string, signal?: AbortSignal) {
       for (const img of page?.images ?? []) {
         const n = img?.title?.replace("File:", "") ?? "";
         if (n && !n.match(/\.(svg|ogv|ogg|webm)$/i)) {
-          rawImages.push(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(n)}?width=800`);
+          // نمرر عبر proxy السيرفر لحل مشكلة CORS مع Commons
+          const commonsUrl = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(n)}?width=800`;
+          rawImages.push(`/api/museum/proxy-image?url=${encodeURIComponent(commonsUrl)}`);
         }
       }
     }

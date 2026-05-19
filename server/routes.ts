@@ -3901,5 +3901,64 @@ export async function registerRoutes(
     }
   });
 
+  // ── Museum: رفع الصور ────────────────────────────────────────────────────
+  const MUSEUM_UPLOADS_DIR = path.join(process.cwd(), "client", "public", "museum-uploads");
+
+  app.post("/api/museum/upload", async (req, res) => {
+    try {
+      fs.mkdirSync(MUSEUM_UPLOADS_DIR, { recursive: true });
+
+      // raw body — نقرأ الـ buffer مباشرةً
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      await new Promise<void>((resolve, reject) => {
+        req.on("end", () => resolve());
+        req.on("error", reject);
+      });
+
+      const body = Buffer.concat(chunks);
+      const contentType = (req.headers["content-type"] || "").toLowerCase();
+
+      // نحدد الامتداد
+      let ext = ".jpg";
+      if (contentType.includes("png"))  ext = ".png";
+      else if (contentType.includes("gif"))  ext = ".gif";
+      else if (contentType.includes("webp")) ext = ".webp";
+
+      const filename = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+      const filePath = path.join(MUSEUM_UPLOADS_DIR, filename);
+      fs.writeFileSync(filePath, body);
+
+      const url = `/museum-uploads/${filename}`;
+      res.json({ ok: true, url });
+    } catch (e: any) {
+      console.error("[museum-upload]", e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Museum: proxy للصور الخارجية (حل CORS مع Wikipedia/Commons) ──────────
+  app.get("/api/museum/proxy-image", async (req, res) => {
+    try {
+      const targetUrl = req.query.url as string;
+      if (!targetUrl || !targetUrl.startsWith("http")) {
+        return res.status(400).json({ error: "invalid url" });
+      }
+      const response = await fetch(targetUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; MuseumBot/1.0)" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) return res.status(response.status).end();
+      const ct = response.headers.get("content-type") || "image/jpeg";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      const buffer = await response.arrayBuffer();
+      res.end(Buffer.from(buffer));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   return httpServer;
 }

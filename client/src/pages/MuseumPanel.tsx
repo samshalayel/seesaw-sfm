@@ -4,7 +4,7 @@
  * متاحة على /museum-panel
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const STORAGE_KEY = "museum:wall-photos";
 const MAX_SLOTS = 8;
@@ -54,11 +54,24 @@ function decodeFromHash(hash: string): string[] | null {
 
 const SLOT_LABELS = ["جدار الشمال — صورة 1","جدار الشمال — صورة 2","جدار الشرق — صورة 1","جدار الشرق — صورة 2","جدار الشرق — صورة 3","جدار الشرق — صورة 4","جدار الغرب — صورة 1","جدار الغرب — صورة 2"];
 
+async function uploadImageFile(file: File): Promise<string> {
+  const res = await fetch("/api/museum/upload", {
+    method: "POST",
+    headers: { "Content-Type": file.type || "image/jpeg" },
+    body: file,
+  });
+  if (!res.ok) throw new Error("فشل الرفع");
+  const data = await res.json();
+  return data.url as string;
+}
+
 export default function MuseumPanel() {
   const [slots, setSlots] = useState<string[]>(loadSlots);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [importError, setImportError] = useState("");
+  const [uploading, setUploading] = useState<number | null>(null);
+  const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // load from URL hash on mount (shared link)
   useEffect(() => {
@@ -82,6 +95,24 @@ export default function MuseumPanel() {
     saveSlots(slots);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleFileUpload = async (i: number, file: File) => {
+    if (!file) return;
+    setUploading(i);
+    try {
+      const url = await uploadImageFile(file);
+      setSlots(prev => {
+        const next = [...prev];
+        next[i] = url;
+        return next;
+      });
+      setSaved(false);
+    } catch (e: any) {
+      alert("خطأ في الرفع: " + e.message);
+    } finally {
+      setUploading(null);
+    }
   };
 
   const handleReset = () => {
@@ -179,28 +210,57 @@ export default function MuseumPanel() {
                 )}
               </div>
 
-              {/* input */}
+              {/* input + upload */}
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6, letterSpacing: 1 }}>
                   {SLOT_LABELS[i]}
                 </div>
-                <input
-                  type="text"
-                  value={url}
-                  onChange={e => update(i, e.target.value)}
-                  placeholder="https://... رابط الصورة"
-                  style={{
-                    width: "100%", boxSizing: "border-box",
-                    background: "rgba(0,0,0,0.3)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 6, padding: "8px 12px",
-                    color: "#e0e8ff", fontSize: 12,
-                    fontFamily: "monospace",
-                    outline: "none",
-                  }}
-                  onFocus={e => (e.target.style.borderColor = "rgba(79,195,247,0.5)")}
-                  onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
-                />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="text"
+                    value={url}
+                    onChange={e => update(i, e.target.value)}
+                    placeholder="https://... رابط الصورة"
+                    style={{
+                      flex: 1, boxSizing: "border-box",
+                      background: "rgba(0,0,0,0.3)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 6, padding: "8px 12px",
+                      color: "#e0e8ff", fontSize: 12,
+                      fontFamily: "monospace", outline: "none",
+                    }}
+                    onFocus={e => (e.target.style.borderColor = "rgba(79,195,247,0.5)")}
+                    onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
+                  />
+                  {/* زر رفع ملف */}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    ref={el => { fileInputRefs.current[i] = el; }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(i, file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    onClick={() => fileInputRefs.current[i]?.click()}
+                    disabled={uploading === i}
+                    title="رفع صورة من جهازك"
+                    style={{
+                      background: "rgba(79,195,247,0.1)",
+                      border: "1px solid rgba(79,195,247,0.3)",
+                      color: uploading === i ? "#888" : "#4fc3f7",
+                      borderRadius: 6, padding: "0 12px",
+                      cursor: uploading === i ? "wait" : "pointer",
+                      fontSize: 16, flexShrink: 0,
+                      display: "flex", alignItems: "center",
+                    }}
+                  >
+                    {uploading === i ? "⏳" : "📁"}
+                  </button>
+                </div>
               </div>
 
               {/* clear */}
