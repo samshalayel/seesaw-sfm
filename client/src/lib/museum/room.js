@@ -2431,7 +2431,17 @@ export function buildRoom({ width, length, height, wallThickness = 0.2, mode = '
 			robot.rotation.y = Math.PI
 			station.add(robot)
 		}
-		// لا كنبة
+		// ── كنبة: الجدار الأيمن (شرق) — ظهرها للجدار الشرقي ────────────────────
+		_gltfLoader.load('/models/couch.glb', (gltf) => {
+			const couch = gltf.scene.clone()
+			couch.scale.set(1.1, 1.1, 1.1)
+			couch.position.set(halfW - 1.2, 0, halfL * 0.4)
+			couch.rotation.y = Math.PI / 2
+			couch.traverse((child) => {
+				if (child.isMesh) { child.castShadow = true; child.receiveShadow = true }
+			})
+			group.add(couch)
+		}, undefined, (err) => console.warn('[museum] couch load failed', err))
 	}
 
 	return {
