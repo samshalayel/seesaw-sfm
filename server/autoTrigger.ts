@@ -3,6 +3,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { spawn, execSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+// ESM-compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToTask } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
@@ -10,6 +15,7 @@ import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getMode
 import { storage } from "./storage";
 import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
+import { extractSkillsFromTags, buildSkillsSection, formatActiveSkills } from "./skills.js";
 
 // clients مؤقتة — يتم إعادة إنشاؤها من الخزنة عند كل مهمة
 // NOTE: OpenAI/Anthropic constructors throw if apiKey is empty/undefined.
@@ -594,6 +600,18 @@ async function processTaskWithAI(task: any, log: TriggerLog, opts: ProcessOpts =
     }
   }
 
+  // Skills — يُفعَّل بناءً على tags المهمة في ClickUp
+  const taskTags     = task.tags || [];
+  console.log(`[AutoTrigger] Task tags for "${task.name}": ${JSON.stringify(taskTags)}`);
+  const activeSkills = extractSkillsFromTags(taskTags);
+  const skillsSection = buildSkillsSection(activeSkills);
+  if (activeSkills.length > 0) {
+    console.log(`[AutoTrigger] Active skills: ${formatActiveSkills(activeSkills)} for task: "${task.name}"`);
+    log.result += `\n[Skills] ${formatActiveSkills(activeSkills)}`;
+  } else {
+    console.log(`[AutoTrigger] No skills matched for task: "${task.name}"`);
+  }
+
   const taskPrompt = `You are an autonomous AI developer at Sillar Digital Production. A ClickUp task has been assigned and you must execute it.
 
 TASK DETAILS:
@@ -628,7 +646,7 @@ CRITICAL RULES:
     ? `${vaultOwner}/${vaultRepo}`
     : "not configured";
 
-  const systemPrompt = `${projectContextSection}${playbookSection}You are sillar-model, an autonomous CI/CD agent. You execute ClickUp tasks automatically. Always respond in Arabic.
+  const systemPrompt = `${projectContextSection}${playbookSection}${skillsSection}You are sillar-model, an autonomous CI/CD agent. You execute ClickUp tasks automatically. Always respond in Arabic.
 
 ━━━ GITHUB TARGET (FIXED) ━━━
 Owner : ${vaultOwner || "not configured"}
