@@ -144,9 +144,9 @@ const toolDefinitions = [
   { name: "create_or_update_file", description: "Create/update a file in GitHub", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" }, content: { type: "string" }, commit_message: { type: "string" } }, required: ["owner", "repo", "path", "content", "commit_message"] } },
   {
     name: "run_on_vps",
-    description: "Run a bash command on the production VPS server (Linux). Use for: composer, npm, php artisan, git, mkdir, apt, etc. Returns stdout+stderr. Working directory is /var/www unless you cd first.",
+    description: "Run a bash command on the production VPS server (Linux). Use for: composer, npm, php artisan, git, mkdir, apt, etc. Returns stdout+stderr. Working directory is /var/www unless you cd first. IMPORTANT: To write multi-line files (HTML/CSS/JS), ALWAYS use heredoc syntax: printf '%s' 'CONTENT' > /path/file — never use echo with \\n.",
     parameters: { type: "object" as const, properties: {
-      command:    { type: "string", description: "Bash command to run on the VPS" },
+      command:    { type: "string", description: "Bash command to run on the VPS. For writing HTML files use: printf '%s' '<full html content>' > /path/file.html" },
       timeout_seconds: { type: "integer", description: "Max wait time in seconds (default 60, max 300)" },
     }, required: ["command"] },
   },
@@ -209,10 +209,12 @@ async function executeToolCall(name: string, args: any): Promise<string> {
         return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message, triggerRoomId), null, 2);
       case "run_on_vps": {
         const timeoutMs = Math.min((args.timeout_seconds || 60), 300) * 1000;
-        console.log(`[AutoTrigger] VPS command: ${args.command.slice(0, 100)}`);
+        // Normalize literal \n → real newlines in the command (AI sometimes escapes them)
+        const vpsCommand = (args.command as string).replace(/\\n/g, '\n');
+        console.log(`[AutoTrigger] VPS command: ${vpsCommand.slice(0, 100)}`);
         const vpsCfg = await getVpsConfig(triggerRoomId);
         if (!vpsCfg.host) return "Error: VPS not configured. Add VPS settings in the vault.";
-        const result = await runOnVps(args.command, timeoutMs, vpsCfg);
+        const result = await runOnVps(vpsCommand, timeoutMs, vpsCfg);
         return result;
       }
       case "get_team_member": {
