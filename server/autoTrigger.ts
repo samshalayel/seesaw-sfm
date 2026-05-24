@@ -143,10 +143,18 @@ const toolDefinitions = [
   { name: "get_repo_contents", description: "Get repo contents at a path", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" } }, required: ["owner", "repo"] } },
   { name: "create_or_update_file", description: "Create/update a file in GitHub", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" }, content: { type: "string" }, commit_message: { type: "string" } }, required: ["owner", "repo", "path", "content", "commit_message"] } },
   {
-    name: "run_on_vps",
-    description: "Run a bash command on the production VPS server (Linux). Use for: composer, npm, php artisan, git, mkdir, apt, etc. Returns stdout+stderr. Working directory is /var/www unless you cd first. IMPORTANT: To write multi-line files (HTML/CSS/JS), ALWAYS use heredoc syntax: printf '%s' 'CONTENT' > /path/file — never use echo with \\n.",
+    name: "write_file_to_vps",
+    description: "Write any file (HTML/CSS/JS/etc) directly to the VPS safely. Use this instead of run_on_vps when writing file content — handles special characters, quotes, and large files correctly via base64 encoding.",
     parameters: { type: "object" as const, properties: {
-      command:    { type: "string", description: "Bash command to run on the VPS. For writing HTML files use: printf '%s' '<full html content>' > /path/file.html" },
+      path:    { type: "string", description: "Absolute path on VPS, e.g. /var/www/sillar/dist/public/landing.html" },
+      content: { type: "string", description: "Full file content (HTML, CSS, JS, etc.) — no escaping needed" },
+    }, required: ["path", "content"] },
+  },
+  {
+    name: "run_on_vps",
+    description: "Run a bash command on the production VPS server (Linux). Use for: npm, git, mkdir, pm2, etc. Returns stdout+stderr. For WRITING FILE CONTENT use write_file_to_vps instead.",
+    parameters: { type: "object" as const, properties: {
+      command:    { type: "string", description: "Bash command to run on the VPS" },
       timeout_seconds: { type: "integer", description: "Max wait time in seconds (default 60, max 300)" },
     }, required: ["command"] },
   },
@@ -207,6 +215,17 @@ async function executeToolCall(name: string, args: any): Promise<string> {
       case "get_repo_contents": return JSON.stringify(await getRepoContents(args.owner, args.repo, args.path || "", triggerRoomId), null, 2);
       case "create_or_update_file":
         return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message, triggerRoomId), null, 2);
+      case "write_file_to_vps": {
+        const vpsCfg = await getVpsConfig(triggerRoomId);
+        if (!vpsCfg.host) return "Error: VPS not configured.";
+        const filePath = args.path as string;
+        const fileContent = (args.content as string).replace(/\\n/g, '\n');
+        // Write via base64 — safe for any content (HTML/CSS/JS with quotes, special chars)
+        const b64 = Buffer.from(fileContent, 'utf8').toString('base64');
+        const cmd = `mkdir -p "$(dirname '${filePath}')" && echo '${b64}' | base64 -d > '${filePath}' && echo "OK: ${filePath}"`;
+        console.log(`[AutoTrigger] write_file_to_vps: ${filePath} (${fileContent.length} chars)`);
+        return await runOnVps(cmd, 30000, vpsCfg);
+      }
       case "run_on_vps": {
         const timeoutMs = Math.min((args.timeout_seconds || 60), 300) * 1000;
         // Normalize literal \n → real newlines in the command (AI sometimes escapes them)
