@@ -15,7 +15,8 @@ import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getMode
 import { storage } from "./storage";
 import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
-import { extractSkillsFromTags, buildSkillsSection, formatActiveSkills } from "./skills.js";
+import { extractSkillsFromTags, buildSkillsSection, formatActiveSkills, renderLandingPage } from "./skills.js";
+import type { LandingContent } from "./skills.js";
 
 // clients مؤقتة — يتم إعادة إنشاؤها من الخزنة عند كل مهمة
 // NOTE: OpenAI/Anthropic constructors throw if apiKey is empty/undefined.
@@ -143,6 +144,29 @@ const toolDefinitions = [
   { name: "get_repo_contents", description: "Get repo contents at a path", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" } }, required: ["owner", "repo"] } },
   { name: "create_or_update_file", description: "Create/update a file in GitHub", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" }, content: { type: "string" }, commit_message: { type: "string" } }, required: ["owner", "repo", "path", "content", "commit_message"] } },
   {
+    name: "submit_page_content",
+    description: "Use this when frontend-design skill is active. Submit text content only — server generates the full HTML automatically with professional dark luxury design.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        filename:         { type: "string",  description: "HTML filename, e.g. landing3.html" },
+        vps_path:         { type: "string",  description: "VPS directory, e.g. /var/www/sillar/dist/public" },
+        company:          { type: "string",  description: "Company name" },
+        eyebrow:          { type: "string",  description: "Short tagline in Arabic" },
+        headline:         { type: "string",  description: "Main hero headline in Arabic (bold, 6-9 words)" },
+        headline_accent:  { type: "string",  description: "ONE key word from headline to highlight in gold" },
+        tagline:          { type: "string",  description: "2 sentences describing value (Arabic)" },
+        hero_cta:         { type: "string",  description: "Hero CTA button text" },
+        stats:            { type: "array",   items: { type: "object", properties: { num: { type: "string" }, label: { type: "string" } }, required: ["num","label"] }, description: "3 stats objects" },
+        services:         { type: "array",   items: { type: "object", properties: { title: { type: "string" }, desc: { type: "string" } }, required: ["title","desc"] }, description: "3 services" },
+        cta_headline:     { type: "string",  description: "Final CTA section headline" },
+        cta_sub:          { type: "string",  description: "Final CTA subtitle" },
+        cta_button:       { type: "string",  description: "Final CTA button text" },
+      },
+      required: ["filename","vps_path","company","eyebrow","headline","headline_accent","tagline","hero_cta","stats","services","cta_headline","cta_sub","cta_button"],
+    },
+  },
+  {
     name: "write_file_to_vps",
     description: "Write any file (HTML/CSS/JS/etc) directly to the VPS safely. Use this instead of run_on_vps when writing file content — handles special characters, quotes, and large files correctly via base64 encoding.",
     parameters: { type: "object" as const, properties: {
@@ -215,6 +239,38 @@ async function executeToolCall(name: string, args: any): Promise<string> {
       case "get_repo_contents": return JSON.stringify(await getRepoContents(args.owner, args.repo, args.path || "", triggerRoomId), null, 2);
       case "create_or_update_file":
         return JSON.stringify(await createOrUpdateFile(args.owner, args.repo, args.path, args.content, args.commit_message, triggerRoomId), null, 2);
+      case "submit_page_content": {
+        const content = args as LandingContent;
+        const html    = renderLandingPage(content);
+        const vpsDir  = (args.vps_path as string).replace(/\/$/, "");
+        const fname   = args.filename as string;
+        const fullPath = `${vpsDir}/${fname}`;
+
+        console.log(`[AutoTrigger] submit_page_content → rendering ${fname} (${html.length} chars)`);
+
+        // Write to VPS via base64
+        const vpsCfg = await getVpsConfig(triggerRoomId);
+        if (vpsCfg.host) {
+          const b64 = Buffer.from(html, "utf8").toString("base64");
+          const cmd = `mkdir -p "${vpsDir}" && printf '%s' '${b64}' | base64 -d > '${fullPath}' && echo "VPS OK: ${fullPath}"`;
+          const vpsResult = await runOnVps(cmd, 30000, vpsCfg);
+          console.log(`[AutoTrigger] VPS result:`, vpsResult);
+        }
+
+        // Write to GitHub
+        const vaultOwnerPC = await getGitHubOwner(triggerRoomId);
+        const vaultRepoPC  = await getGitHubRepo(triggerRoomId);
+        if (vaultOwnerPC && vaultRepoPC) {
+          try {
+            await createOrUpdateFile(vaultOwnerPC, vaultRepoPC, fname, html, `feat: add landing page ${fname}`, triggerRoomId);
+            console.log(`[AutoTrigger] GitHub OK: ${fname}`);
+          } catch (e: any) {
+            console.warn(`[AutoTrigger] GitHub write failed (non-fatal):`, e.message);
+          }
+        }
+
+        return `✅ Landing page "${fname}" created with dark luxury design and written to VPS: ${fullPath}`;
+      }
       case "write_file_to_vps": {
         const vpsCfg = await getVpsConfig(triggerRoomId);
         if (!vpsCfg.host) return "Error: VPS not configured.";
