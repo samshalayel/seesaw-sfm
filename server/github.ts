@@ -116,7 +116,9 @@ export async function getAuthenticatedUser(roomId?: string) {
 export async function createOrUpdateFile(owner: string, repo: string, path: string, content: string, commitMessage: string, roomId?: string, isBase64 = false) {
   try {
     const octokit = await getClient(roomId);
-    const contentBase64 = isBase64 ? content : Buffer.from(content).toString('base64');
+    // Normalize literal \n → real newlines (AI sometimes passes escaped strings)
+    const normalizedContent = isBase64 ? content : content.replace(/\\n/g, '\n');
+    const contentBase64 = isBase64 ? content : Buffer.from(normalizedContent).toString('base64');
 
     let sha: string | undefined;
     try {
