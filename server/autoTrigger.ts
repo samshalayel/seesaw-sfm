@@ -627,7 +627,7 @@ async function processTaskWithAI(task: any, log: TriggerLog, opts: ProcessOpts =
   }
 
   const taskPrompt = `You are an autonomous AI developer at Sillar Digital Production. A ClickUp task has been assigned and you must execute it.
-
+${skillsSection ? `\n⚠️ ACTIVE SKILLS — READ BEFORE DOING ANYTHING ELSE:\n${skillsSection}` : ""}
 TASK DETAILS:
 - Name: ${task.name}
 - Description: ${task.description || "No description provided"}
