@@ -360,6 +360,16 @@ Now execute the task. Provide a brief Arabic summary when done.`;
       cwd: tmpDir,
     });
 
+    // ── Timeout: اقتل الـ process بعد 5 دقائق إذا ما خلص ──────────────────────
+    const CLI_TIMEOUT_MS = 5 * 60 * 1000;
+    const killTimer = setTimeout(() => {
+      console.warn(`[AutoTrigger CLI ${log.id}] ⏱ Timeout (5 min) — killing process`);
+      proc.kill("SIGKILL");
+      log.error = "Claude CLI timeout (5 min) — task aborted";
+      log.status = "failed";
+      log.completedAt = Date.now();
+    }, CLI_TIMEOUT_MS);
+
     let fullOutput = "";
 
     proc.stdout.on("data", (data: Buffer) => {
@@ -373,6 +383,7 @@ Now execute the task. Provide a brief Arabic summary when done.`;
     });
 
     proc.on("close", async (code) => {
+      clearTimeout(killTimer);
       try { fs.unlinkSync(promptFile); } catch (_) {}
 
       // Detect limit exhaustion phrases
@@ -405,6 +416,7 @@ Now execute the task. Provide a brief Arabic summary when done.`;
     });
 
     proc.on("error", (err: Error) => {
+      clearTimeout(killTimer);
       log.status = "failed";
       log.error = `Spawn error: ${err.message} — هل claude CLI مثبت؟`;
       log.completedAt = Date.now();
