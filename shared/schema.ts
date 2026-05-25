@@ -53,6 +53,9 @@ export const rooms = pgTable("rooms", {
   // Figma
   figmaToken: text("figma_token").notNull().default(""),
 
+  // AgentRouter
+  agentRouterKey: text("agent_router_key").notNull().default(""),
+
   // VPS / SSH
   vpsHost:     text("vps_host").notNull().default(""),
   vpsPort:     text("vps_port").notNull().default("22"),

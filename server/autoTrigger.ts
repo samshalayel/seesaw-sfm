@@ -11,7 +11,7 @@ const __dirname  = path.dirname(__filename);
 import { getAllTasksRaw, getTask, updateTask, getWorkspaceMembers, attachFileToTask } from "./clickup";
 import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } from "./github";
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
-import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig, getModels, getWhatsAppConfig } from "./vaultStore";
+import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig, getModels, getWhatsAppConfig, getAgentRouterKey } from "./vaultStore";
 import { storage } from "./storage";
 import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
@@ -827,8 +827,58 @@ You must actually execute tool calls — do not describe what you will do, just 
 
   try {
     // robot-5: Devin — autonomous software engineer (Cognition AI)
+    // بناء الـ tools ديناميكياً بناءً على الـ skills الفعّالة
+    const { openai: taskOpenaiTools, anthropic: taskAnthropicTools } = buildTools(activeSkills);
+
     if (_robotId === "robot-5") {
       await processTaskWithDevin(task, log);
+      return;
+    }
+
+    // robot-6: AgentRouter — claude-opus-4-6 / deepseek-v4-pro via agentrouter.org
+    if (_robotId === "robot-6") {
+      const arKey = await getAgentRouterKey(triggerRoomId);
+      if (!arKey) throw new Error("AgentRouter key غير مضبوط — أضفه في الخزنة.");
+      const arClient = new OpenAI({ apiKey: arKey, baseURL: "https://agentrouter.org/v1" });
+      const arModel = "claude-opus-4-6";
+      log.modelUsed = `robot-6 (${arModel})`;
+
+      let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        { role: "system", content: systemPrompt },
+        { role: "user",   content: taskPrompt },
+      ];
+      let fullResult = "";
+      let iterations = 0;
+
+      while (iterations++ < MAX_ITERATIONS) {
+        if (isLogCancelled(log.id)) return;
+        if (checkTimeout()) { fullResult += "\n\n⏱️ انتهت المهلة."; break; }
+
+        const response = await arClient.chat.completions.create({
+          model: arModel,
+          messages,
+          tools: taskOpenaiTools,
+          tool_choice: "auto",
+          max_tokens: 4096,
+        });
+
+        const msg = response.choices[0].message;
+        fullResult += msg.content || "";
+        log.result = fullResult;
+
+        if (!msg.tool_calls?.length) break;
+
+        messages.push(msg as any);
+        for (const tc of msg.tool_calls) {
+          const fn = (tc as any).function;
+          log.toolsUsed.push(fn.name);
+          let args: any = {};
+          try { args = JSON.parse(fn.arguments); } catch (_) {}
+          const toolResult = await executeToolCall(fn.name, args);
+          messages.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
+        }
+      }
+      log.result = fullResult;
       return;
     }
 
@@ -837,9 +887,6 @@ You must actually execute tool calls — do not describe what you will do, just 
       await processTaskWithCLI(task, log);
       return;
     }
-
-    // بناء الـ tools ديناميكياً بناءً على الـ skills الفعّالة
-    const { openai: taskOpenaiTools, anthropic: taskAnthropicTools } = buildTools(activeSkills);
 
     if (_robotId === "robot-2") {
       let messages: Anthropic.MessageParam[] = [{ role: "user", content: taskPrompt }];

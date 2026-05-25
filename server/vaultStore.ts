@@ -48,6 +48,7 @@ export interface VaultSettings {
   vps?: { host: string; port: string; user: string; password: string; webRoot: string };
   whatsapp?: { instanceId: string; token: string; phone: string };
   agora?: { appId: string; appCertificate: string };
+  agentRouter?: { key: string };
   humans:       HumanMember[];
   models:       ModelConfig[];
   hallWorkers:  ModelConfig[];
@@ -109,6 +110,9 @@ function roomToVault(room: Room, models: ModelConfig[]): VaultSettings {
     agora: {
       appId:          (room as any).agoraAppId          || "",
       appCertificate: (room as any).agoraAppCertificate || "",
+    },
+    agentRouter: {
+      key: (room as any).agentRouterKey || "",
     },
     google: {
       clientId:        (room as any).googleClientId      || "",
@@ -279,6 +283,11 @@ export async function setVaultSettings(
   if (settings.agora) {
     if (settings.agora.appId          && settings.agora.appId          !== "••••••••") (update as any).agoraAppId          = settings.agora.appId;
     if (settings.agora.appCertificate && settings.agora.appCertificate !== "••••••••") (update as any).agoraAppCertificate = settings.agora.appCertificate;
+  }
+  if (settings.agentRouter) {
+    if (settings.agentRouter.key && settings.agentRouter.key !== "••••••••") {
+      (update as any).agentRouterKey = settings.agentRouter.key;
+    }
   }
   if (settings.google) {
     if (settings.google.clientId)      (update as any).googleClientId      = settings.google.clientId;
@@ -460,4 +469,9 @@ export async function setDefaultModel(modelName: string, roomId?: string): Promi
 export async function getSystemPrompt(roomId?: string): Promise<string> {
   const room = await storage.getRoom(roomId || "default");
   return room?.systemPrompt || "";
+}
+
+export async function getAgentRouterKey(roomId?: string): Promise<string> {
+  const room = await storage.getRoom(roomId || "default");
+  return room?.agentRouterKey || process.env.AGENT_ROUTER_KEY || "";
 }

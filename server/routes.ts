@@ -2994,6 +2994,10 @@ export async function registerRoutes(
         appCertificate: settings.agora?.appCertificate ? "••••••••" : "",
         hasAppId:       !!(settings.agora?.appId),
       },
+      agentRouter: {
+        key:    settings.agentRouter?.key ? "••••••••" : "",
+        hasKey: !!(settings.agentRouter?.key),
+      },
       humans: settings.humans || [],
     });
   });
@@ -3142,8 +3146,8 @@ export async function registerRoutes(
 
   app.post("/api/vault-settings", async (req, res) => {
     const roomId = getRoomId(req);
-    const { company, loginBg, doors, github, clickup, sfm, huggingface, apidog, figma, vps, whatsapp, agora, models, hallWorkers, humans, systemPrompt } = req.body;
-    if (!github && !clickup && !sfm && !huggingface && !apidog && !figma && !vps && !whatsapp && !agora && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
+    const { company, loginBg, doors, github, clickup, sfm, huggingface, apidog, figma, vps, whatsapp, agora, agentRouter, models, hallWorkers, humans, systemPrompt } = req.body;
+    if (!github && !clickup && !sfm && !huggingface && !apidog && !figma && !vps && !whatsapp && !agora && !agentRouter && !models && !hallWorkers && !humans && !company && !doors && loginBg === undefined && systemPrompt === undefined) {
       return res.status(400).json({ error: "Invalid payload" });
     }
     const current = await getVaultSettings(roomId);
@@ -3226,6 +3230,11 @@ export async function registerRoutes(
       updatePayload.agora = {
         appId:          agora.appId          === "••••••••" ? current.agora?.appId          : (agora.appId          ?? ""),
         appCertificate: agora.appCertificate === "••••••••" ? current.agora?.appCertificate : (agora.appCertificate ?? ""),
+      };
+    }
+    if (agentRouter) {
+      updatePayload.agentRouter = {
+        key: agentRouter.key === "••••••••" ? current.agentRouter?.key : (agentRouter.key ?? ""),
       };
     }
     if (models && Array.isArray(models)) {
