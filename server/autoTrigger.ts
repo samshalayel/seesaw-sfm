@@ -144,29 +144,6 @@ const toolDefinitions = [
   { name: "get_repo_contents", description: "Get repo contents at a path", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" } }, required: ["owner", "repo"] } },
   { name: "create_or_update_file", description: "Create/update a file in GitHub", parameters: { type: "object" as const, properties: { owner: { type: "string" }, repo: { type: "string" }, path: { type: "string" }, content: { type: "string" }, commit_message: { type: "string" } }, required: ["owner", "repo", "path", "content", "commit_message"] } },
   {
-    name: "submit_page_content",
-    description: "Use this when frontend-design skill is active. Submit text content only — server generates the full HTML automatically with professional dark luxury design.",
-    parameters: {
-      type: "object" as const,
-      properties: {
-        filename:         { type: "string",  description: "HTML filename, e.g. landing3.html" },
-        vps_path:         { type: "string",  description: "VPS directory, e.g. /var/www/sillar/dist/public" },
-        company:          { type: "string",  description: "Company name" },
-        eyebrow:          { type: "string",  description: "Short tagline in Arabic" },
-        headline:         { type: "string",  description: "Main hero headline in Arabic (bold, 6-9 words)" },
-        headline_accent:  { type: "string",  description: "ONE key word from headline to highlight in gold" },
-        tagline:          { type: "string",  description: "2 sentences describing value (Arabic)" },
-        hero_cta:         { type: "string",  description: "Hero CTA button text" },
-        stats:            { type: "array",   items: { type: "object", properties: { num: { type: "string" }, label: { type: "string" } }, required: ["num","label"] }, description: "3 stats objects" },
-        services:         { type: "array",   items: { type: "object", properties: { title: { type: "string" }, desc: { type: "string" } }, required: ["title","desc"] }, description: "3 services" },
-        cta_headline:     { type: "string",  description: "Final CTA section headline" },
-        cta_sub:          { type: "string",  description: "Final CTA subtitle" },
-        cta_button:       { type: "string",  description: "Final CTA button text" },
-      },
-      required: ["filename","vps_path","company","eyebrow","headline","headline_accent","tagline","hero_cta","stats","services","cta_headline","cta_sub","cta_button"],
-    },
-  },
-  {
     name: "write_file_to_vps",
     description: "Write any file (HTML/CSS/JS/etc) directly to the VPS safely. Use this instead of run_on_vps when writing file content — handles special characters, quotes, and large files correctly via base64 encoding.",
     parameters: { type: "object" as const, properties: {
@@ -206,6 +183,49 @@ const toolDefinitions = [
   },
 ];
 
+// ── Skill-specific tools (injected only when skill is active) ─────────────────
+const skillToolDefinitions: Record<string, any> = {
+  "frontend-design": {
+    name: "submit_page_content",
+    description: "Submit landing page text content — server renders a professional dark luxury HTML page automatically. USE THIS instead of write_file_to_vps or create_or_update_file.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        filename:         { type: "string",  description: "HTML filename, e.g. landing3.html" },
+        vps_path:         { type: "string",  description: "VPS directory, e.g. /var/www/sillar/dist/public" },
+        company:          { type: "string",  description: "Company name" },
+        eyebrow:          { type: "string",  description: "Short tagline in Arabic" },
+        headline:         { type: "string",  description: "Main hero headline in Arabic (bold, 6-9 words)" },
+        headline_accent:  { type: "string",  description: "ONE key word from headline to highlight in gold" },
+        tagline:          { type: "string",  description: "2 sentences about value (Arabic)" },
+        hero_cta:         { type: "string",  description: "Hero CTA button text" },
+        stats:            { type: "array",   items: { type: "object", properties: { num: { type: "string" }, label: { type: "string" } }, required: ["num","label"] }, description: "3 stats" },
+        services:         { type: "array",   items: { type: "object", properties: { title: { type: "string" }, desc: { type: "string" } }, required: ["title","desc"] }, description: "3 services" },
+        cta_headline:     { type: "string",  description: "Final CTA headline" },
+        cta_sub:          { type: "string",  description: "Final CTA subtitle" },
+        cta_button:       { type: "string",  description: "Final CTA button text" },
+      },
+      required: ["filename","vps_path","company","eyebrow","headline","headline_accent","tagline","hero_cta","stats","services","cta_headline","cta_sub","cta_button"],
+    },
+  },
+};
+
+function buildTools(activeSkills: string[]) {
+  const extra = activeSkills.map(s => skillToolDefinitions[s]).filter(Boolean);
+  const all = [...toolDefinitions, ...extra];
+  const openai: OpenAI.Chat.Completions.ChatCompletionTool[] = all.map(t => ({
+    type: "function" as const,
+    function: { name: t.name, description: t.description, parameters: t.parameters as any },
+  }));
+  const anthropic: Anthropic.Tool[] = all.map(t => ({
+    name: t.name,
+    description: t.description,
+    input_schema: { ...t.parameters, type: "object" as const },
+  }));
+  return { openai, anthropic };
+}
+
+// Static defaults (no active skills)
 const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = toolDefinitions.map(t => ({
   type: "function" as const,
   function: { name: t.name, description: t.description, parameters: t.parameters as any },
@@ -818,6 +838,9 @@ You must actually execute tool calls — do not describe what you will do, just 
       return;
     }
 
+    // بناء الـ tools ديناميكياً بناءً على الـ skills الفعّالة
+    const { openai: taskOpenaiTools, anthropic: taskAnthropicTools } = buildTools(activeSkills);
+
     if (_robotId === "robot-2") {
       let messages: Anthropic.MessageParam[] = [{ role: "user", content: taskPrompt }];
       let fullResult = "";
@@ -836,7 +859,7 @@ You must actually execute tool calls — do not describe what you will do, just 
           model: "claude-sonnet-4-20250514",
           max_tokens: 2048,
           system: systemPrompt,
-          tools: anthropicTools,
+          tools: taskAnthropicTools,
           messages,
         });
 
@@ -884,7 +907,7 @@ You must actually execute tool calls — do not describe what you will do, just 
         const response = await _gemini.chat.completions.create({
           model: "gemini-2.0-flash",
           messages,
-          tools: openaiTools,
+          tools: taskOpenaiTools,
           max_tokens: 2048,
         });
 
@@ -928,7 +951,7 @@ You must actually execute tool calls — do not describe what you will do, just 
         const response = await _openai.chat.completions.create({
           model: "gpt-4o",
           messages,
-          tools: openaiTools,
+          tools: taskOpenaiTools,
           max_completion_tokens: 2048,
         });
 
