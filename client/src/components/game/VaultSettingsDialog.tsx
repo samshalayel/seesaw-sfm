@@ -2067,33 +2067,6 @@ export function VaultSettingsDialog() {
               </div>
             </div>
 
-            {/* ── AgentRouter ─────────────────────────────────────────── */}
-            <div style={{ marginTop: 18, borderTop: "1px solid #334155", paddingTop: 14 }}>
-              <div style={{ color: "#e2e8f0", fontWeight: "bold", marginBottom: 6, fontSize: 13 }}>
-                🤖 AgentRouter API Key
-              </div>
-              <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 8 }}>
-                يستخدمه robot-6 — يدعم claude-opus-4-6 وdeepseek-v4-pro والمزيد.
-              </div>
-              <input
-                type="password"
-                value={agentRouterKey}
-                onChange={(e) => setAgentRouterKey(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder="sk-xxxxxxxxxxxxxxxxxxxx"
-                style={inputStyle}
-              />
-              <div style={{ marginTop: 6, color: "#64748b", fontSize: 11 }}>
-                احصل على التوكن من{" "}
-                <span
-                  style={{ color: "#a78bfa", cursor: "pointer", textDecoration: "underline" }}
-                  onClick={() => window.open("https://agentrouter.org/console/token", "_blank")}
-                >
-                  agentrouter.org/console/token ↗
-                </span>
-              </div>
-            </div>
-
             {/* ── PDF RAG ─────────────────────────────────────────────── */}
             <div style={{ marginTop: 18, borderTop: "1px solid #334155", paddingTop: 14 }}>
               <div style={{ color: "#e2e8f0", fontWeight: "bold", marginBottom: 6, fontSize: 13 }}>
@@ -2727,6 +2700,40 @@ export function VaultSettingsDialog() {
                   موديلات GLM الصينية من ZhipuAI — <strong style={{ color: "#4caf50" }}>GLM-4.7-Flash</strong> و <strong style={{ color: "#4caf50" }}>GLM-4.5-Flash</strong> مجانية محدودة الوقت.
                   سجّل على <strong style={{ color: "#a855f7" }}>open.bigmodel.cn</strong> واحصل على API key من لوحة التحكم.
                 </div>
+              </div>
+            </div>
+
+            {/* ── AgentRouter ─────────────────────────────────────────── */}
+            <div style={{ marginTop: 20, borderTop: "1px solid #1e293b", paddingTop: 16 }}>
+              <div style={{ color: "#e2e8f0", fontWeight: "bold", marginBottom: 4, fontSize: 13 }}>
+                🔀 AgentRouter — robot-6
+              </div>
+              <div style={{ color: "#64748b", fontSize: 12, marginBottom: 10 }}>
+                يتيح استخدام <strong style={{ color: "#a78bfa" }}>claude-opus-4-6</strong> و <strong style={{ color: "#a78bfa" }}>deepseek-v4-pro</strong> والمزيد عبر{" "}
+                <span
+                  style={{ color: "#a78bfa", cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => window.open("https://agentrouter.org", "_blank")}
+                >
+                  agentrouter.org ↗
+                </span>
+              </div>
+              <label style={labelStyle}>AgentRouter API Key</label>
+              <input
+                type="password"
+                value={agentRouterKey}
+                onChange={(e) => setAgentRouterKey(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="sk-xxxxxxxxxxxxxxxxxxxx"
+                style={inputStyle}
+              />
+              <div style={{ marginTop: 6, color: "#64748b", fontSize: 11 }}>
+                احصل على التوكن من{" "}
+                <span
+                  style={{ color: "#a78bfa", cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => window.open("https://agentrouter.org/console/token", "_blank")}
+                >
+                  agentrouter.org/console/token ↗
+                </span>
               </div>
             </div>
           </>
