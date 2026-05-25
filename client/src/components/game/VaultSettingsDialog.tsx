@@ -115,6 +115,7 @@ export function VaultSettingsDialog() {
   const [hfToken, setHfToken] = useState("");
   const [apidogToken, setApidogToken] = useState("");
   const [figmaToken, setFigmaToken] = useState("");
+  const [agentRouterKey, setAgentRouterKey] = useState("");
   const [githubToken, setGithubToken] = useState("");
   const [githubOwner, setGithubOwner] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
@@ -433,8 +434,9 @@ export function VaultSettingsDialog() {
           }
           if (data.huggingface) {
             setHfToken(data.huggingface.token || "");
-            if (data.apidog) setApidogToken(data.apidog.token || "");
-            if (data.figma)  setFigmaToken(data.figma.token || "");
+            if (data.apidog)       setApidogToken(data.apidog.token || "");
+            if (data.figma)        setFigmaToken(data.figma.token || "");
+            if (data.agentRouter)  setAgentRouterKey(data.agentRouter.key || "");
           }
           if (data.vps) {
             setVpsHost(data.vps.host || "");
@@ -541,6 +543,7 @@ export function VaultSettingsDialog() {
           huggingface: { token: hfToken },
           apidog: { token: apidogToken },
           figma:  { token: figmaToken },
+          agentRouter: { key: agentRouterKey },
           vps: { host: vpsHost, port: vpsPort, user: vpsUser, password: vpsPassword, webRoot: vpsWebRoot },
           whatsapp: {
             instanceId: waInstanceId, token: waToken, phone: waPhone,
@@ -2060,6 +2063,33 @@ export function VaultSettingsDialog() {
                   onClick={() => window.open("https://www.figma.com/settings", "_blank")}
                 >
                   Figma → Settings → Personal access tokens ↗
+                </span>
+              </div>
+            </div>
+
+            {/* ── AgentRouter ─────────────────────────────────────────── */}
+            <div style={{ marginTop: 18, borderTop: "1px solid #334155", paddingTop: 14 }}>
+              <div style={{ color: "#e2e8f0", fontWeight: "bold", marginBottom: 6, fontSize: 13 }}>
+                🤖 AgentRouter API Key
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 8 }}>
+                يستخدمه robot-6 — يدعم claude-opus-4-6 وdeepseek-v4-pro والمزيد.
+              </div>
+              <input
+                type="password"
+                value={agentRouterKey}
+                onChange={(e) => setAgentRouterKey(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="sk-xxxxxxxxxxxxxxxxxxxx"
+                style={inputStyle}
+              />
+              <div style={{ marginTop: 6, color: "#64748b", fontSize: 11 }}>
+                احصل على التوكن من{" "}
+                <span
+                  style={{ color: "#a78bfa", cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => window.open("https://agentrouter.org/console/token", "_blank")}
+                >
+                  agentrouter.org/console/token ↗
                 </span>
               </div>
             </div>
