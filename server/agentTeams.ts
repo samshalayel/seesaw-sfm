@@ -38,34 +38,31 @@ function runAgent(
   prompt: string,
   onLog: (msg: string) => void,
 ): Promise<string> {
+  const claudeCmd = findClaude();
+  const tmpFile = path.join(os.tmpdir(), `seesaw-agent-${role}-${Date.now()}.txt`);
+  fs.writeFileSync(tmpFile, prompt, "utf8");
+
+  // Filter env: remove ANTHROPIC_API_KEY + drop undefined/null values (Windows spawn EINVAL guard)
+  const { ANTHROPIC_API_KEY: _removed, ...baseEnv } = process.env as Record<string, string>;
+  const env: Record<string, string> = Object.fromEntries(
+    Object.entries(baseEnv).filter(([, v]) => v != null)
+  );
+
+  // Use shell: true + pipe via type/cat — same approach as robot-3 (avoids spawn EINVAL on Windows)
+  const isWin = process.platform === "win32";
+  const shellCmd = isWin
+    ? `type "${tmpFile}" | "${claudeCmd}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001 --max-turns 1`
+    : `cat "${tmpFile}" | "${claudeCmd}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001 --max-turns 1`;
+
+  onLog(`[${role}] running via claude CLI...`);
+
   return new Promise((resolve, reject) => {
-    const claudeCmd = findClaude();
-    const tmpFile = path.join(os.tmpdir(), `seesaw-agent-${role}-${Date.now()}.txt`);
-    fs.writeFileSync(tmpFile, prompt, "utf8");
-
-    const env = { ...process.env };
-    delete env.ANTHROPIC_API_KEY; // use claude.ai subscription
-
-    const args = [
-      "--model", "claude-haiku-4-5-20251001",
-      "--output-format", "text",
-      "--max-turns", "1",
-    ];
-
-    const proc = spawn(claudeCmd, args, {
-      env,
-      cwd: os.tmpdir(),
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const proc = spawn(shellCmd, [], { shell: true, env, cwd: os.tmpdir() });
 
     const killTimer = setTimeout(() => {
       proc.kill("SIGKILL");
       reject(new Error(`[${role}] timeout after 8 min`));
     }, CLAUDE_TIMEOUT_MS);
-
-    // Feed prompt via stdin
-    const promptStream = fs.createReadStream(tmpFile);
-    promptStream.pipe(proc.stdin);
 
     let output = "";
     let errOutput = "";
