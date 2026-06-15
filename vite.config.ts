@@ -4,7 +4,6 @@ import path, { dirname } from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { fileURLToPath } from "url";
 import glsl from "vite-plugin-glsl";
-import mkcert from "vite-plugin-mkcert";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -14,7 +13,6 @@ export default defineConfig({
     react(),
     runtimeErrorOverlay(),
     glsl(),
-    mkcert(),
   ],
   resolve: {
     alias: {
