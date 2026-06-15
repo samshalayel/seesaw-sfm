@@ -50,9 +50,11 @@ function runAgent(
 
   // Use shell: true + pipe via type/cat — same approach as robot-3 (avoids spawn EINVAL on Windows)
   const isWin = process.platform === "win32";
+  const isRoot = process.getuid ? process.getuid() === 0 : false;
+  const skipPerms = isRoot ? "" : " --dangerously-skip-permissions";
   const shellCmd = isWin
-    ? `type "${tmpFile}" | "${claudeCmd}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001 --max-turns 1`
-    : `cat "${tmpFile}" | "${claudeCmd}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001 --max-turns 1`;
+    ? `type "${tmpFile}" | "${claudeCmd}" -p${skipPerms} --model claude-haiku-4-5-20251001 --max-turns 1`
+    : `cat "${tmpFile}" | "${claudeCmd}" -p${skipPerms} --model claude-haiku-4-5-20251001 --max-turns 1`;
 
   onLog(`[${role}] running via claude CLI...`);
 
