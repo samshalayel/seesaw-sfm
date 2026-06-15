@@ -9,11 +9,6 @@ import { spawn } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const CLAUDE_TIMEOUT_MS = 8 * 60 * 1000; // 8 min per agent
 
 // ── Find claude binary ────────────────────────────────────────────────────────
