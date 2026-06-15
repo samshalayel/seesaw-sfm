@@ -313,7 +313,8 @@ export function TopRightPanel() {
     if (id === "robot-3" || lower.includes("claude cli"))return { label: "Claude CLI",  color: "#c084fc", short: "🆓" };
     if (id === "robot-4" || lower.includes("gemini"))    return { label: "Gemini",      color: "#facc15", short: "✦" };
     if (id === "robot-5" || lower.includes("devin"))     return { label: "Devin",         color: "#f97316", short: "🤖" };
-    if (id === "robot-6" || lower.includes("agentrouter")) return { label: "AgentRouter", color: "#a78bfa", short: "🔀" };
+    if (id === "robot-6" || lower.includes("agentrouter")) return { label: "AgentRouter",  color: "#a78bfa", short: "🔀" };
+    if (id === "robot-7" || lower.includes("multi-agent")) return { label: "Multi-Agent",  color: "#34d399", short: "🧠" };
     return { label: id, color: "#aaa", short: id.slice(0,2).toUpperCase() };
   };
 
@@ -517,6 +518,7 @@ export function TopRightPanel() {
                     { id: "robot-4", label: "Gemini ⚡",     color: "#facc15" },
                     { id: "robot-5", label: "Devin 🤖",      color: "#f97316" },
                     { id: "robot-6", label: "AgentRouter 🔀", color: "#a78bfa" },
+                    { id: "robot-7", label: "Multi-Agent 🧠", color: "#34d399" },
                   ] as const).map(r => {
                     const on = selRobots.includes(r.id);
                     return (
@@ -561,7 +563,8 @@ export function TopRightPanel() {
                         id === "robot-3" ? "Claude CLI 🆓" :
                         id === "robot-4" ? "Gemini ⚡" :
                         id === "robot-5" ? "Devin 🤖" :
-                        id === "robot-6" ? "AgentRouter 🔀" : "Claude API"
+                        id === "robot-6" ? "AgentRouter 🔀" :
+                        id === "robot-7" ? "Multi-Agent 🧠" : "Claude API"
                       ).join(" + ")
                     }
                     {(config?.robotIds?.length ?? 1) > 1 && <span style={{ color: "#facc15", marginRight: 4 }}>⚡ متزامن</span>}
