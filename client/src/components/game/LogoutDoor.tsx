@@ -1,16 +1,11 @@
 import * as THREE from "three";
 import { useTexture, Html } from "@react-three/drei";
 import { useGame } from "@/lib/stores/useGame";
-import { useChat } from "@/lib/stores/useChat";
-import { apiFetch } from "@/lib/utils";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 
 export function LogoutDoor() {
-  const logout = useGame((s) => s.logout);
-  const clearAllChats = useChat((s) => s.clearAllChats);
   const isExteriorView = useGame((s) => s.isExteriorView);
   const [hovered, setHovered] = useState(false);
-  const [showWarning, setShowWarning] = useState(false);
 
   const doorTexture = useTexture("/images/door.png");
   doorTexture.center.set(0.5, 0.5);
@@ -19,24 +14,6 @@ export function LogoutDoor() {
 
   const doorWidth = 2.6;
   const doorHeight = 5.2;
-
-  const handleDoorClick = useCallback(async () => {
-    try {
-      const res = await apiFetch("/api/jobs");
-      const jobs = await res.json();
-      const activeJobs = jobs.filter((j: any) => j.status === "pending" || j.status === "running");
-      if (activeJobs.length > 0) {
-        setShowWarning(true);
-        setTimeout(() => setShowWarning(false), 4000);
-        return;
-      }
-    } catch {}
-    try {
-      await apiFetch("/api/session/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-    } catch {}
-    clearAllChats();
-    logout();
-  }, [clearAllChats, logout]);
 
   return (
     <group position={[0, 2.7, 7.92]} rotation={[0, Math.PI, 0]}>
@@ -50,29 +27,8 @@ export function LogoutDoor() {
         <meshStandardMaterial color="#1a1a28" roughness={0.4} metalness={0.4} />
       </mesh>
 
-      {showWarning && !isExteriorView && (
-        <Html transform position={[0, 1.5, 0.2]} scale={0.3} style={{ pointerEvents: "none", userSelect: "none" }}>
-          <div style={{
-            background: "rgba(239, 68, 68, 0.95)",
-            color: "white",
-            padding: "12px 20px",
-            borderRadius: "10px",
-            fontSize: "16px",
-            fontWeight: "bold",
-            fontFamily: "Inter, sans-serif",
-            direction: "rtl",
-            textAlign: "center",
-            whiteSpace: "nowrap",
-            boxShadow: "0 4px 20px rgba(239,68,68,0.5)",
-          }}>
-            فيه مهام خلفية شغّالة، انتظر تخلص قبل الخروج
-          </div>
-        </Html>
-      )}
-
       <mesh
         position={[0, -0.1, 0.01]}
-        onClick={handleDoorClick}
         onPointerEnter={() => {
           setHovered(true);
           document.body.style.cursor = "pointer";

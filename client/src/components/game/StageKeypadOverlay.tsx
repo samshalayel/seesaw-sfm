@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useGame } from "@/lib/stores/useGame";
+import { useChat } from "@/lib/stores/useChat";
 import { apiFetch } from "@/lib/utils";
 
 /**
@@ -14,6 +15,7 @@ export function StageKeypadOverlay() {
   const brAOpen      = useGame((s) => s.brAKeypadOpen);
   const brBOpen      = useGame((s) => s.brBKeypadOpen);
   const brCOpen      = useGame((s) => s.brCKeypadOpen);
+  const logoutOpen   = useGame((s) => s.logoutKeypadOpen);
 
   const closeStage0  = useGame((s) => s.closeStage0Keypad);
   const closeStage1  = useGame((s) => s.closeStage1Keypad);
@@ -22,6 +24,7 @@ export function StageKeypadOverlay() {
   const closeBrA     = useGame((s) => s.closeBrAKeypad);
   const closeBrB     = useGame((s) => s.closeBrBKeypad);
   const closeBrC     = useGame((s) => s.closeBrCKeypad);
+  const closeLogout  = useGame((s) => s.closeLogoutKeypad);
 
   const unlockStage0 = useGame((s) => s.unlockStage0Door);
   const unlockStage1 = useGame((s) => s.unlockStage1Door);
@@ -30,8 +33,10 @@ export function StageKeypadOverlay() {
   const unlockBrA    = useGame((s) => s.unlockBrADoor);
   const unlockBrB    = useGame((s) => s.unlockBrBDoor);
   const unlockBrC    = useGame((s) => s.unlockBrCDoor);
+  const doLogout     = useGame((s) => s.logout);
+  const clearAllChats = useChat((s) => s.clearAllChats);
 
-  const isOpen = stage0Open || stage1Open || hallOpen || hall2Open || brAOpen || brBOpen || brCOpen;
+  const isOpen = stage0Open || stage1Open || hallOpen || hall2Open || brAOpen || brBOpen || brCOpen || logoutOpen;
 
   const doorId = stage0Open ? "stage0"
     : stage1Open ? "stage1"
@@ -39,6 +44,7 @@ export function StageKeypadOverlay() {
     : hall2Open  ? "hall2"
     : brAOpen    ? "brA"
     : brBOpen    ? "brB"
+    : logoutOpen ? "logout"
     : "brC";
 
   const accentColor = stage0Open ? "#4fc3f7"
@@ -47,6 +53,7 @@ export function StageKeypadOverlay() {
     : hall2Open  ? "#c4a44a"
     : brAOpen    ? "#f59e0b"
     : brBOpen    ? "#a855f7"
+    : logoutOpen ? "#ef4444"
     : "#10b981";
 
   const doorLabel = stage0Open ? "Stage 1 — Product Shaping"
@@ -55,6 +62,7 @@ export function StageKeypadOverlay() {
     : hall2Open  ? "Production Hall — Manager Side"
     : brAOpen    ? "Stage 4 — Observability"
     : brBOpen    ? "Stage 5 — Reproducibility"
+    : logoutOpen ? "Exit — Logout"
     : "Stage 6 — Production Ready";
 
   const close = stage0Open ? closeStage0
@@ -63,6 +71,7 @@ export function StageKeypadOverlay() {
     : hall2Open  ? closeHall2
     : brAOpen    ? closeBrA
     : brBOpen    ? closeBrB
+    : logoutOpen ? closeLogout
     : closeBrC;
 
   const unlock = stage0Open ? unlockStage0
@@ -71,6 +80,7 @@ export function StageKeypadOverlay() {
     : hall2Open  ? unlockHall2
     : brAOpen    ? unlockBrA
     : brBOpen    ? unlockBrB
+    : logoutOpen ? (() => { /* handled below */ })
     : unlockBrC;
 
   const bgGradient = stage0Open
@@ -81,6 +91,8 @@ export function StageKeypadOverlay() {
     ? "linear-gradient(135deg, #001a1b 0%, #002628 50%, #001a1b 100%)"
     : brAOpen
     ? "linear-gradient(135deg, #1a0d00 0%, #281500 50%, #1a0d00 100%)"
+    : logoutOpen
+    ? "linear-gradient(135deg, #1a0606 0%, #280a0a 50%, #1a0606 100%)"
     : "linear-gradient(135deg, #001a0e 0%, #002614 50%, #001a0e 100%)";
 
   const [code, setCode]         = useState("");
@@ -117,12 +129,36 @@ export function StageKeypadOverlay() {
         });
         const data = await res.json();
         if (data.success) {
-          unlock();
           setSuccess(true);
-          setTimeout(() => {
-            close();
-            setSuccess(false);
-          }, 500);
+          if (logoutOpen) {
+            // بعد التحقق: تحقق من المهام الخلفية ثم اخرج
+            setTimeout(async () => {
+              try {
+                const jobsRes = await apiFetch("/api/jobs");
+                const jobs = await jobsRes.json();
+                const active = jobs.filter((j: any) => j.status === "pending" || j.status === "running");
+                if (active.length > 0) {
+                  setError(true);
+                  setSuccess(false);
+                  setCode("");
+                  setTimeout(() => setError(false), 2000);
+                  setChecking(false);
+                  return;
+                }
+              } catch {}
+              try {
+                await apiFetch("/api/session/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+              } catch {}
+              clearAllChats();
+              doLogout();
+            }, 400);
+          } else {
+            unlock();
+            setTimeout(() => {
+              close();
+              setSuccess(false);
+            }, 500);
+          }
         } else {
           setError(true);
           setTimeout(() => { setCode(""); setError(false); }, 800);

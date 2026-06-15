@@ -3113,6 +3113,7 @@ export async function registerRoutes(
         brA:    d.brACode    || "0000",
         brB:    d.brBCode    || "0000",
         brC:    d.brCCode    || "0000",
+        logout: d.mainCode   || "1977",
       };
       const expected = codeMap[doorId] ?? "0000";
       res.json({ success: expected === code });

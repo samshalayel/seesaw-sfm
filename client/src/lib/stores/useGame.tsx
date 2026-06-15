@@ -260,6 +260,8 @@ interface GameState {
   brAKeypadOpen: boolean;
   brBKeypadOpen: boolean;
   brCKeypadOpen: boolean;
+  logoutKeypadOpen: boolean;
+  nearDoorHint: string | null;
   videoScreenOpen: boolean;
   hologramOpen: boolean;
   humanOverlayOpen: boolean;
@@ -319,6 +321,9 @@ interface GameState {
   closeBrBKeypad: () => void;
   openBrCKeypad: () => void;
   closeBrCKeypad: () => void;
+  openLogoutKeypad: () => void;
+  closeLogoutKeypad: () => void;
+  setNearDoorHint: (hint: string | null) => void;
   openVideoScreen: () => void;
   closeVideoScreen: () => void;
   openHologram: () => void;
@@ -375,6 +380,8 @@ export const useGame = create<GameState>()(
     brAKeypadOpen: false,
     brBKeypadOpen: false,
     brCKeypadOpen: false,
+    logoutKeypadOpen: false,
+    nearDoorHint: null,
     videoScreenOpen: false,
     hologramOpen: false,
     humanOverlayOpen: false,
@@ -497,6 +504,8 @@ export const useGame = create<GameState>()(
         brADoorLocked: true,
         brBDoorLocked: true,
         brCDoorLocked: true,
+        logoutKeypadOpen: false,
+        nearDoorHint: null,
       });
     },
 
@@ -547,6 +556,9 @@ export const useGame = create<GameState>()(
     closeBrBKeypad:  () => set({ brBKeypadOpen: false }),
     openBrCKeypad:   () => set({ brCKeypadOpen: true }),
     closeBrCKeypad:  () => set({ brCKeypadOpen: false }),
+    openLogoutKeypad:  () => set({ logoutKeypadOpen: true }),
+    closeLogoutKeypad: () => set({ logoutKeypadOpen: false }),
+    setNearDoorHint: (hint) => set({ nearDoorHint: hint }),
 
     openVideoScreen: () => {
       set({ videoScreenOpen: true });

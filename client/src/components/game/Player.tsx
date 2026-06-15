@@ -159,6 +159,7 @@ function GlbPlayerInner() {
   const wasNearBrADoor    = useRef(false);
   const wasNearBrBDoor    = useRef(false);
   const wasNearBrCDoor    = useRef(false);
+  const wasNearLogoutDoor = useRef(false);
   const wasInBackRoomA    = useRef(false);
   const wasInBackRoomB    = useRef(false);
   const wasInBackRoomC    = useRef(false);
@@ -490,14 +491,32 @@ function GlbPlayerInner() {
           chatState.closeChat();
         } else if (gameState.vaultOpen) {
           gameState.closeVault();
-          gameState.setCarryingBox(false);  // اختفى الصندوق عند الإغلاق من الخزنة
+          gameState.setCarryingBox(false);
         } else if (gameState.managerKeypadOpen) {
           gameState.closeManagerKeypad();
+        } else if (wasNearDoor.current && gameState.managerDoorLocked && !gameState.isGuest && !chatState.isOpen && !gameState.vaultOpen) {
+          gameState.openManagerKeypad();
+        } else if (wasNearStage0Door.current && gameState.stage0DoorLocked && !gameState.isGuest) {
+          gameState.openStage0Keypad();
+        } else if (wasNearStage1Door.current && gameState.stage1DoorLocked && !gameState.isGuest) {
+          gameState.openStage1Keypad();
+        } else if (wasNearHallDoor1.current && gameState.hallDoorLocked && !gameState.isGuest) {
+          gameState.openHallKeypad();
+        } else if (wasNearHallDoor2.current && gameState.hall2DoorLocked && !gameState.isGuest) {
+          gameState.openHall2Keypad();
+        } else if (wasNearBrADoor.current && gameState.brADoorLocked && !gameState.isGuest) {
+          gameState.openBrAKeypad();
+        } else if (wasNearBrBDoor.current && gameState.brBDoorLocked && !gameState.isGuest) {
+          gameState.openBrBKeypad();
+        } else if (wasNearBrCDoor.current && gameState.brCDoorLocked && !gameState.isGuest) {
+          gameState.openBrCKeypad();
+        } else if (wasNearLogoutDoor.current) {
+          gameState.openLogoutKeypad();
         } else {
-          const pp = playerRef.current.position; // local coords — matches VAULT_POSITION
+          const pp = playerRef.current.position;
           if (!gameState.isGuest && pp.distanceTo(VAULT_POSITION) < VAULT_INTERACT_DISTANCE) {
             gameState.openVault();
-            gameState.setCarryingBox(false); // تسليم الصندوق للخزنة
+            gameState.setCarryingBox(false);
           } else if (!gameState.isGuest) {
             const pp2 = playerRef.current.position;
             if (pp2.distanceTo(HUMAN_DEV_POSITION) < HUMAN_DEV_INTERACT_DIST) {
@@ -520,12 +539,8 @@ function GlbPlayerInner() {
     const outsideManager = playerPos.x < MANAGER_ROOM_X_MIN;
     const nearDoorAndOut = nearDoor && outsideManager;
 
-    const justApproachedDoor = nearDoorAndOut && !wasNearDoor.current;
-    wasNearDoor.current      = nearDoorAndOut;
+    wasNearDoor.current = nearDoorAndOut;
 
-    if (justApproachedDoor && !chatState.isOpen && !gameState.vaultOpen && gameState.managerDoorLocked && !gameState.isGuest) {
-      gameState.openManagerKeypad();
-    }
     if (!nearDoorAndOut && gameState.managerKeypadOpen) {
       gameState.closeManagerKeypad();
     }
@@ -534,11 +549,7 @@ function GlbPlayerInner() {
     {
       const distS0     = playerPos.distanceTo(STAGE0_DOOR_POSITION);
       const nearS0     = distS0 < STAGE0_DOOR_INTERACT_DIST && playerPos.x > STAGE0_ROOM_X_MAX - PLAYER_RADIUS;
-      const justNearS0 = nearS0 && !wasNearStage0Door.current;
       wasNearStage0Door.current = nearS0;
-      if (justNearS0 && !chatState.isOpen && gameState.stage0DoorLocked && !gameState.isGuest) {
-        gameState.openStage0Keypad();
-      }
       if (!nearS0 && gameState.stage0KeypadOpen) {
         gameState.closeStage0Keypad();
       }
@@ -548,11 +559,7 @@ function GlbPlayerInner() {
     {
       const distS1     = playerPos.distanceTo(STAGE1_DOOR_POSITION);
       const nearS1     = distS1 < STAGE1_DOOR_INTERACT_DIST && playerPos.x > STAGE1_ROOM_X_MAX - PLAYER_RADIUS;
-      const justNearS1 = nearS1 && !wasNearStage1Door.current;
       wasNearStage1Door.current = nearS1;
-      if (justNearS1 && !chatState.isOpen && gameState.stage1DoorLocked && !gameState.isGuest) {
-        gameState.openStage1Keypad();
-      }
       if (!nearS1 && gameState.stage1KeypadOpen) {
         gameState.closeStage1Keypad();
       }
@@ -561,56 +568,64 @@ function GlbPlayerInner() {
     // ── Hall Door 1 proximity (Stage1 ↔ Hall) ────────────────────────────────
     {
       const nearHD1 = playerPos.distanceTo(HALL_DOOR1_POSITION) < HALL_DOOR1_INTERACT_DIST;
-      const justNearHD1 = nearHD1 && !wasNearHallDoor1.current;
       wasNearHallDoor1.current = nearHD1;
-      if (justNearHD1 && !chatState.isOpen && gameState.hallDoorLocked && !gameState.isGuest) {
-        gameState.openHallKeypad();
-      }
       if (!nearHD1 && gameState.hallDoorKeypadOpen) gameState.closeHallKeypad();
     }
 
     // ── Hall Door 2 proximity (Manager ↔ Hall) ────────────────────────────────
     {
       const nearHD2 = playerPos.distanceTo(new THREE.Vector3(HALL_DOOR2_X, 0, HALL_Z_FRONT)) < HALL_DOOR1_INTERACT_DIST;
-      const justNearHD2 = nearHD2 && !wasNearHallDoor2.current;
       wasNearHallDoor2.current = nearHD2;
-      if (justNearHD2 && !chatState.isOpen && gameState.hall2DoorLocked && !gameState.isGuest) {
-        gameState.openHall2Keypad();
-      }
       if (!nearHD2 && gameState.hall2DoorKeypadOpen) gameState.closeHall2Keypad();
     }
 
     // ── Back Room door A proximity ───────────────────────────────────────────
     {
       const nearBrA = playerPos.distanceTo(BR_DOOR_A_POSITION) < BR_DOOR_INTERACT_DIST;
-      const justNearBrA = nearBrA && !wasNearBrADoor.current;
       wasNearBrADoor.current = nearBrA;
-      if (justNearBrA && !chatState.isOpen && gameState.brADoorLocked && !gameState.isGuest) {
-        gameState.openBrAKeypad();
-      }
       if (!nearBrA && gameState.brAKeypadOpen) gameState.closeBrAKeypad();
     }
 
     // ── Back Room door B proximity ───────────────────────────────────────────
     {
       const nearBrB = playerPos.distanceTo(BR_DOOR_B_POSITION) < BR_DOOR_INTERACT_DIST;
-      const justNearBrB = nearBrB && !wasNearBrBDoor.current;
       wasNearBrBDoor.current = nearBrB;
-      if (justNearBrB && !chatState.isOpen && gameState.brBDoorLocked && !gameState.isGuest) {
-        gameState.openBrBKeypad();
-      }
       if (!nearBrB && gameState.brBKeypadOpen) gameState.closeBrBKeypad();
     }
 
     // ── Back Room door C proximity ───────────────────────────────────────────
     {
       const nearBrC = playerPos.distanceTo(BR_DOOR_C_POSITION) < BR_DOOR_INTERACT_DIST;
-      const justNearBrC = nearBrC && !wasNearBrCDoor.current;
       wasNearBrCDoor.current = nearBrC;
-      if (justNearBrC && !chatState.isOpen && gameState.brCDoorLocked && !gameState.isGuest) {
-        gameState.openBrCKeypad();
-      }
       if (!nearBrC && gameState.brCKeypadOpen) gameState.closeBrCKeypad();
+    }
+
+    // ── Logout door proximity ─────────────────────────────────────────────────
+    {
+      const LOGOUT_DOOR_POS = new THREE.Vector3(0, 0, 7.92);
+      const nearLogout = playerPos.distanceTo(LOGOUT_DOOR_POS) < 2.2 && playerPos.z > 5.5;
+      wasNearLogoutDoor.current = nearLogout;
+      if (!nearLogout && gameState.logoutKeypadOpen) gameState.closeLogoutKeypad();
+    }
+
+    // ── nearDoorHint — أي باب الاعب بجانبه ──────────────────────────────────
+    {
+      const hint =
+        (wasNearDoor.current && gameState.managerDoorLocked && !gameState.isGuest) ? "Manager Room" :
+        (wasNearStage0Door.current && gameState.stage0DoorLocked && !gameState.isGuest) ? "Stage 1" :
+        (wasNearStage1Door.current && gameState.stage1DoorLocked && !gameState.isGuest) ? "Stage 2" :
+        (wasNearHallDoor1.current && gameState.hallDoorLocked && !gameState.isGuest) ? "Production Hall" :
+        (wasNearHallDoor2.current && gameState.hall2DoorLocked && !gameState.isGuest) ? "Production Hall" :
+        (wasNearBrADoor.current && gameState.brADoorLocked && !gameState.isGuest) ? "Stage 4" :
+        (wasNearBrBDoor.current && gameState.brBDoorLocked && !gameState.isGuest) ? "Stage 5" :
+        (wasNearBrCDoor.current && gameState.brCDoorLocked && !gameState.isGuest) ? "Stage 6" :
+        wasNearLogoutDoor.current ? "Exit" :
+        null;
+      const anyKeypadOpen = gameState.managerKeypadOpen || gameState.stage0KeypadOpen || gameState.stage1KeypadOpen ||
+        gameState.hallDoorKeypadOpen || gameState.hall2DoorKeypadOpen ||
+        gameState.brAKeypadOpen || gameState.brBKeypadOpen || gameState.brCKeypadOpen || gameState.logoutKeypadOpen;
+      if (!anyKeypadOpen) gameState.setNearDoorHint(hint);
+      else gameState.setNearDoorHint(null);
     }
 
     // ── Video screen proximity (auto open/close, respects manual close) ──────
@@ -1086,6 +1101,7 @@ function LitePlayerInner() {
   const wasNearBrADoor       = useRef(false);
   const wasNearBrBDoor       = useRef(false);
   const wasNearBrCDoor       = useRef(false);
+  const wasNearLogoutDoor    = useRef(false);
   const wasInBackRoomA       = useRef(false);
   const wasInBackRoomB       = useRef(false);
   const wasInBackRoomC       = useRef(false);
@@ -1334,8 +1350,26 @@ function LitePlayerInner() {
           gameState.setCarryingBox(false);
         } else if (gameState.managerKeypadOpen) {
           gameState.closeManagerKeypad();
+        } else if (wasNearDoor.current && gameState.managerDoorLocked && !gameState.isGuest && !chatState.isOpen && !gameState.vaultOpen) {
+          gameState.openManagerKeypad();
+        } else if (wasNearStage0Door.current && gameState.stage0DoorLocked && !gameState.isGuest) {
+          gameState.openStage0Keypad();
+        } else if (wasNearStage1Door.current && gameState.stage1DoorLocked && !gameState.isGuest) {
+          gameState.openStage1Keypad();
+        } else if (wasNearHallDoor1.current && gameState.hallDoorLocked && !gameState.isGuest) {
+          gameState.openHallKeypad();
+        } else if (wasNearHallDoor2.current && gameState.hall2DoorLocked && !gameState.isGuest) {
+          gameState.openHall2Keypad();
+        } else if (wasNearBrADoor.current && gameState.brADoorLocked && !gameState.isGuest) {
+          gameState.openBrAKeypad();
+        } else if (wasNearBrBDoor.current && gameState.brBDoorLocked && !gameState.isGuest) {
+          gameState.openBrBKeypad();
+        } else if (wasNearBrCDoor.current && gameState.brCDoorLocked && !gameState.isGuest) {
+          gameState.openBrCKeypad();
+        } else if (wasNearLogoutDoor.current) {
+          gameState.openLogoutKeypad();
         } else {
-          const pp = playerRef.current.position; // local coords — matches VAULT_POSITION
+          const pp = playerRef.current.position;
           if (!gameState.isGuest && pp.distanceTo(VAULT_POSITION) < VAULT_INTERACT_DISTANCE) {
             gameState.openVault();
             gameState.setCarryingBox(false);
@@ -1360,22 +1394,14 @@ function LitePlayerInner() {
     const nearDoor       = distToDoor < MANAGER_DOOR_INTERACT_DISTANCE;
     const outsideManager = playerPos.x < MANAGER_ROOM_X_MIN;
     const nearDoorAndOut = nearDoor && outsideManager;
-    const justApproachedDoor = nearDoorAndOut && !wasNearDoor.current;
-    wasNearDoor.current      = nearDoorAndOut;
-    if (justApproachedDoor && !chatState.isOpen && !gameState.vaultOpen && gameState.managerDoorLocked && !gameState.isGuest) {
-      gameState.openManagerKeypad();
-    }
+    wasNearDoor.current  = nearDoorAndOut;
     if (!nearDoorAndOut && gameState.managerKeypadOpen) gameState.closeManagerKeypad();
 
     // ── Stage0 door proximity ────────────────────────────────────────────────
     {
       const distS0     = playerPos.distanceTo(STAGE0_DOOR_POSITION);
       const nearS0     = distS0 < STAGE0_DOOR_INTERACT_DIST && playerPos.x > STAGE0_ROOM_X_MAX - PLAYER_RADIUS;
-      const justNearS0 = nearS0 && !wasNearStage0Door.current;
       wasNearStage0Door.current = nearS0;
-      if (justNearS0 && !chatState.isOpen && gameState.stage0DoorLocked && !gameState.isGuest) {
-        gameState.openStage0Keypad();
-      }
       if (!nearS0 && gameState.stage0KeypadOpen) gameState.closeStage0Keypad();
     }
 
@@ -1383,67 +1409,71 @@ function LitePlayerInner() {
     {
       const distS1     = playerPos.distanceTo(STAGE1_DOOR_POSITION);
       const nearS1     = distS1 < STAGE1_DOOR_INTERACT_DIST && playerPos.x > STAGE1_ROOM_X_MAX - PLAYER_RADIUS;
-      const justNearS1 = nearS1 && !wasNearStage1Door.current;
       wasNearStage1Door.current = nearS1;
-      if (justNearS1 && !chatState.isOpen && gameState.stage1DoorLocked && !gameState.isGuest) {
-        gameState.openStage1Keypad();
-      }
       if (!nearS1 && gameState.stage1KeypadOpen) gameState.closeStage1Keypad();
     }
 
     // ── Hall Door 1 proximity (Stage1 ↔ Hall) ────────────────────────────────
     {
       const nearHD1 = playerPos.distanceTo(HALL_DOOR1_POSITION) < HALL_DOOR1_INTERACT_DIST;
-      const justNearHD1 = nearHD1 && !wasNearHallDoor1.current;
       wasNearHallDoor1.current = nearHD1;
-      if (justNearHD1 && !chatState.isOpen && gameState.hallDoorLocked && !gameState.isGuest) {
-        gameState.openHallKeypad();
-      }
       if (!nearHD1 && gameState.hallDoorKeypadOpen) gameState.closeHallKeypad();
     }
 
     // ── Hall Door 2 proximity (Manager ↔ Hall) ────────────────────────────────
     {
       const nearHD2 = playerPos.distanceTo(new THREE.Vector3(HALL_DOOR2_X, 0, HALL_Z_FRONT)) < HALL_DOOR1_INTERACT_DIST;
-      const justNearHD2 = nearHD2 && !wasNearHallDoor2.current;
       wasNearHallDoor2.current = nearHD2;
-      if (justNearHD2 && !chatState.isOpen && gameState.hall2DoorLocked && !gameState.isGuest) {
-        gameState.openHall2Keypad();
-      }
       if (!nearHD2 && gameState.hall2DoorKeypadOpen) gameState.closeHall2Keypad();
     }
 
     // ── Back Room door A proximity ───────────────────────────────────────────
     {
       const nearBrA = playerPos.distanceTo(BR_DOOR_A_POSITION) < BR_DOOR_INTERACT_DIST;
-      const justNearBrA = nearBrA && !wasNearBrADoor.current;
       wasNearBrADoor.current = nearBrA;
-      if (justNearBrA && !chatState.isOpen && gameState.brADoorLocked && !gameState.isGuest) {
-        gameState.openBrAKeypad();
-      }
       if (!nearBrA && gameState.brAKeypadOpen) gameState.closeBrAKeypad();
     }
 
     // ── Back Room door B proximity ───────────────────────────────────────────
     {
       const nearBrB = playerPos.distanceTo(BR_DOOR_B_POSITION) < BR_DOOR_INTERACT_DIST;
-      const justNearBrB = nearBrB && !wasNearBrBDoor.current;
       wasNearBrBDoor.current = nearBrB;
-      if (justNearBrB && !chatState.isOpen && gameState.brBDoorLocked && !gameState.isGuest) {
-        gameState.openBrBKeypad();
-      }
       if (!nearBrB && gameState.brBKeypadOpen) gameState.closeBrBKeypad();
     }
 
     // ── Back Room door C proximity ───────────────────────────────────────────
     {
       const nearBrC = playerPos.distanceTo(BR_DOOR_C_POSITION) < BR_DOOR_INTERACT_DIST;
-      const justNearBrC = nearBrC && !wasNearBrCDoor.current;
       wasNearBrCDoor.current = nearBrC;
-      if (justNearBrC && !chatState.isOpen && gameState.brCDoorLocked && !gameState.isGuest) {
-        gameState.openBrCKeypad();
-      }
       if (!nearBrC && gameState.brCKeypadOpen) gameState.closeBrCKeypad();
+    }
+
+    // ── Logout door proximity ─────────────────────────────────────────────────
+    {
+      const LOGOUT_DOOR_POS = new THREE.Vector3(0, 0, 7.92);
+      const nearLogout = playerPos.distanceTo(LOGOUT_DOOR_POS) < 2.2 && playerPos.z > 5.5;
+      wasNearLogoutDoor.current = nearLogout;
+      if (!nearLogout && gameState.logoutKeypadOpen) gameState.closeLogoutKeypad();
+    }
+
+    // ── nearDoorHint ──────────────────────────────────────────────────────────
+    {
+      const hint =
+        (wasNearDoor.current && gameState.managerDoorLocked && !gameState.isGuest) ? "Manager Room" :
+        (wasNearStage0Door.current && gameState.stage0DoorLocked && !gameState.isGuest) ? "Stage 1" :
+        (wasNearStage1Door.current && gameState.stage1DoorLocked && !gameState.isGuest) ? "Stage 2" :
+        (wasNearHallDoor1.current && gameState.hallDoorLocked && !gameState.isGuest) ? "Production Hall" :
+        (wasNearHallDoor2.current && gameState.hall2DoorLocked && !gameState.isGuest) ? "Production Hall" :
+        (wasNearBrADoor.current && gameState.brADoorLocked && !gameState.isGuest) ? "Stage 4" :
+        (wasNearBrBDoor.current && gameState.brBDoorLocked && !gameState.isGuest) ? "Stage 5" :
+        (wasNearBrCDoor.current && gameState.brCDoorLocked && !gameState.isGuest) ? "Stage 6" :
+        wasNearLogoutDoor.current ? "Exit" :
+        null;
+      const anyKeypadOpen = gameState.managerKeypadOpen || gameState.stage0KeypadOpen || gameState.stage1KeypadOpen ||
+        gameState.hallDoorKeypadOpen || gameState.hall2DoorKeypadOpen ||
+        gameState.brAKeypadOpen || gameState.brBKeypadOpen || gameState.brCKeypadOpen || gameState.logoutKeypadOpen;
+      if (!anyKeypadOpen) gameState.setNearDoorHint(hint);
+      else gameState.setNearDoorHint(null);
     }
 
     // ── video screen proximity ────────────────────────────────────────────────

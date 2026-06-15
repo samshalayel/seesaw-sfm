@@ -471,45 +471,57 @@ function ClassicCameraController() {
       const nearBrB = camPos.distanceTo(CL_BR_B_POS)    < D;
       const nearBrC = camPos.distanceTo(CL_BR_C_POS)    < D;
 
-      // Stage 0
-      if (nearS0 && !wasNearS0.current && gs.stage0DoorLocked && !anyKeypadOpen)  gs.openStage0Keypad();
+      // Track proximity only — keypad opens on F key
       if (!nearS0 && gs.stage0KeypadOpen) gs.closeStage0Keypad();
       wasNearS0.current = nearS0;
 
-      // Stage 1
-      if (nearS1 && !wasNearS1.current && gs.stage1DoorLocked && !anyKeypadOpen)  gs.openStage1Keypad();
       if (!nearS1 && gs.stage1KeypadOpen) gs.closeStage1Keypad();
       wasNearS1.current = nearS1;
 
-      // Manager
-      if (nearMgr && !wasNearMgr.current && gs.managerDoorLocked && !anyKeypadOpen) gs.openManagerKeypad();
       if (!nearMgr && gs.managerKeypadOpen) gs.closeManagerKeypad();
       wasNearMgr.current = nearMgr;
 
-      // Hall Door 1
-      if (nearHD1 && !wasNearHD1.current && gs.hallDoorLocked && !anyKeypadOpen)  gs.openHallKeypad();
       if (!nearHD1 && gs.hallDoorKeypadOpen) gs.closeHallKeypad();
       wasNearHD1.current = nearHD1;
 
-      // Hall Door 2
-      if (nearHD2 && !wasNearHD2.current && gs.hall2DoorLocked && !anyKeypadOpen) gs.openHall2Keypad();
       if (!nearHD2 && gs.hall2DoorKeypadOpen) gs.closeHall2Keypad();
       wasNearHD2.current = nearHD2;
 
-      // Back Room A
-      if (nearBrA && !wasNearBrA.current && gs.brADoorLocked && !anyKeypadOpen)   gs.openBrAKeypad();
       if (!nearBrA && gs.brAKeypadOpen) gs.closeBrAKeypad();
       wasNearBrA.current = nearBrA;
 
-      // Back Room B
-      if (nearBrB && !wasNearBrB.current && gs.brBDoorLocked && !anyKeypadOpen)   gs.openBrBKeypad();
       if (!nearBrB && gs.brBKeypadOpen) gs.closeBrBKeypad();
       wasNearBrB.current = nearBrB;
 
-      // Back Room C
-      if (nearBrC && !wasNearBrC.current && gs.brCDoorLocked && !anyKeypadOpen)   gs.openBrCKeypad();
       if (!nearBrC && gs.brCKeypadOpen) gs.closeBrCKeypad();
       wasNearBrC.current = nearBrC;
+
+      // nearDoorHint
+      const hint =
+        (nearMgr && gs.managerDoorLocked) ? "Manager Room" :
+        (nearS0 && gs.stage0DoorLocked) ? "Stage 1" :
+        (nearS1 && gs.stage1DoorLocked) ? "Stage 2" :
+        (nearHD1 && gs.hallDoorLocked) ? "Production Hall" :
+        (nearHD2 && gs.hall2DoorLocked) ? "Production Hall" :
+        (nearBrA && gs.brADoorLocked) ? "Stage 4" :
+        (nearBrB && gs.brBDoorLocked) ? "Stage 5" :
+        (nearBrC && gs.brCDoorLocked) ? "Stage 6" :
+        null;
+      if (!anyKeypadOpen) gs.setNearDoorHint(hint);
+      else gs.setNearDoorHint(null);
+
+      // Open keypad on F key
+      const keys = getKeys();
+      if (keys.interact && !anyKeypadOpen) {
+        if (nearMgr && gs.managerDoorLocked) gs.openManagerKeypad();
+        else if (nearS0 && gs.stage0DoorLocked) gs.openStage0Keypad();
+        else if (nearS1 && gs.stage1DoorLocked) gs.openStage1Keypad();
+        else if (nearHD1 && gs.hallDoorLocked) gs.openHallKeypad();
+        else if (nearHD2 && gs.hall2DoorLocked) gs.openHall2Keypad();
+        else if (nearBrA && gs.brADoorLocked) gs.openBrAKeypad();
+        else if (nearBrB && gs.brBDoorLocked) gs.openBrBKeypad();
+        else if (nearBrC && gs.brCDoorLocked) gs.openBrCKeypad();
+      }
     }
   });
 
@@ -536,6 +548,31 @@ function MeetingCameraAnimator() {
     camera.quaternion.slerp(_meetQ, 0.06);
   }, 5); // priority 5 → يعمل بعد Player (يتغلب على حركة الكاميرا العادية)
   return null;
+}
+
+function DoorProximityHint() {
+  const hint = useGame((s) => s.nearDoorHint);
+  if (!hint) return null;
+  return (
+    <div style={{
+      position: "fixed", bottom: "80px", left: "50%", transform: "translateX(-50%)",
+      zIndex: 8000, display: "flex", alignItems: "center", gap: "10px",
+      background: "rgba(10,14,22,0.92)", border: "1px solid rgba(255,255,255,0.18)",
+      borderRadius: "10px", padding: "10px 20px",
+      boxShadow: "0 0 24px rgba(0,0,0,0.6)", backdropFilter: "blur(8px)",
+      pointerEvents: "none", userSelect: "none",
+    }}>
+      <div style={{
+        background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.4)",
+        borderRadius: "6px", padding: "2px 10px",
+        color: "#fff", fontSize: "13px", fontFamily: "monospace",
+        fontWeight: "bold", letterSpacing: "1px",
+      }}>F</div>
+      <div style={{ color: "#e0e0e0", fontSize: "13px", fontFamily: "Inter, sans-serif" }}>
+        {hint === "Exit" ? "Press F to enter code & exit" : `Press F to unlock ${hint}`}
+      </div>
+    </div>
+  );
 }
 
 function LoadingScreen() {
@@ -1066,6 +1103,7 @@ function App() {
         </KeyboardControls>
 
         <LoadingOverlay />
+        <DoorProximityHint />
         <ManagerKeypadOverlay />
         <StageKeypadOverlay />
         <ManagerVideoOverlay />
@@ -1217,6 +1255,7 @@ function App() {
       {phase === "avatar_select" && <AvatarSelect />}
 
       <LoadingOverlay />
+      <DoorProximityHint />
       <ManagerKeypadOverlay />
       <StageKeypadOverlay />
       <ManagerVideoOverlay />
