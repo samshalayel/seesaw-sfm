@@ -17,6 +17,7 @@ import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
 import { extractSkillsFromTags, buildSkillsSection, formatActiveSkills, renderLandingPage } from "./skills.js";
 import type { LandingContent } from "./skills.js";
+import { runMultiAgentPipeline, parseFileBlocks } from "./agentTeams.js";
 
 // clients مؤقتة — يتم إعادة إنشاؤها من الخزنة عند كل مهمة
 // NOTE: OpenAI/Anthropic constructors throw if apiKey is empty/undefined.
@@ -879,6 +880,53 @@ You must actually execute tool calls — do not describe what you will do, just 
         }
       }
       log.result = fullResult;
+      return;
+    }
+
+    // robot-7: Multi-Agent Pipeline — Lead → Coder → Reviewer (Claude CLI × 3)
+    if (_robotId === "robot-7") {
+      const owner = await getGitHubOwner(triggerRoomId);
+      const repo  = await getGitHubRepo(triggerRoomId);
+      const vpsCfg = await getVpsConfig(triggerRoomId);
+
+      const systemInfo = [
+        `GitHub: ${owner}/${repo}`,
+        vpsCfg?.host ? `VPS: ${vpsCfg.host} (webRoot: ${vpsCfg.webRoot || "/var/www"})` : "",
+        `Task ID: ${task.id}`,
+      ].filter(Boolean).join("\n");
+
+      log.modelUsed = "robot-7 (multi-agent: Lead→Coder→Reviewer)";
+      log.toolsUsed.push("multi-agent-pipeline");
+
+      const result = await runMultiAgentPipeline({
+        taskName:   task.name,
+        taskDesc:   task.description || taskPrompt,
+        systemInfo,
+        onLog: (msg) => {
+          log.result = (log.result || "") + "\n" + msg;
+          console.log(`[robot-7] ${msg}`);
+        },
+      });
+
+      log.result = result;
+
+      // استخراج الملفات من نتيجة الـ Reviewer وحفظها في GitHub
+      const fileBlocks = parseFileBlocks(result);
+      if (fileBlocks.length > 0) {
+        log.toolsUsed.push(`commit-${fileBlocks.length}-files`);
+        for (const { path: filePath, content } of fileBlocks) {
+          try {
+            await createOrUpdateFile(
+              owner, repo, filePath, content,
+              `feat: ${task.name} (multi-agent)`,
+              triggerRoomId,
+            );
+            console.log(`[robot-7] committed: ${filePath}`);
+          } catch (e: any) {
+            console.error(`[robot-7] commit failed for ${filePath}:`, e.message);
+          }
+        }
+      }
       return;
     }
 
