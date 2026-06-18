@@ -1128,7 +1128,7 @@ function App() {
   const isToon = appMode === "toon";
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden", filter: isToon ? "saturate(2.2) contrast(1.12) hue-rotate(5deg)" : undefined }}>
+    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden", filter: isToon ? "saturate(1.9) contrast(1.06) hue-rotate(5deg)" : undefined }}>
       <KeyboardControls map={controls}>
         <Canvas
           flat
@@ -1148,11 +1148,11 @@ function App() {
         >
           <color attach="background" args={[isToon ? "#7dd3cb" : "#1a1a2a"]} />
 
-          <ambientLight intensity={isToon ? 5.5 : 2.5} color={isToon ? "#ffe8f0" : "#ffffff"} />
-          <hemisphereLight intensity={isToon ? 2.5 : 1.2} color={isToon ? "#c8f0ff" : "#e0e0ff"} groundColor={isToon ? "#a8e6cf" : "#4a4a6a"} />
+          <ambientLight intensity={isToon ? 2.0 : 2.5} color={isToon ? "#ffe8f0" : "#ffffff"} />
+          <hemisphereLight intensity={isToon ? 1.0 : 1.2} color={isToon ? "#c8f0ff" : "#e0e0ff"} groundColor={isToon ? "#a8e6cf" : "#4a4a6a"} />
           <directionalLight
             position={[5, 12, 5]}
-            intensity={isToon ? 0.6 : 1.5}
+            intensity={isToon ? 1.8 : 1.5}
             castShadow={!isToon}
             shadow-mapSize-width={512}
             shadow-mapSize-height={512}
