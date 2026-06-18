@@ -1125,12 +1125,14 @@ function App() {
     );
   }
 
+  const isToon = appMode === "toon";
+
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden", filter: isToon ? "saturate(2.2) contrast(1.12) hue-rotate(5deg)" : undefined }}>
       <KeyboardControls map={controls}>
         <Canvas
           flat
-          shadows
+          shadows={!isToon}
           camera={{
             position: [0, 5, 10],
             fov: 55,
@@ -1144,14 +1146,14 @@ function App() {
             }, false);
           }}
         >
-          <color attach="background" args={["#1a1a2a"]} />
+          <color attach="background" args={[isToon ? "#7dd3cb" : "#1a1a2a"]} />
 
-          <ambientLight intensity={2.5} color="#ffffff" />
-          <hemisphereLight intensity={1.2} color="#e0e0ff" groundColor="#4a4a6a" />
+          <ambientLight intensity={isToon ? 5.5 : 2.5} color={isToon ? "#ffe8f0" : "#ffffff"} />
+          <hemisphereLight intensity={isToon ? 2.5 : 1.2} color={isToon ? "#c8f0ff" : "#e0e0ff"} groundColor={isToon ? "#a8e6cf" : "#4a4a6a"} />
           <directionalLight
             position={[5, 12, 5]}
-            intensity={1.5}
-            castShadow
+            intensity={isToon ? 0.6 : 1.5}
+            castShadow={!isToon}
             shadow-mapSize-width={512}
             shadow-mapSize-height={512}
             shadow-camera-far={50}
