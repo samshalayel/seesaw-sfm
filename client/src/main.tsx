@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import OfficePage from "./pages/OfficePage";
@@ -11,4 +12,8 @@ if (path === "/office")        Page = OfficePage;
 else if (path === "/museum-panel") Page = MuseumPanel;
 else                           Page = App;
 
-createRoot(document.getElementById("root")!).render(<Page />);
+createRoot(document.getElementById("root")!).render(
+  <Suspense fallback={null}>
+    <Page />
+  </Suspense>
+);
