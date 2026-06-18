@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, startTransition } from "react";
 import { useGame } from "@/lib/stores/useGame";
 
 function isMobile() {
@@ -11,7 +11,7 @@ export function ModeSelectScreen() {
   // الموبايل أو رابط دعوة اجتماع — Classic تلقائياً بدون اختيار
   useEffect(() => {
     const hasAgoraMeeting = new URLSearchParams(window.location.search).get("agoraMeeting");
-    if (isMobile() || hasAgoraMeeting) setAppMode("classic");
+    if (isMobile() || hasAgoraMeeting) startTransition(() => setAppMode("classic"));
   }, []); // eslint-disable-line
 
   return (
@@ -70,7 +70,7 @@ export function ModeSelectScreen() {
           subtitle="Classic"
           description="مبنى الشركة فقط بدون أفاتار — خفيف وسريع، مثالي للأجهزة المتوسطة"
           accentColor="#4fc3f7"
-          onClick={() => setAppMode("classic")}
+          onClick={() => startTransition(() => setAppMode("classic"))}
         />
 
         {/* Pro Card */}
@@ -80,7 +80,7 @@ export function ModeSelectScreen() {
           subtitle="Pro"
           description="التجربة الثلاثية الأبعاد الكاملة مع الأفاتار والروبوتات والمدينة"
           accentColor="#00ff88"
-          onClick={() => setAppMode("pro")}
+          onClick={() => startTransition(() => setAppMode("pro"))}
         />
 
         {/* Showcase Card */}
@@ -91,11 +91,11 @@ export function ModeSelectScreen() {
           description="مشهد سينمائي ثلاثي الأبعاد بتقنيات الإضاءة والجسيمات المتقدمة"
           accentColor="#f59e0b"
           badge="NEW"
-          onClick={() => setAppMode("showcase")}
+          onClick={() => startTransition(() => setAppMode("showcase"))}
         />
 
         {/* Toon Card */}
-        <ToonCard onClick={() => setAppMode("toon")} />
+        <ToonCard onClick={() => startTransition(() => setAppMode("toon"))} />
       </div>
 
       {/* Footer hint */}
