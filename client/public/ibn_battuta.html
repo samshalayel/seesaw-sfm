@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ابن بطوطة — MVP</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    background: #0f1117;
+    color: #e8e6de;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+  .logo {
+    font-size: 28px;
+    font-weight: 700;
+    color: #4aaeff;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 28px;
+  }
+  .card {
+    background: #1a1d26;
+    border: 1px solid #2a2d3a;
+    border-radius: 16px;
+    padding: 20px;
+    width: 100%;
+    max-width: 620px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    background: #0f1117;
+    border: 1px solid #2a2d3a;
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: #e8e6de;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    direction: ltr;
+  }
+  input:focus { border-color: #4aaeff; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 10px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: #4aaeff; color: #000; }
+  .btn-primary:hover { background: #6bbfff; }
+  .btn-primary:disabled { background: #2a3a4a; color: #555; cursor: not-allowed; }
+  .btn-danger { background: #e24b4a; color: #fff; }
+  .btn-danger:hover { background: #f06060; }
+  .btn-ghost { background: #2a2d3a; color: #e8e6de; }
+  .btn-ghost:hover { background: #333647; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .mic-btn {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    border: none;
+    background: #1e3a5f;
+    color: #4aaeff;
+    font-size: 28px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mic-btn:hover { background: #4aaeff; color: #000; transform: scale(1.05); }
+  .mic-btn.recording { background: #e24b4a; color: #fff; animation: pulse 1s infinite; }
+  .mic-btn:disabled { background: #1a1d26; color: #444; cursor: not-allowed; }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+  .status {
+    font-size: 13px;
+    color: #888;
+    padding: 6px 12px;
+    background: #0f1117;
+    border-radius: 8px;
+    border: 1px solid #2a2d3a;
+  }
+  .status.connected { color: #3dd68c; border-color: #1a4a30; background: #0d2018; }
+  .status.error { color: #e24b4a; border-color: #4a1a1a; background: #200d0d; }
+  .chat {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .msg {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .msg.ai {
+    background: #1e2535;
+    border: 1px solid #2a3a55;
+    color: #b8d4ff;
+    align-self: flex-start;
+    border-radius: 4px 14px 14px 14px;
+  }
+  .msg.user {
+    background: #1a3020;
+    border: 1px solid #1e4a2a;
+    color: #a8e8b8;
+    align-self: flex-end;
+    border-radius: 14px 4px 14px 14px;
+    direction: rtl;
+  }
+  .msg.system {
+    background: #2a2010;
+    border: 1px solid #4a3a10;
+    color: #d4aa60;
+    align-self: center;
+    font-size: 12px;
+    border-radius: 10px;
+    text-align: center;
+  }
+  .msg-label {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 4px;
+  }
+  .url-preview {
+    font-size: 12px;
+    color: #4aaeff;
+    background: #0f1a2a;
+    border: 1px solid #1a2a40;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 8px;
+    word-break: break-all;
+    direction: ltr;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-blue { background: #1a3050; color: #4aaeff; }
+  .badge-green { background: #0d2018; color: #3dd68c; }
+  .wave {
+    display: flex; gap: 3px; align-items: center; height: 20px;
+  }
+  .wave span {
+    width: 3px; background: #4aaeff; border-radius: 2px;
+    animation: wave 1.2s infinite ease-in-out;
+  }
+  .wave span:nth-child(2) { animation-delay: 0.1s; }
+  .wave span:nth-child(3) { animation-delay: 0.2s; }
+  .wave span:nth-child(4) { animation-delay: 0.3s; }
+  .wave span:nth-child(5) { animation-delay: 0.4s; }
+  @keyframes wave {
+    0%,100%{height:4px;opacity:.4} 50%{height:18px;opacity:1}
+  }
+  #text-input-row { display: flex; gap: 8px; }
+  #text-input { flex: 1; }
+  .divider { text-align: center; color: #444; font-size: 12px; margin: 6px 0; }
+</style>
+</head>
+<body>
+
+<div class="logo">🗺️ ابن بطوطة</div>
+<div class="subtitle">منصة التحقق من الرحلات بالصوت والذكاء الاصطناعي</div>
+
+<!-- API Key -->
+<div class="card">
+  <div class="card-title">🔑 مفتاح Gemini API</div>
+  <input type="password" id="api-key" placeholder="AIza..." />
+</div>
+
+<!-- Google Earth URL -->
+<div class="card">
+  <div class="card-title">🌍 رابط Google Earth / Street View</div>
+  <input type="text" id="earth-url" placeholder="https://earth.google.com/web/@..." />
+  <div id="url-preview" style="display:none" class="url-preview"></div>
+</div>
+
+<!-- Connect -->
+<div class="card">
+  <div class="card-title">الاتصال</div>
+  <div class="controls">
+    <button class="btn btn-primary" id="connect-btn" onclick="connectGemini()">🔗 اتصال بالـ AI</button>
+    <button class="btn btn-ghost" id="disconnect-btn" onclick="disconnectGemini()" style="display:none">قطع الاتصال</button>
+    <span class="status" id="status-badge">غير متصل</span>
+  </div>
+</div>
+
+<!-- Voice + Chat -->
+<div class="card" id="chat-card" style="display:none">
+  <div class="card-title">المحادثة <span class="badge badge-blue">ابن بطوطة AI</span></div>
+  <div class="chat" id="chat-box"></div>
+
+  <div style="margin-top:16px">
+    <div class="divider">— حكي بصوتك —</div>
+    <div class="controls" style="justify-content:center; margin: 12px 0">
+      <button class="mic-btn" id="mic-btn" onclick="toggleMic()" disabled title="اضغط للتسجيل">🎤</button>
+      <div id="wave-indicator" style="display:none" class="wave">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+    <div class="divider">— أو اكتب —</div>
+    <div id="text-input-row" style="margin-top:10px">
+      <input type="text" id="text-input" placeholder="اكتب ردك هنا..." onkeydown="if(event.key==='Enter') sendText()" />
+      <button class="btn btn-primary" onclick="sendText()">↩</button>
+    </div>
+  </div>
+</div>
+
+<audio id="audio-out" autoplay></audio>
+
+<script>
+let ws = null;
+let mediaRecorder = null;
+let audioCtx = null;
+let isRecording = false;
+let sharedPlayCtx = null;
+let nextPlayTime = 0;
+
+const MAPS_API_KEY = 'AIzaSyA7jITeOOqanhXBAkKHrra4_Xekuih4LRI';
+
+const SYSTEM_PROMPT = `أنت "حَكَم ابن بطوطة" — ذكاء اصطناعي متخصص في التحقق من زيارات المسافرين.
+أنت تستطيع رؤية صورة Street View الحقيقية للمكان — استخدم ما تراه فعلاً في الصورة.
+
+مهمتك:
+1. المستخدم يعطيك رابط Google Earth أو Street View لمكان يدّعي زيارته
+2. ستصلك صورة Street View حقيقية من الموقع — حللها جيداً
+3. اسأل 3 أسئلة تحقق ذكية بناءً على ما تراه في الصورة فعلاً — تفاصيل دقيقة ومرئية
+4. الأسئلة تكون عن: ألوان محددة، لافتات، أشياء عشوائية، تفاصيل صغيرة تراها في الصورة
+5. بعد كل إجابة تحلل مصداقيتها وتعطي نسبة تحقق
+6. في النهاية تعطي حكم نهائي: ✅ زيارة مؤكدة أو ❌ زيارة مشكوك فيها
+
+تحكي بالعربي دائماً، بأسلوب ودي لكن محترف.
+انتظر الصورة أولاً ثم ابدأ التحقق.`;
+
+// استخراج lat/lng من روابط Google Earth / Street View / Maps
+function extractLatLng(url) {
+  // Google Earth: @lat,lng,z  or  @lat,lng,
+  let m = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+
+  // Street View: !3d-lat!4dlng or !4dlng!3dlat
+  m = url.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+
+  // Maps: /place/.../@lat,lng or ?q=lat,lng
+  m = url.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+
+  // cbll= (Street View embedded)
+  m = url.match(/cbll=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+
+  return null;
+}
+
+// جلب صورة Street View وتحويلها لـ base64
+async function fetchStreetViewImage(lat, lng) {
+  // نجيب 4 اتجاهات (0, 90, 180, 270) ونرسلهم كـ grid
+  const headings = [0, 90, 180, 270];
+  const size = '400x300';
+  const fov = 90;
+  const pitch = 0;
+
+  const blobs = await Promise.all(headings.map(h =>
+    fetch(`https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${lat},${lng}&heading=${h}&fov=${fov}&pitch=${pitch}&key=${MAPS_API_KEY}`)
+      .then(r => r.blob())
+  ));
+
+  // ارسم الـ 4 صور في canvas 2x2
+  const canvas = document.createElement('canvas');
+  canvas.width = 800; canvas.height = 600;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, 800, 600);
+
+  await Promise.all(blobs.map((blob, i) => new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const col = i % 2, row = Math.floor(i / 2);
+      ctx.drawImage(img, col * 400, row * 300, 400, 300);
+
+      // label الاتجاه
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(col * 400 + 4, row * 300 + 4, 50, 20);
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px Arial';
+      ctx.fillText(['N','E','S','W'][i], col * 400 + 20, row * 300 + 18);
+      resolve();
+    };
+    img.onerror = resolve;
+    img.src = URL.createObjectURL(blob);
+  })));
+
+  return canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+}
+
+function connectGemini() {
+  const apiKey = document.getElementById('api-key').value.trim();
+  const url = document.getElementById('earth-url').value.trim();
+
+  if (!apiKey) { alert('أدخل مفتاح API أولاً'); return; }
+  if (!url) { alert('أدخل رابط Google Earth'); return; }
+
+  setStatus('جاري الاتصال...', '');
+
+  const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch(e) {
+    setStatus('خطأ في الاتصال', 'error');
+    return;
+  }
+
+  ws.onopen = () => {
+    const setup = {
+      setup: {
+        model: "models/gemini-3.1-flash-live-preview",
+        generation_config: {
+          response_modalities: ["AUDIO"],
+          speech_config: { voice_config: { prebuilt_voice_config: { voice_name: "Aoede" } } }
+        },
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] }
+      }
+    };
+    ws.send(JSON.stringify(setup));
+  };
+
+  ws.onmessage = async (e) => {
+    let rawText;
+    if (e.data instanceof Blob) {
+      rawText = await e.data.text();
+    } else {
+      rawText = e.data;
+    }
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch(err) {
+      console.error('WS parse error:', err, rawText?.slice?.(0, 100));
+      return;
+    }
+    console.log('WS message:', JSON.stringify(data).slice(0, 300));
+
+    if (data.error) {
+      setStatus('خطأ: ' + (data.error.message || JSON.stringify(data.error)), 'error');
+      addMsg('system', '❌ ' + (data.error.message || JSON.stringify(data.error)));
+      return;
+    }
+
+    if (data.setupComplete) {
+      setStatus('متصل ✓', 'connected');
+      document.getElementById('connect-btn').style.display = 'none';
+      document.getElementById('disconnect-btn').style.display = 'inline-flex';
+      document.getElementById('chat-card').style.display = 'block';
+      document.getElementById('mic-btn').disabled = false;
+
+      const earthUrl = document.getElementById('earth-url').value.trim();
+      showUrlPreview(earthUrl);
+      addMsg('user', `🌍 ${earthUrl}`);
+
+      // حاول استخراج الإحداثيات وإرسال صورة Street View
+      const coords = extractLatLng(earthUrl);
+      if (coords) {
+        addMsg('system', `📍 إحداثيات: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)} — جاري تحميل Street View...`);
+        setStatus('جاري تحميل Street View...', '');
+        fetchStreetViewImage(coords.lat, coords.lng).then(imgB64 => {
+          setStatus('متصل ✓', 'connected');
+          // أرسل الصورة + النص معاً
+          ws.send(JSON.stringify({
+            clientContent: {
+              turns: [{
+                role: "user",
+                parts: [
+                  { inlineData: { mimeType: "image/jpeg", data: imgB64 } },
+                  { text: `هذه صورة Street View الحقيقية للموقع (4 اتجاهات: شمال، شرق، جنوب، غرب).\nالرابط: ${earthUrl}\n\nابدأ التحقق من زيارتي — اسأل 3 أسئلة بناءً على ما تراه في الصورة فعلاً.` }
+                ]
+              }],
+              turnComplete: true
+            }
+          }));
+          addMsg('system', '🖼️ تم إرسال صورة Street View للـ AI');
+        }).catch(() => {
+          setStatus('متصل ✓', 'connected');
+          addMsg('system', '⚠️ تعذر تحميل Street View — سيعتمد AI على الرابط فقط');
+          ws.send(JSON.stringify({
+            clientContent: {
+              turns: [{ role: "user", parts: [{ text: `رابط الموقع: ${earthUrl}\n\nابدأ التحقق من زيارتي لهذا المكان.` }] }],
+              turnComplete: true
+            }
+          }));
+        });
+      } else {
+        addMsg('system', '⚠️ لم يتم استخراج الإحداثيات — سيعتمد AI على الرابط فقط');
+        ws.send(JSON.stringify({
+          clientContent: {
+            turns: [{ role: "user", parts: [{ text: `رابط الموقع: ${earthUrl}\n\nابدأ التحقق من زيارتي لهذا المكان.` }] }],
+            turnComplete: true
+          }
+        }));
+      }
+    }
+
+    if (data.serverContent) {
+      const sc = data.serverContent;
+      if (sc.modelTurn?.parts) {
+        for (const part of sc.modelTurn.parts) {
+          if (part.text) addMsg('ai', part.text);
+          if (part.inlineData?.mimeType?.startsWith('audio/')) {
+            queueAudio(part.inlineData.data);
+          }
+        }
+      }
+    }
+  };
+
+  ws.onerror = () => setStatus('خطأ في الاتصال', 'error');
+  ws.onclose = () => {
+    setStatus('انقطع الاتصال', 'error');
+    document.getElementById('mic-btn').disabled = true;
+  };
+}
+
+function disconnectGemini() {
+  if (ws) ws.close();
+  ws = null;
+  if (sharedPlayCtx) { sharedPlayCtx.close(); sharedPlayCtx = null; }
+  nextPlayTime = 0;
+  setStatus('غير متصل', '');
+  document.getElementById('connect-btn').style.display = 'inline-flex';
+  document.getElementById('disconnect-btn').style.display = 'none';
+  document.getElementById('chat-card').style.display = 'none';
+  document.getElementById('mic-btn').disabled = true;
+}
+
+async function toggleMic() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    await startRecording();
+  }
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
+    audioCtx = new AudioContext({ sampleRate: 16000 });
+    const source = audioCtx.createMediaStreamSource(stream);
+    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+    processor.onaudioprocess = (e) => {
+      if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const pcm = e.inputBuffer.getChannelData(0);
+      const int16 = new Int16Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) int16[i] = Math.max(-32768, Math.min(32767, pcm[i] * 32767));
+      const bytes = new Uint8Array(int16.buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const b64 = btoa(binary);
+      ws.send(JSON.stringify({ realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: b64 } } }));
+    };
+
+    source.connect(processor);
+    processor.connect(audioCtx.destination);
+    isRecording = true;
+
+    document.getElementById('mic-btn').classList.add('recording');
+    document.getElementById('mic-btn').textContent = '⏹';
+    document.getElementById('wave-indicator').style.display = 'flex';
+    addMsg('system', '🎤 جاري التسجيل...');
+  } catch(e) {
+    alert('تعذر الوصول للميكروفون');
+  }
+}
+
+function stopRecording() {
+  isRecording = false;
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  document.getElementById('mic-btn').classList.remove('recording');
+  document.getElementById('mic-btn').textContent = '🎤';
+  document.getElementById('wave-indicator').style.display = 'none';
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ clientContent: { turnComplete: true } }));
+  }
+}
+
+function sendText() {
+  const input = document.getElementById('text-input');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+  addMsg('user', text);
+  ws.send(JSON.stringify({
+    clientContent: {
+      turns: [{ role: "user", parts: [{ text }] }],
+      turnComplete: true
+    }
+  }));
+  input.value = '';
+}
+
+function getPlayCtx() {
+  if (!sharedPlayCtx || sharedPlayCtx.state === 'closed') {
+    sharedPlayCtx = new AudioContext({ sampleRate: 24000 });
+    nextPlayTime = 0;
+  }
+  return sharedPlayCtx;
+}
+
+async function queueAudio(b64) {
+  try {
+    const ctx = getPlayCtx();
+    const raw = atob(b64);
+    const int16 = new Int16Array(raw.length / 2);
+    for (let i = 0; i < int16.length; i++) {
+      int16[i] = (raw.charCodeAt(i*2+1) << 8) | (raw.charCodeAt(i*2) & 0xFF);
+    }
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+    const buf = ctx.createBuffer(1, float32.length, 24000);
+    buf.copyToChannel(float32, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    const startTime = Math.max(ctx.currentTime + 0.05, nextPlayTime);
+    src.start(startTime);
+    nextPlayTime = startTime + buf.duration;
+  } catch(e) { console.error('audio error', e); }
+}
+
+function addMsg(role, text) {
+  const box = document.getElementById('chat-box');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setStatus(text, type) {
+  const el = document.getElementById('status-badge');
+  el.textContent = text;
+  el.className = 'status' + (type ? ' ' + type : '');
+}
+
+function showUrlPreview(url) {
+  const el = document.getElementById('url-preview');
+  el.textContent = '📍 ' + url;
+  el.style.display = 'block';
+}
+</script>
+</body>
+</html>

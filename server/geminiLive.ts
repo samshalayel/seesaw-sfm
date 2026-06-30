@@ -17,6 +17,7 @@ import { Server as HttpServer } from "http";
 import { Client as SshClient } from "ssh2";
 import { getModelByName, getVoiceModel, getGitHubOwner, getGitHubRepo, getClickUpListId, getVpsConfig, getWhatsAppConfig } from "./vaultStore";
 import { getRepoContents, createOrUpdateFile, getRepos } from "./github";
+import { atalEnqueue } from "./atalWorker";
 import { getTasks, getTask, updateTask, searchTasksByName, createTask, getWorkspaceMembers } from "./clickup";
 import { getAutoTriggerConfig } from "./autoTrigger";
 
@@ -237,8 +238,8 @@ async function executeTool(
 
     if (name === "create_or_update_file") {
       if (!owner || !repo) return "GitHub غير مُعدّ في الخزنة";
-      await createOrUpdateFile(owner, repo, args.path, args.content, args.message, roomId);
-      return `✅ تم حفظ ${args.path} بنجاح — commit: "${args.message}"`;
+      atalEnqueue(roomId || "default", args.path, args.content);
+      return `✅ تم إضافة ${args.path} لقائمة العتال — سيُرفع على GitHub خلال ثوانٍ`;
     }
 
     if (name === "get_clickup_tasks") {
@@ -579,6 +580,12 @@ function connectToGemini(
           clientContent: {
             turns: [{ role: "user", parts: [{ text: msg.text }] }],
             turnComplete: true,
+          },
+        }));
+      } else if (msg.type === "video") {
+        geminiWs.send(JSON.stringify({
+          realtimeInput: {
+            video: { mimeType: msg.mimeType || "image/jpeg", data: msg.data },
           },
         }));
       } else if (msg.type === "interrupt") {
