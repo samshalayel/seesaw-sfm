@@ -25,7 +25,7 @@ export function ChatBubble() {
   const [repoFiles, setRepoFiles] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsSaving, setSlotsSaving] = useState<SlotName | null>(null);
-  const [size, setSize] = useState({ width: 420, height: 500 });
+  const [size, setSize] = useState({ width: Math.round(window.innerWidth * 0.8), height: Math.round(window.innerHeight * 0.8) });
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -308,7 +308,7 @@ export function ChatBubble() {
         border: `2px solid ${robotColor}`,
         display: "flex",
         flexDirection: "column",
-        fontFamily: "Inter, sans-serif",
+        fontFamily: "'Tajawal', 'Cairo', 'Segoe UI', sans-serif",
         zIndex: 100,
         boxShadow: `0 0 30px ${robotColor}40`,
         userSelect: isResizing || isDragging ? "none" : "auto",
@@ -607,9 +607,10 @@ export function ChatBubble() {
               padding: "8px 14px",
               borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
               maxWidth: "85%",
-              fontSize: "14px",
-              lineHeight: "1.5",
+              fontSize: "15px",
+              lineHeight: "1.7",
               direction: "rtl",
+              fontFamily: "'Tajawal', 'Cairo', 'Segoe UI', sans-serif",
               wordBreak: "break-word",
               whiteSpace: "pre-wrap",
               display: "flex",
