@@ -2377,7 +2377,7 @@ export async function registerRoutes(
           try {
             // OpenRouter: cap at 4096 to avoid "requires more credits" 402 errors
             // ZhipuAI: 8192 (free models support up to 8k output)
-            const maxTokens = provider === "ZhipuAI" ? 8192 : provider === "OpenRouter" ? 4096 : 16384;
+            const maxTokens = provider === "ZhipuAI" ? 8192 : provider === "OpenRouter" ? 4096 : 4096;
             // Qwen3 models have thinking mode ON by default — disable to save output tokens
             const isQwen3 = modelId.toLowerCase().includes("qwen3");
             response = await (modelClient.chat.completions.create as any)({
