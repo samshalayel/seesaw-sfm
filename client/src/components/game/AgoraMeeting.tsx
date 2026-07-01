@@ -148,6 +148,11 @@ export function AgoraMeeting() {
   const audioTrack   = useRef<IMicrophoneAudioTrack | null>(null);
   const videoTrack   = useRef<ICameraVideoTrack | null>(null);
 
+  // track joined state in a ref so closures can read latest value
+  const joinedRef             = useRef(false);
+  const aiReconnectTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiManuallyStoppedRef  = useRef(false);   // true when user clicked "stop AI" manually
+
   // AI bridge refs
   const geminiWsRef       = useRef<WebSocket | null>(null);
   const aiAudioCtxRef     = useRef<AudioContext | null>(null);
@@ -158,6 +163,13 @@ export function AgoraMeeting() {
   const aiNextPlayTimeRef = useRef(0);
   const aiMixerRef        = useRef<GainNode | null>(null);
   const aiSourcesRef      = useRef<Map<string | number, MediaStreamAudioSourceNode>>(new Map());
+  // ── video vision ────────────────────────────────────────────────────────────
+  const aiVideoElemsRef  = useRef<Map<string | number, HTMLVideoElement>>(new Map());
+  const aiVideoCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const aiFrameTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // keep joinedRef in sync
+  useEffect(() => { joinedRef.current = joined; }, [joined]);
 
   const roomId = user?.roomId || "default";
   const myName = user?.username || "أنت";
@@ -177,7 +189,13 @@ export function AgoraMeeting() {
   }, []);
 
   // ── AI deactivation ─────────────────────────────────────────────────────────
-  const deactivateAI = useCallback(async () => {
+  const deactivateAI = useCallback(async (manual = false) => {
+    if (manual) aiManuallyStoppedRef.current = true;
+    // cancel any pending auto-reconnect
+    if (aiReconnectTimerRef.current) {
+      clearTimeout(aiReconnectTimerRef.current);
+      aiReconnectTimerRef.current = null;
+    }
     geminiWsRef.current?.close();
     geminiWsRef.current = null;
 
@@ -188,6 +206,12 @@ export function AgoraMeeting() {
 
     aiSourcesRef.current.forEach((s) => { try { s.disconnect(); } catch {} });
     aiSourcesRef.current.clear();
+
+    // clean up video vision
+    if (aiFrameTimerRef.current) { clearInterval(aiFrameTimerRef.current); aiFrameTimerRef.current = null; }
+    aiVideoElemsRef.current.forEach((vid) => { vid.srcObject = null; try { vid.remove(); } catch {} });
+    aiVideoElemsRef.current.clear();
+    aiVideoCanvasRef.current = null;
 
     aiAudioCtxRef.current?.close().catch(() => {});
     aiAudioCtxRef.current = null;
@@ -242,7 +266,7 @@ export function AgoraMeeting() {
 
   // deactivate AI when leaving meeting
   useEffect(() => {
-    if (!joined) deactivateAI();
+    if (!joined) deactivateAI(true);   // manual=true → no reconnect after leaving
   }, [joined, deactivateAI]);
 
   // ── polling: هل AI مفعّل من شخص آخر؟ ────────────────────────────────────
@@ -264,12 +288,30 @@ export function AgoraMeeting() {
   // ── auto-start AI when joined ─────────────────────────────────────────────
   useEffect(() => {
     if (joined && !aiActive) {
-      // تأخير 1.5s لضمان استقرار Agora أولاً
+      // reset manual-stop flag so auto-start isn't blocked
+      aiManuallyStoppedRef.current = false;
       const t = setTimeout(() => activateAI(), 1500);
       return () => clearTimeout(t);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joined]);
+
+  // sync remote VIDEO tracks into hidden elements when users join/leave during AI session
+  useEffect(() => {
+    if (!aiActive) return;
+    // add newly joined
+    remoteUsers.forEach((u) => {
+      if (u.videoTrack) attachVideoElem(u.uid, u.videoTrack as any);
+    });
+    // remove departed
+    const uids = new Set(remoteUsers.map((u) => u.uid));
+    aiVideoElemsRef.current.forEach((vid, uid) => {
+      if (uid !== 'local' && !uids.has(uid)) {
+        vid.srcObject = null; try { vid.remove(); } catch {}
+        aiVideoElemsRef.current.delete(uid);
+      }
+    });
+  }, [aiActive, remoteUsers]);
 
   // sync remote audio sources into the AI mixer
   useEffect(() => {
@@ -405,6 +447,52 @@ export function AgoraMeeting() {
     setVideoMuted(!videoMuted);
   };
 
+  // ── capture video grid and send to Gemini ───────────────────────────────────
+  const captureVideoGrid = () => {
+    if (!geminiWsRef.current || geminiWsRef.current.readyState !== WebSocket.OPEN) return;
+    const videos: HTMLVideoElement[] = [];
+    aiVideoElemsRef.current.forEach((vid) => {
+      if (vid.readyState >= 2 && vid.videoWidth > 0) videos.push(vid);
+    });
+    if (videos.length === 0) return;
+
+    let canvas = aiVideoCanvasRef.current;
+    if (!canvas) { canvas = document.createElement('canvas'); aiVideoCanvasRef.current = canvas; }
+
+    const cols = Math.min(videos.length, 3);
+    const rows = Math.ceil(videos.length / cols);
+    const W = 160, H = 120;
+    canvas.width  = cols * W;
+    canvas.height = rows * H;
+
+    const ctx2d = canvas.getContext('2d');
+    if (!ctx2d) return;
+    ctx2d.fillStyle = '#111';
+    ctx2d.fillRect(0, 0, canvas.width, canvas.height);
+    videos.forEach((vid, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      try { ctx2d.drawImage(vid, col * W, row * H, W, H); } catch {}
+    });
+
+    const jpeg = canvas.toDataURL('image/jpeg', 0.55).split(',')[1];
+    try { geminiWsRef.current!.send(JSON.stringify({ type: 'video', data: jpeg, mimeType: 'image/jpeg' })); } catch {}
+  };
+
+  // helper: attach an Agora video track to a hidden video element for canvas capture
+  const attachVideoElem = (uid: string | number, agoraTrack: { getMediaStreamTrack: () => MediaStreamTrack }) => {
+    if (aiVideoElemsRef.current.has(uid)) return;
+    try {
+      const mst = agoraTrack.getMediaStreamTrack();
+      const vid = document.createElement('video');
+      vid.srcObject = new MediaStream([mst]);
+      vid.autoplay = true; vid.muted = true; vid.playsInline = true;
+      vid.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:-9999px;left:-9999px';
+      document.body.appendChild(vid);
+      vid.play().catch(() => {});
+      aiVideoElemsRef.current.set(uid, vid);
+    } catch {}
+  };
+
   // ── activate AI in meeting ────────────────────────────────────────────────
   const activateAI = async () => {
     if (!clientRef.current || !joined) return;
@@ -500,7 +588,19 @@ export function AgoraMeeting() {
 
       ws.onclose = (e: CloseEvent) => {
         console.log("[AI] ws.onclose — code:", e.code, "reason:", e.reason, "wasClean:", e.wasClean);
-        setAiActive(false); setAiStatus("idle");
+        setAiActive(false);
+        setAiStatus("idle");
+        // ── auto-reconnect if still in meeting and not manually stopped ──────
+        if (joinedRef.current && !aiManuallyStoppedRef.current) {
+          console.log("[AI] connection dropped — auto-reconnect in 4s...");
+          setAiStatus("connecting");
+          aiReconnectTimerRef.current = setTimeout(() => {
+            if (joinedRef.current && !aiManuallyStoppedRef.current) {
+              console.log("[AI] reconnecting...");
+              activateAI();
+            }
+          }, 4000);
+        }
       };
 
       ws.onmessage = (ev) => {
@@ -530,6 +630,15 @@ export function AgoraMeeting() {
             proc.connect(silence);
             silence.connect(capCtx.destination);
             setAiStatus("listening");
+
+            // ── video vision: attach local + remote cameras ─────────────────
+            if (videoTrack.current) attachVideoElem('local', videoTrack.current);
+            remoteUsers.forEach((u) => {
+              if (u.videoTrack) attachVideoElem(u.uid, u.videoTrack as any);
+            });
+            // start frame capture loop (every 2s)
+            if (aiFrameTimerRef.current) clearInterval(aiFrameTimerRef.current);
+            aiFrameTimerRef.current = setInterval(captureVideoGrid, 2000);
           }
 
           if (msg.type === "audio") {
@@ -757,7 +866,7 @@ export function AgoraMeeting() {
                 <span style={{ fontSize: "10px", display: "block" }}>{videoMuted ? "كاميرا" : "مرئي"}</span>
               </button>
               <button
-                onClick={aiActive ? deactivateAI : activateAI}
+                onClick={aiActive ? () => deactivateAI(true) : () => { aiManuallyStoppedRef.current = false; activateAI(); }}
                 disabled={aiStatus === "connecting" || aiBlockedByOther}
                 style={ctrlBtn(aiActive, aiBlockedByOther ? "#666" : "#a855f7")}
                 title={aiBlockedByOther ? "AI مفعّل من مشارك آخر" : aiActive ? "إيقاف AI" : "تشغيل AI"}
