@@ -214,7 +214,9 @@ export function ChatBubble() {
 
   const injectFilesToChat = async () => {
     if (!selectedFiles.length) return;
-    let combined = inputText;
+    const names = selectedFiles.map(f => f.name).join("، ");
+    setRepoBrowserLoading(true);
+    let combined = "";
     for (const f of selectedFiles) {
       try {
         const r = await apiFetch(`/api/github/contents?path=${encodeURIComponent(f.path)}`);
@@ -225,9 +227,17 @@ export function ChatBubble() {
         }
       } catch {}
     }
-    setInputText(combined);
+    setRepoBrowserLoading(false);
+    if (!combined) return;
     setSelectedFiles([]);
     setShowRepoBrowser(false);
+    // أرسل الملفات كرسالة فورية مع إشعار للمستخدم
+    const userMsg = `📎 ${names}\n\n${combined}`;
+    useChat.setState({ inputText: userMsg });
+    setTimeout(() => {
+      sendMessage();
+      setTimeout(() => inputRef.current?.focus(), 200);
+    }, 80);
   };
 
   // جلب ملفات مجلد الريبو (لقائمة الاختيار)
