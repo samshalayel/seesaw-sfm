@@ -215,6 +215,7 @@ export function ChatBubble() {
 
   const injectFilesToChat = async () => {
     if (!selectedFiles.length) return;
+    const fileCount = selectedFiles.length;
     const names = selectedFiles.map(f => f.name).join("، ");
     setRepoBrowserLoading(true);
     let combined = "";
@@ -236,9 +237,7 @@ export function ChatBubble() {
     setSelectedFiles([]);
     setShowRepoBrowser(false);
     // أرسل الملفات مع تعليمة صريحة: لا تستخدم أدوات — المحتوى موجود هنا
-    const names = selectedFiles.map(f => f.name).join("، ");
     const userMsg = `المحتوى التالي هو ملفات المشروع المرسلة مباشرة — لا تستخدم أي أداة لجلبها، هي موجودة هنا الآن:\n\nالملفات: ${names}\n\n${combined}\n\n---\nاقرأ المحتوى أعلاه وأجب: ما اسم المشروع وما هي المرحلة الحالية؟`;
-    const fileCount = selectedFiles.length;
     // انتظر حتى ينتهي أي loading سابق ثم أرسل مباشرة بدون لمس inputText
     const trySend = () => {
       if (useChat.getState().isLoading) { setTimeout(trySend, 300); return; }
