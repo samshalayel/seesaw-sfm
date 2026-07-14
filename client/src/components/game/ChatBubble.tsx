@@ -238,11 +238,10 @@ export function ChatBubble() {
     // أرسل الملفات كرسالة مع تعليمة صريحة للموديل
     const userMsg = `فيما يلي محتوى ${selectedFiles.length} ملف من المشروع. اقرأها كاملة واحفظها في ذاكرتك لأنني سأسألك عنها:\n\n${combined}\n\n---\nهل قرأت الملفات؟ أجب باختصار عن محتواها.`;
     const fileCount = selectedFiles.length;
-    useChat.getState().setInputText(userMsg);
-    // انتظر حتى ينتهي أي loading سابق ثم أرسل
+    // انتظر حتى ينتهي أي loading سابق ثم أرسل مباشرة بدون لمس inputText
     const trySend = () => {
       if (useChat.getState().isLoading) { setTimeout(trySend, 300); return; }
-      useChat.getState().sendMessage();
+      useChat.getState().sendRawMessage(userMsg);
       setFilesSentToast(`✅ تم إرسال ${fileCount} ملف — الموديل يقرأها الآن`);
       setTimeout(() => setFilesSentToast(""), 4000);
       setTimeout(() => inputRef.current?.focus(), 300);

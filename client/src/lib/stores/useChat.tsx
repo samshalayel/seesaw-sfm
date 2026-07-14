@@ -31,6 +31,7 @@ interface ChatState {
   setInputText: (text: string) => void;
   setPendingImage: (img: string | null) => void;
   sendMessage: () => void;
+  sendRawMessage: (content: string) => void;
   clearAllChats: () => void;
   setRobotScreen: (robotId: string, content: string) => void;
   startBroadcast: (message: string, workerIds: string[]) => Promise<void>;
@@ -237,59 +238,65 @@ export const useChat = create<ChatState>((set, get) => ({
       }));
 
       let done = false;
+      let buffer = ""; // ← يجمّع الـ chunks الناقصة
       while (!done) {
         const { value, done: streamDone } = await reader.read();
         done = streamDone;
 
         if (value) {
-          const text = decoder.decode(value);
-          const lines = text.split("\n").filter((l) => l.startsWith("data: "));
+          buffer += decoder.decode(value, { stream: true });
 
-          for (const line of lines) {
-            const data = line.slice(6);
-            if (data === "[DONE]") {
-              done = true;
-              break;
-            }
+          // قسّم على \n\n (نهاية كل حدث SSE) لتجنّب كسر JSON كبير
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? ""; // آخر جزء قد يكون ناقصاً — احتفظ به
 
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                set((state) => {
-                  const msgs = [...state.messages];
-                  const lastMsg = msgs[msgs.length - 1];
-                  let newContent = "";
-                  if (lastMsg && lastMsg.role === "assistant") {
-                    newContent = lastMsg.content + parsed.content;
-                    msgs[msgs.length - 1] = { ...lastMsg, content: newContent };
-                  }
-                  if (activeRobotId) {
-                    return { messages: msgs, robotScreens: { ...state.robotScreens, [activeRobotId]: newContent } };
-                  }
-                  return { messages: msgs };
-                });
+          for (const part of parts) {
+            const lines = part.split("\n").filter((l) => l.startsWith("data: "));
+            for (const line of lines) {
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") { done = true; break; }
+
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  set((state) => {
+                    const msgs = [...state.messages];
+                    const lastMsg = msgs[msgs.length - 1];
+                    let newContent = "";
+                    if (lastMsg && lastMsg.role === "assistant") {
+                      newContent = lastMsg.content + parsed.content;
+                      msgs[msgs.length - 1] = { ...lastMsg, content: newContent };
+                    }
+                    if (activeRobotId) {
+                      return { messages: msgs, robotScreens: { ...state.robotScreens, [activeRobotId]: newContent } };
+                    }
+                    return { messages: msgs };
+                  });
+                }
+                if (parsed.usage) {
+                  const { input, output, model, cost } = parsed.usage;
+                  set((state) => {
+                    const msgs = [...state.messages];
+                    const lastMsg = msgs[msgs.length - 1];
+                    if (lastMsg && lastMsg.role === "assistant") {
+                      msgs[msgs.length - 1] = { ...lastMsg, cost, inputTokens: input, outputTokens: output };
+                    }
+                    return {
+                      messages: msgs,
+                      sessionUsage: {
+                        input: state.sessionUsage.input + input,
+                        output: state.sessionUsage.output + output,
+                        cost: state.sessionUsage.cost + cost,
+                        model,
+                      },
+                    };
+                  });
+                }
+              } catch {
+                // JSON ناقص — سيُكمَل في الـ chunk التالي
               }
-              if (parsed.usage) {
-                const { input, output, model, cost } = parsed.usage;
-                set((state) => {
-                  const msgs = [...state.messages];
-                  const lastMsg = msgs[msgs.length - 1];
-                  if (lastMsg && lastMsg.role === "assistant") {
-                    msgs[msgs.length - 1] = { ...lastMsg, cost, inputTokens: input, outputTokens: output };
-                  }
-                  return {
-                    messages: msgs,
-                    sessionUsage: {
-                      input: state.sessionUsage.input + input,
-                      output: state.sessionUsage.output + output,
-                      cost: state.sessionUsage.cost + cost,
-                      model,
-                    },
-                  };
-                });
-              }
-            } catch {
             }
+            if (done) break;
           }
         }
       }
@@ -316,6 +323,72 @@ export const useChat = create<ChatState>((set, get) => ({
         messages: [...state.messages, { role: "assistant" as const, content: "حدث خطأ، حاول مرة أخرى" }],
         isLoading: false,
       }));
+    }
+  },
+
+  sendRawMessage: async (content: string) => {
+    const { messages, activeRobotId, isLoading } = get();
+    if (!content.trim() || isLoading) return;
+    const userMessage: ChatMessage = { role: "user", content: content.trim() };
+    set({ messages: [...messages, userMessage], isLoading: true });
+    try {
+      const currentMessages = get().messages;
+      const history = currentMessages
+        .filter(m => m.content.trim().length > 0)
+        .map(m => ({ role: m.role, content: m.content }))
+        .slice(-30);
+      const response = await apiFetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: content.trim(), robotId: activeRobotId, history, projectKey: get().activeProjectKey }),
+      });
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) throw new Error("No reader");
+      set((state) => ({ messages: [...state.messages, { role: "assistant" as const, content: "" }], isLoading: false }));
+      let done = false; let buffer = "";
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n"); buffer = parts.pop() ?? "";
+          for (const part of parts) {
+            const lines = part.split("\n").filter(l => l.startsWith("data: "));
+            for (const line of lines) {
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") { done = true; break; }
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  set((state) => {
+                    const msgs = [...state.messages];
+                    const last = msgs[msgs.length - 1];
+                    if (last && last.role === "assistant") {
+                      const newContent = last.content + parsed.content;
+                      msgs[msgs.length - 1] = { ...last, content: newContent };
+                      if (activeRobotId) return { messages: msgs, robotScreens: { ...state.robotScreens, [activeRobotId]: newContent } };
+                    }
+                    return { messages: msgs };
+                  });
+                }
+                if (parsed.usage) {
+                  const { input, output, model, cost } = parsed.usage;
+                  set((state) => {
+                    const msgs = [...state.messages];
+                    const last = msgs[msgs.length - 1];
+                    if (last && last.role === "assistant") msgs[msgs.length - 1] = { ...last, cost, inputTokens: input, outputTokens: output };
+                    return { messages: msgs, sessionUsage: { input: state.sessionUsage.input + input, output: state.sessionUsage.output + output, cost: state.sessionUsage.cost + cost, model } };
+                  });
+                }
+              } catch {}
+            }
+            if (done) break;
+          }
+        }
+      }
+    } catch (err: any) {
+      set((state) => ({ messages: [...state.messages, { role: "assistant" as const, content: "حدث خطأ، حاول مرة أخرى" }], isLoading: false }));
     }
   },
 }));
