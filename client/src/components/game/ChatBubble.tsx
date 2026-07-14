@@ -31,6 +31,7 @@ export function ChatBubble() {
   const [repoBrowserItems, setRepoBrowserItems] = useState<Array<{name: string; type: string; path: string}>>([]);
   const [repoBrowserLoading, setRepoBrowserLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Array<{name: string; path: string}>>([]);
+  const [pendingFileContent, setPendingFileContent] = useState<string>("");
   const [size, setSize] = useState({ width: Math.round(window.innerWidth * 0.8), height: Math.round(window.innerHeight * 0.8) });
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -236,17 +237,11 @@ export function ChatBubble() {
     if (!combined) return;
     setSelectedFiles([]);
     setShowRepoBrowser(false);
-    // أرسل الملفات مع تعليمة صريحة: لا تستخدم أدوات — المحتوى موجود هنا
-    const userMsg = `هذه الملفات من الريبو — اقرأها واستخدمها في ردك مباشرةً، لا تطلب جلبها بأدوات:\n\nالملفات: ${names}\n\n${combined}`;
-    // انتظر حتى ينتهي أي loading سابق ثم أرسل مباشرة بدون لمس inputText
-    const trySend = () => {
-      if (useChat.getState().isLoading) { setTimeout(trySend, 300); return; }
-      useChat.getState().sendRawMessage(userMsg);
-      setFilesSentToast(`✅ تم إرسال ${fileCount} ملف — الموديل يقرأها الآن`);
-      setTimeout(() => setFilesSentToast(""), 4000);
-      setTimeout(() => inputRef.current?.focus(), 300);
-    };
-    setTimeout(trySend, 100);
+    // خزّن محتوى الملفات كـ pending — ستُدمَج مع رسالة المستخدم التالية عند الإرسال
+    setPendingFileContent(`هذه الملفات من الريبو — اقرأها واستخدمها في ردك:\n\nالملفات: ${names}\n\n${combined}\n\n---\n`);
+    setFilesSentToast(`📎 ${fileCount} ملف جاهز — اكتب سؤالك وأرسل`);
+    setTimeout(() => setFilesSentToast(""), 5000);
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   // جلب ملفات مجلد الريبو (لقائمة الاختيار)
@@ -341,10 +336,24 @@ export function ChatBubble() {
   const robotColor = activeModel ? getModelColor(activeModel.index) : "#4fc3f7";
   const roomId = useGame.getState().user?.roomId;
 
+  const handleSend = () => {
+    if (pendingFileContent && inputText.trim()) {
+      const fullMsg = pendingFileContent + inputText.trim();
+      setPendingFileContent("");
+      useChat.getState().sendRawMessage(fullMsg);
+    } else if (pendingFileContent && !inputText.trim()) {
+      // لا تُرسِل الملفات بدون سؤال
+      setFilesSentToast("⚠️ اكتب سؤالك أولاً ثم اضغط إرسال");
+      setTimeout(() => setFilesSentToast(""), 3000);
+    } else {
+      sendMessage();
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     e.stopPropagation();
     if (e.key === "Enter" && !isLoading) {
-      sendMessage();
+      handleSend();
     }
     if (e.key === "Escape") {
       closeChat();
@@ -903,6 +912,18 @@ export function ChatBubble() {
         </div>
       )}
 
+      {/* مؤشر الملفات المحملة */}
+      {pendingFileContent && (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 16px", background: "#0a2a1a", borderTop: "1px solid #16a34a44", direction: "rtl" }}>
+          <span style={{ fontSize: "14px" }}>📎</span>
+          <span style={{ color: "#4ade80", fontSize: "12px", flex: 1 }}>ملفات محملة — اكتب سؤالك وأرسل</span>
+          <button
+            onClick={() => setPendingFileContent("")}
+            style={{ background: "none", border: "none", color: "#888", fontSize: "13px", cursor: "pointer", padding: "0 4px" }}
+          >✕</button>
+        </div>
+      )}
+
       <div
         style={{
           padding: "12px 16px",
@@ -980,8 +1001,8 @@ export function ChatBubble() {
           {bgSending ? "..." : "📋 خلفية"}
         </button>
         <button
-          onClick={sendMessage}
-          disabled={isLoading || (!inputText.trim() && !pendingImage)}
+          onClick={handleSend}
+          disabled={isLoading || (!inputText.trim() && !pendingImage && !pendingFileContent)}
           style={{
             background: robotColor,
             border: "none",
