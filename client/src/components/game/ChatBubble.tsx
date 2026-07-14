@@ -222,7 +222,10 @@ export function ChatBubble() {
         const r = await apiFetch(`/api/github/contents?path=${encodeURIComponent(f.path)}`);
         const data = await r.json();
         if (data.content) {
-          const content = atob(data.content.replace(/\n/g, ""));
+          const binary = atob(data.content.replace(/\n/g, ""));
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const content = new TextDecoder("utf-8").decode(bytes);
           combined += (combined ? "\n\n" : "") + `[FILE: ${f.path}]\n${content}\n[/FILE]`;
         }
       } catch {}
