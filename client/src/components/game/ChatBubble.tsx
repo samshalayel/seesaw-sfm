@@ -234,13 +234,13 @@ export function ChatBubble() {
     if (!combined) return;
     setSelectedFiles([]);
     setShowRepoBrowser(false);
-    // أرسل الملفات كرسالة فورية مع إشعار للمستخدم
-    const userMsg = `📎 ${names}\n\n${combined}`;
-    useChat.setState({ inputText: userMsg });
+    // أرسل الملفات كرسالة مع تعليمة صريحة للموديل
+    const userMsg = `فيما يلي محتوى ${selectedFiles.length} ملف من المشروع. اقرأها كاملة واحفظها في ذاكرتك لأنني سأسألك عنها:\n\n${combined}\n\n---\nهل قرأت الملفات؟ أجب باختصار عن محتواها.`;
+    useChat.getState().setInputText(userMsg);
     setTimeout(() => {
-      sendMessage();
-      setTimeout(() => inputRef.current?.focus(), 200);
-    }, 80);
+      useChat.getState().sendMessage();
+      setTimeout(() => inputRef.current?.focus(), 300);
+    }, 50);
   };
 
   // جلب ملفات مجلد الريبو (لقائمة الاختيار)
