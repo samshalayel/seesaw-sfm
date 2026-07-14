@@ -25,6 +25,7 @@ export function ChatBubble() {
   const [repoFiles, setRepoFiles] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsSaving, setSlotsSaving] = useState<SlotName | null>(null);
+  const [filesSentToast, setFilesSentToast] = useState("");
   const [showRepoBrowser, setShowRepoBrowser]   = useState(false);
   const [repoBrowserPath, setRepoBrowserPath]   = useState("");
   const [repoBrowserItems, setRepoBrowserItems] = useState<Array<{name: string; type: string; path: string}>>([]);
@@ -239,6 +240,8 @@ export function ChatBubble() {
     useChat.getState().setInputText(userMsg);
     setTimeout(() => {
       useChat.getState().sendMessage();
+      setFilesSentToast(`✅ تم إرسال ${selectedFiles.length} ملف — الموديل يقرأها الآن`);
+      setTimeout(() => setFilesSentToast(""), 4000);
       setTimeout(() => inputRef.current?.focus(), 300);
     }, 50);
   };
@@ -750,6 +753,18 @@ export function ChatBubble() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Files sent toast */}
+      {filesSentToast && (
+        <div style={{
+          position: "absolute", top: "60px", left: "50%", transform: "translateX(-50%)",
+          background: "#14532d", border: "1px solid #22c55e", borderRadius: "8px",
+          padding: "8px 18px", color: "#4ade80", fontSize: "13px", fontWeight: "bold",
+          zIndex: 200, whiteSpace: "nowrap", boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+        }}>
+          {filesSentToast}
         </div>
       )}
 
