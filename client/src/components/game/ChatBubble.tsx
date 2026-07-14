@@ -25,6 +25,11 @@ export function ChatBubble() {
   const [repoFiles, setRepoFiles] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsSaving, setSlotsSaving] = useState<SlotName | null>(null);
+  const [showRepoBrowser, setShowRepoBrowser]   = useState(false);
+  const [repoBrowserPath, setRepoBrowserPath]   = useState("");
+  const [repoBrowserItems, setRepoBrowserItems] = useState<Array<{name: string; type: string; path: string}>>([]);
+  const [repoBrowserLoading, setRepoBrowserLoading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Array<{name: string; path: string}>>([]);
   const [size, setSize] = useState({ width: Math.round(window.innerWidth * 0.8), height: Math.round(window.innerHeight * 0.8) });
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -181,6 +186,49 @@ export function ChatBubble() {
       setSlots(filled);
     }).catch(() => {}).finally(() => setSlotsLoading(false));
   }, [showSlotsPanel, activeProjectKey]);
+
+  const browseRepo = async (path = "") => {
+    setRepoBrowserLoading(true);
+    setRepoBrowserPath(path);
+    try {
+      const r = await apiFetch(`/api/github/contents?path=${encodeURIComponent(path)}`);
+      if (!r.ok) return;
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        const sorted = [...data].sort((a: any, b: any) =>
+          a.type === b.type ? a.name.localeCompare(b.name) : a.type === "dir" ? -1 : 1
+        );
+        setRepoBrowserItems(sorted.map((f: any) => ({ name: f.name, type: f.type, path: f.path })));
+      }
+    } catch {}
+    setRepoBrowserLoading(false);
+  };
+
+  const toggleFileSelect = (file: {name: string; path: string}) => {
+    setSelectedFiles(prev =>
+      prev.find(f => f.path === file.path)
+        ? prev.filter(f => f.path !== file.path)
+        : [...prev, file]
+    );
+  };
+
+  const injectFilesToChat = async () => {
+    if (!selectedFiles.length) return;
+    let combined = inputText;
+    for (const f of selectedFiles) {
+      try {
+        const r = await apiFetch(`/api/github/contents?path=${encodeURIComponent(f.path)}`);
+        const data = await r.json();
+        if (data.content) {
+          const content = atob(data.content.replace(/\n/g, ""));
+          combined += (combined ? "\n\n" : "") + `[FILE: ${f.path}]\n${content}\n[/FILE]`;
+        }
+      } catch {}
+    }
+    setInputText(combined);
+    setSelectedFiles([]);
+    setShowRepoBrowser(false);
+  };
 
   // جلب ملفات مجلد الريبو (لقائمة الاختيار)
   const loadRepoFiles = async (path = "") => {
@@ -370,9 +418,31 @@ export function ChatBubble() {
           >
             {activeProjectKey ? `◈ ${activeProjectKey}` : "+ مشروع"}
           </button>
+          <button
+            onClick={() => {
+              const next = !showRepoBrowser;
+              setShowRepoBrowser(next);
+              setShowProjectPanel(false);
+              setShowSlotsPanel(false);
+              if (next) browseRepo("");
+            }}
+            title="متصفح ملفات الريبو"
+            style={{
+              background: showRepoBrowser ? "#1a0a2e" : "#1e1e2e",
+              border: `1px solid ${showRepoBrowser ? "#a855f7" : "#444"}`,
+              borderRadius: "8px",
+              padding: "3px 10px",
+              color: showRepoBrowser ? "#d8b4fe" : "#666",
+              fontSize: "12px",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
+            📁 ريبو
+          </button>
           {activeProjectKey && (
             <button
-              onClick={() => { setShowSlotsPanel(p => !p); setShowProjectPanel(false); if (!showSlotsPanel) loadRepoFiles(); }}
+              onClick={() => { setShowSlotsPanel(p => !p); setShowProjectPanel(false); setShowRepoBrowser(false); if (!showSlotsPanel) loadRepoFiles(); }}
               title="ملفات المراحل"
               style={{
                 background: showSlotsPanel ? "#0369a122" : "#1e1e2e",
@@ -557,6 +627,116 @@ export function ChatBubble() {
           <div style={{ marginTop: "8px", fontSize: "10px", color: "#334155", direction: "rtl" }}>
             💡 اكتب اسم الملف أو اختره من القائمة ثم اضغط ✓ لحفظه في المرحلة
           </div>
+        </div>
+      )}
+
+      {/* ── Repo Browser Panel ── */}
+      {showRepoBrowser && (
+        <div style={{
+          background: "#080d1a",
+          borderBottom: "1px solid #2d1b69",
+          padding: "10px 14px",
+          flexShrink: 0,
+          direction: "rtl",
+          maxHeight: "340px",
+          overflowY: "auto",
+        }}>
+          {/* Breadcrumb + controls */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", direction: "ltr", flexWrap: "wrap" }}>
+              <button onClick={() => browseRepo("")}
+                style={{ background: "none", border: "none", color: "#a855f7", cursor: "pointer", fontSize: "11px", padding: "0 2px" }}>
+                📦 ريبو
+              </button>
+              {repoBrowserPath.split("/").filter(Boolean).map((part, idx, arr) => {
+                const partPath = arr.slice(0, idx + 1).join("/");
+                return (
+                  <React.Fragment key={partPath}>
+                    <span style={{ color: "#475569" }}>/</span>
+                    <button onClick={() => browseRepo(partPath)}
+                      style={{ background: "none", border: "none", color: idx === arr.length - 1 ? "#e2e8f0" : "#a855f7", cursor: "pointer", fontSize: "11px", padding: "0 2px" }}>
+                      {part}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: "4px" }}>
+              {repoBrowserPath && (
+                <button onClick={() => browseRepo(repoBrowserPath.split("/").slice(0, -1).join("/"))}
+                  style={{ fontSize: "10px", background: "none", border: "1px solid #2d1b69", borderRadius: "4px", color: "#a855f7", cursor: "pointer", padding: "2px 6px" }}>
+                  🔙
+                </button>
+              )}
+              <button onClick={() => browseRepo(repoBrowserPath)}
+                style={{ fontSize: "10px", background: "none", border: "1px solid #2d1b69", borderRadius: "4px", color: "#64748b", cursor: "pointer", padding: "2px 6px" }}>
+                🔄
+              </button>
+            </div>
+          </div>
+
+          {/* Items */}
+          {repoBrowserLoading ? (
+            <div style={{ fontSize: "12px", color: "#64748b", textAlign: "center", padding: "10px" }}>⏳ جاري التحميل...</div>
+          ) : repoBrowserItems.length === 0 ? (
+            <div style={{ fontSize: "12px", color: "#475569", textAlign: "center", padding: "10px" }}>المجلد فارغ</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+              {repoBrowserItems.map(item => {
+                const isSelected = selectedFiles.some(f => f.path === item.path);
+                const isDir = item.type === "dir";
+                return (
+                  <div key={item.path} onClick={() => isDir ? browseRepo(item.path) : toggleFileSelect({ name: item.name, path: item.path })}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "6px",
+                      padding: "4px 8px", borderRadius: "5px", cursor: "pointer",
+                      background: isSelected ? "#1a0a3a" : "transparent",
+                      border: isSelected ? "1px solid #7c3aed" : "1px solid transparent",
+                      direction: "ltr",
+                    }}>
+                    <span style={{ fontSize: "13px" }}>{isDir ? "📁" : "📄"}</span>
+                    <span style={{ fontSize: "12px", color: isDir ? "#93c5fd" : isSelected ? "#d8b4fe" : "#cbd5e1", flex: 1 }}>{item.name}</span>
+                    {isSelected && <span style={{ fontSize: "11px", color: "#a855f7", fontWeight: "bold" }}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Selected files + inject */}
+          {selectedFiles.length > 0 && (
+            <div style={{ marginTop: "10px", borderTop: "1px solid #1e293b", paddingTop: "8px" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "8px" }}>
+                {selectedFiles.map(f => (
+                  <span key={f.path} style={{
+                    background: "#2d1b69", border: "1px solid #7c3aed", borderRadius: "12px",
+                    padding: "2px 8px", fontSize: "11px", color: "#d8b4fe",
+                    direction: "ltr", display: "flex", alignItems: "center", gap: "4px",
+                  }}>
+                    {f.name}
+                    <button onClick={e => { e.stopPropagation(); toggleFileSelect(f); }}
+                      style={{ background: "none", border: "none", color: "#7c3aed", cursor: "pointer", fontSize: "12px", padding: "0", lineHeight: 1 }}>
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button onClick={injectFilesToChat} style={{
+                  background: "#6d28d9", border: "none", borderRadius: "6px",
+                  padding: "5px 14px", color: "#fff", fontSize: "12px", cursor: "pointer", fontWeight: "bold",
+                }}>
+                  📥 أضف ({selectedFiles.length}) للمحادثة
+                </button>
+                <button onClick={() => setSelectedFiles([])} style={{
+                  background: "none", border: "1px solid #374151", borderRadius: "6px",
+                  padding: "5px 10px", color: "#9ca3af", fontSize: "11px", cursor: "pointer",
+                }}>
+                  مسح الكل
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
