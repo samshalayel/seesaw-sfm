@@ -237,13 +237,17 @@ export function ChatBubble() {
     setShowRepoBrowser(false);
     // أرسل الملفات كرسالة مع تعليمة صريحة للموديل
     const userMsg = `فيما يلي محتوى ${selectedFiles.length} ملف من المشروع. اقرأها كاملة واحفظها في ذاكرتك لأنني سأسألك عنها:\n\n${combined}\n\n---\nهل قرأت الملفات؟ أجب باختصار عن محتواها.`;
+    const fileCount = selectedFiles.length;
     useChat.getState().setInputText(userMsg);
-    setTimeout(() => {
+    // انتظر حتى ينتهي أي loading سابق ثم أرسل
+    const trySend = () => {
+      if (useChat.getState().isLoading) { setTimeout(trySend, 300); return; }
       useChat.getState().sendMessage();
-      setFilesSentToast(`✅ تم إرسال ${selectedFiles.length} ملف — الموديل يقرأها الآن`);
+      setFilesSentToast(`✅ تم إرسال ${fileCount} ملف — الموديل يقرأها الآن`);
       setTimeout(() => setFilesSentToast(""), 4000);
       setTimeout(() => inputRef.current?.focus(), 300);
-    }, 50);
+    };
+    setTimeout(trySend, 100);
   };
 
   // جلب ملفات مجلد الريبو (لقائمة الاختيار)
