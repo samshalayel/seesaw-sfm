@@ -237,7 +237,7 @@ export function ChatBubble() {
     setSelectedFiles([]);
     setShowRepoBrowser(false);
     // أرسل الملفات مع تعليمة صريحة: لا تستخدم أدوات — المحتوى موجود هنا
-    const userMsg = `المحتوى التالي هو ملفات المشروع المرسلة مباشرة — لا تستخدم أي أداة لجلبها، هي موجودة هنا الآن:\n\nالملفات: ${names}\n\n${combined}\n\n---\nاقرأ المحتوى أعلاه وأجب: ما اسم المشروع وما هي المرحلة الحالية؟`;
+    const userMsg = `هذه الملفات من الريبو — اقرأها واستخدمها في ردك مباشرةً، لا تطلب جلبها بأدوات:\n\nالملفات: ${names}\n\n${combined}`;
     // انتظر حتى ينتهي أي loading سابق ثم أرسل مباشرة بدون لمس inputText
     const trySend = () => {
       if (useChat.getState().isLoading) { setTimeout(trySend, 300); return; }
