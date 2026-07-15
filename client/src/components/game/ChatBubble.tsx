@@ -237,11 +237,20 @@ export function ChatBubble() {
     if (!combined) return;
     setSelectedFiles([]);
     setShowRepoBrowser(false);
-    // خزّن محتوى الملفات كـ pending — ستُدمَج مع رسالة المستخدم التالية عند الإرسال
-    setPendingFileContent(`هذه الملفات من الريبو — اقرأها واستخدمها في ردك:\n\nالملفات: ${names}\n\n${combined}\n\n---\n`);
-    setFilesSentToast(`📎 ${fileCount} ملف جاهز — اكتب سؤالك وأرسل`);
-    setTimeout(() => setFilesSentToast(""), 5000);
-    setTimeout(() => inputRef.current?.focus(), 100);
+    // خزّن المحتوى كـ pending مع رسالة تأكيد
+    const fileList = selectedFiles.map((f, i) => `${i + 1}. ${f.name}`).join("\n");
+    const confirmMsg = `لديك الآن ${fileCount} ملف في سياق المحادثة:\n${fileList}\n\nهذا هو محتواها — اقرأه واحتفظ به للأسئلة القادمة:\n\n${combined}\n\n---\nرد فقط بتأكيد قصير: "✅ استلمت ${fileCount} ملف: [أسماؤها]"`;
+    setPendingFileContent(confirmMsg);
+    // أرسل تلقائياً رسالة التأكيد
+    const trySend = () => {
+      if (useChat.getState().isLoading) { setTimeout(trySend, 300); return; }
+      useChat.getState().sendRawMessage(confirmMsg);
+      setPendingFileContent("");
+      setFilesSentToast(`📤 جاري تأكيد استلام ${fileCount} ملف...`);
+      setTimeout(() => setFilesSentToast(""), 4000);
+      setTimeout(() => inputRef.current?.focus(), 500);
+    };
+    setTimeout(trySend, 100);
   };
 
   // جلب ملفات مجلد الريبو (لقائمة الاختيار)
