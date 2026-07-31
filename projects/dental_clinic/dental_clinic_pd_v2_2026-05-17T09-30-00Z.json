@@ -1,0 +1,234 @@
+{
+  "nodes": [
+    {
+      "id": "group-pd-20260517-dental_clinic",
+      "type": "group",
+      "data": { "label": "PD — Problem Discovery" },
+      "position": { "x": 120, "y": -600 },
+      "width": 2000,
+      "height": 1600,
+      "style": { "width": 2000, "height": 1600, "zIndex": -1 }
+    },
+    {
+      "id": "pd-summary-1",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Problem Summary",
+        "description": "عيادة أسنان صغيرة فيها 3 أطباء. المرضى يتصلون بالتلفون لحجز مواعيد والموظفة تكتب الحجوزات على ورقة. كل يوم يصير لخبطة: مريضين يجون نفس الوقت، مواعيد تنكتب غلط، والدكتور يضيع وقته يسأل 'مين الجاي؟'. المرضى يزعلون والعيادة تخسر زبائن.",
+        "points": [
+          "تداخل المواعيد بسبب سوء تنظيم الحجوزات",
+          "الموظفة تكتب المواعيد على الورق مما يسبب أخطاء",
+          "الأطباء يضيعون وقتهم في الاستفسار عن المواعيد"
+        ]
+      },
+      "position": { "x": 40, "y": 80 },
+      "width": 320,
+      "height": 280
+    },
+    {
+      "id": "pd-actors-2",
+      "type": "pd-actors-node",
+      "data": {
+        "label": "Actors",
+        "description": "الأطراف المتأثرة بالمشكلة",
+        "points": [
+          "المرضى — يريدون حجز سريع والتأكد من مواعيدهم",
+          "الأطباء — يعانون من ضياع الوقت بسبب الفوضى",
+          "الموظفة — تواجه صعوبة في تنظيم الحجوزات"
+        ]
+      },
+      "position": { "x": 420, "y": 80 },
+      "width": 300,
+      "height": 240
+    },
+    {
+      "id": "pd-goals-3",
+      "type": "pd-goals-node",
+      "data": {
+        "label": "Goals",
+        "description": "الأهداف المرجوة — ماذا نريد تحقيقه (بدون ذكر كيف)",
+        "points": [
+          "تنظيم عملية الحجز ومنع التضارب",
+          "تسهيل عملية حجز المواعيد للمرضى",
+          "تقليل الوقت الضائع للأطباء"
+        ]
+      },
+      "position": { "x": 760, "y": 80 },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-pain-4",
+      "type": "pd-pain-points-node",
+      "data": {
+        "label": "Pain Points",
+        "description": "نقاط الألم الحالية — مشاكل محددة وصريحة من القصة",
+        "points": [
+          "المرضى يشعرون بالإحباط عند تداخل المواعيد",
+          "الأطباء لا يعرفون من الجالس في العيادة",
+          "الموظفة رغم مجهودها لا تستطيع ضبط الحجوزات"
+        ]
+      },
+      "position": { "x": 1120, "y": 80 },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-constraints-5",
+      "type": "pd-constraints-node",
+      "data": {
+        "label": "Constraints",
+        "description": "القيود والمحددات — ما لا يجب لمسه أو تجاوزه",
+        "points": [
+          "لا يمكن تغيير عدد الأطباء في العيادة",
+          "يجب الحفاظ على طريقة الحجز الهاتفية لفترة انتقالية",
+          "الأدوات المستخدمة للحجز ستكون ورقية خلال المرحلة الحالية"
+        ]
+      },
+      "position": { "x": 40, "y": 420 },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-scope-6",
+      "type": "pd-scope-node",
+      "data": {
+        "label": "Scope",
+        "description": "نطاق العمل — ماذا نريد تحقيقه (desired outcomes) وماذا نؤجله",
+        "inScope": [
+          "منع تداخل المواعيد",
+          "تسهيل رؤية الأطباء لمواعيدهم",
+          "تمكين المرضى من تأكيد مواعيدهم بسهولة"
+        ],
+        "outScope": [
+          "تطوير نظام حجز إلكتروني بالكامل في الوقت الحالي",
+          "إلغاء الحجز الهاتفي كليًا",
+          "إدراج خدمات إضافية خارج نطاق الحجز"
+        ]
+      },
+      "position": { "x": 420, "y": 420 },
+      "width": 320,
+      "height": 300
+    },
+    {
+      "id": "pd-signals-7",
+      "type": "pd-signals-node",
+      "data": {
+        "label": "Success Signals",
+        "description": "مؤشرات نجاح سلوكية وقابلة للملاحظة — بدون نسب مخترعة",
+        "points": [
+          "عدم وجود حالات تداخل في المواعيد",
+          "المرضى يقومون بالحجز دون الحاجة للاتصال",
+          "الأطباء يستطيعون رؤية جدول مواعيدهم بوضوح"
+        ]
+      },
+      "position": { "x": 760, "y": 420 },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-unknowns-8",
+      "type": "pd-unknowns-node",
+      "data": {
+        "label": "Unknowns & Clarifying Questions",
+        "description": "أسئلة مفتوحة تحتاج إجابة من صاحب المشكلة قبل المتابعة",
+        "points": [
+          "هل هناك نظام مؤقت يمكن استخدامه لتنظيم الحجوزات؟",
+          "كم من الوقت يستغرق الأطباء للرد على المكالمات؟",
+          "ما هو متوسط عدد المرضى الذين يحضرون في كل يوم؟"
+        ]
+      },
+      "position": { "x": 1120, "y": 420 },
+      "width": 320,
+      "height": 240
+    },
+    {
+      "id": "pd-insight-9",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Problem Insight",
+        "description": "استنتاج عميق: ما المشكلة الحقيقية وراء الأعراض؟",
+        "points": [
+          "المشكلة تكمن في غياب نظام مركزى لإدارة الحجوزات",
+          "توزيع العمل غير متوازن بين الموظفة والأطباء",
+          "نقص في التواصل الفعال أثناء عمليات الحجز"
+        ]
+      },
+      "position": { "x": 40, "y": 780 },
+      "width": 320,
+      "height": 220
+    },
+    {
+      "id": "pd-outcome-10",
+      "type": "pd-goals-node",
+      "data": {
+        "label": "Desired Outcome",
+        "description": "الحالة النهائية المرغوبة — كيف يبدو العالم بعد حل المشكلة",
+        "points": [
+          "المرضى يحجزون مواعيدهم بسهولة ودون تداخل",
+          "الأطباء لديهم رؤية واضحة لمواعيدهم دون استفسارات",
+          "العيادة تدير الحجوزات بشكل سهل وفعال"
+        ]
+      },
+      "position": { "x": 420, "y": 780 },
+      "width": 320,
+      "height": 220
+    },
+    {
+      "id": "pd-direction-11",
+      "type": "pd-summary-node",
+      "data": {
+        "label": "Strategic Direction",
+        "description": "إلى أين نتجه — بدون تحديد كيف",
+        "points": [
+          "تعديل العملية تتعلق بإدارة المواعيد",
+          "تحقيق شفافية أكبر بين الأطباء والمرضى",
+          "تحسين فعالية الاتصالات خلال عمليات الحجز"
+        ]
+      },
+      "position": { "x": 760, "y": 780 },
+      "width": 320,
+      "height": 220
+    },
+    {
+      "id": "gate-problem-12",
+      "type": "gate-problem",
+      "data": {
+        "label": "PD Lock Gate ⏳",
+        "description": "لا يمكن الانتقال إلى S0 قبل اعتماد المشكلة من الإنسان وإغلاق كل الأسئلة المفتوحة",
+        "gateStatus": "pending_human_review",
+        "decisionAuthority": "Human Only",
+        "gateChecklist": [
+          "Summary يعكس قصة الألم الأصلية بدون تحريف",
+          "الأطراف محددة بأسمائهم وأدوارهم",
+          "الأهداف غير تقنية ولا تصف حلولاً",
+          "نقاط الألم صريحة ومن وجهة نظر المستخدم",
+          "النطاق يصف desired outcomes لا ميزات تقنية",
+          "inScope لا يحتوي على حلول أو أسماء تقنيات",
+          "outScope يوضح ما يُؤجل صراحة",
+          "مؤشرات النجاح سلوكية وبدون أرقام مخترعة",
+          "كل الأسئلة المفتوحة (Unknowns) تم الإجابة عليها أو قبول المخاطرة"
+        ]
+      },
+      "position": { "x": 350, "y": 1080 },
+      "width": 700,
+      "height": 280
+    }
+  ],
+  "edges": [
+    { "id": "e-1-2", "type": "custom", "source": "pd-summary-1", "target": "pd-actors-2" },
+    { "id": "e-2-3", "type": "custom", "source": "pd-actors-2", "target": "pd-goals-3" },
+    { "id": "e-3-4", "type": "custom", "source": "pd-goals-3", "target": "pd-pain-4" },
+    { "id": "e-5-6", "type": "custom", "source": "pd-constraints-5", "target": "pd-scope-6" },
+    { "id": "e-6-7", "type": "custom", "source": "pd-scope-6", "target": "pd-signals-7" },
+    { "id": "e-7-8", "type": "custom", "source": "pd-signals-7", "target": "pd-unknowns-8" },
+    { "id": "e-4-9", "type": "custom", "source": "pd-pain-4", "target": "pd-insight-9" },
+    { "id": "e-8-10", "type": "custom", "source": "pd-unknowns-8", "target": "pd-outcome-10" },
+    { "id": "e-9-11", "type": "custom", "source": "pd-insight-9", "target": "pd-direction-11" },
+    { "id": "e-10-11", "type": "custom", "source": "pd-outcome-10", "target": "pd-direction-11" },
+    { "id": "e-11-gate", "type": "custom", "source": "pd-direction-11", "target": "gate-problem-12" },
+    { "id": "e-insight-gate", "type": "custom", "source": "pd-insight-9", "target": "gate-problem-12" }
+  ],
+  "evidence": [],
+  "exportedAt": "2026-05-17T09:44:00.000Z"
+}
