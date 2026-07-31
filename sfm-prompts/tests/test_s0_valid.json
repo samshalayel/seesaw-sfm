@@ -1,0 +1,150 @@
+{
+  "nodes": [
+    {
+      "id": "group-s0-20260517-dental_clinic",
+      "type": "group",
+      "data": { "label": "S0" },
+      "position": { "x": 150, "y": -705 },
+      "width": 1697,
+      "height": 1100,
+      "style": { "width": 1697, "height": 1100, "zIndex": -1 }
+    },
+    {
+      "id": "stage-0-1",
+      "type": "stage-0",
+      "data": {
+        "group": "S0",
+        "label": "Stage 0 — Problem / Technical Lock",
+        "description": "عيادة أسنان صغيرة فيها 3 أطباء تعاني من: (1) تداخل مواعيد بين مريضين عند نفس الطبيب — مريض يحضر ولا يلاقي دور، (2) أخطاء في كتابة الحجوزات اليدوية — الموظفة تسجل غلط والدكتور يسأل 'مين الجاي؟'، (3) المرضى يزعلون ويتركون العيادة بسبب سوء التنظيم. المشكلة تنظيمية بالدرجة الأولى — غياب مصدر موحد للحقيقة يمنع أي طرف من معرفة الوضع الفعلي للمواعيد.",
+        "aiPercentage": 20,
+        "humanPercentage": 80,
+        "aiResponsibilities": ["تحليل نقاط الألم من PD", "كشف أنماط الفشل"],
+        "humanResponsibilities": ["تحديد المشكلة الحقيقية", "تأكيد السياق", "تحديد القيود"],
+        "stageNumber": 0,
+        "restrictions": ["لا حلول تنفيذية","لا API","لا UI","لا DB Schema","لا Architecture Stack","لا CRUD","لا Code"],
+        "customFields": {},
+        "provenance": [{"source":"pd_output","confidence":0.92,"derived_from":["pd-summary-1","pd-pain-4","pd-actors-2"],"validation_status":"human_pending","reasoning":"مستخلص مباشرة من ملخص PD ونقاط الألم والأطراف المتأثرة"}]
+      },
+      "position": { "x": 15, "y": 60 },
+      "width": 300,
+      "height": 208,
+      "parentId": "group-s0-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "insight-node-2",
+      "type": "insight-node",
+      "data": {
+        "group": "S0",
+        "label": "Insight",
+        "description": "جذر المشكلة ليس خطأ فردياً بل فشل حوكمي: لا توجد آلية رقابة تمنع حجز نفس الوقت لمريضين مختلفين (غياب حوكمة التضارب)، لا إسناد واضح للمسؤولية عند حدوث الخطأ (الموظفة تتحمل كل شيء بدون أدوات)، ولا مساءلة على ضياع المواعيد. النتيجة: كل طرف يعمل بمعلومات مختلفة ولا يوجد مصدر واحد للحقيقة.",
+        "provenance": [{"source":"ai_inference","confidence":0.82,"derived_from":["pd-insight-9","pd-pain-4","pd-unknowns-8"],"validation_status":"human_pending","reasoning":"تحليل جذري مبني على نقاط الألم وأسئلة PD المفتوحة"}]
+      },
+      "position": { "x": 210, "y": 285 },
+      "width": 300,
+      "height": 297,
+      "parentId": "group-s0-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "outcome-node-3",
+      "type": "outcome-node",
+      "data": {
+        "group": "S0",
+        "label": "Outcome",
+        "description": "النتيجة المرجوة: (1) موثوقية البيانات — سجل مواعيد واحد موثوق يعكس الحقيقة الفعلية للحجوزات، لا تعارض ولا ضياع. (2) حوكمة الإجراءات — آلية واضحة تمنع التضارب وتحدد المسؤولية وتوفر رقابة على كل عملية حجز. (3) توفر واستقرار — المعلومات متاحة لكل الأطراف (طبيب، موظفة، مريض) في أي وقت بشكل مستمر ومستقر.",
+        "provenance": [{"source":"ai_inference","confidence":0.78,"derived_from":["pd-outcome-10","pd-goals-3","pd-signals-7"],"validation_status":"human_pending","reasoning":"مبني على الأهداف والنتائج المرجوة ومؤشرات النجاح من PD"}]
+      },
+      "position": { "x": 570, "y": 90 },
+      "width": 300,
+      "height": 299,
+      "parentId": "group-s0-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "direction-node-4",
+      "type": "direction-node",
+      "data": {
+        "group": "S0",
+        "label": "Direction",
+        "description": "الاتجاه: التركيز على ثلاثة محاور — (1) مصدر واحد للحقيقة: كل الأطراف ترجع لنفس المرجع للمواعيد. (2) ضبط التضارب: آلية تمنع حجز نفس الوقت لمريضين عند نفس الطبيب. (3) شفافية الجدول: كل طرف يعرف وضعه الحقيقي بدون سؤال أحد. خارج النطاق الحالي: سجلات طبية، فواتير، إشعارات خارجية.",
+        "provenance": [{"source":"ai_inference","confidence":0.80,"derived_from":["pd-direction-11","pd-scope-6","pd-constraints-5"],"validation_status":"human_pending","reasoning":"مشتق من الاتجاه الاستراتيجي والنطاق والقيود في PD"}]
+      },
+      "position": { "x": 915, "y": 225 },
+      "width": 300,
+      "height": 299,
+      "parentId": "group-s0-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "gate-problem-5",
+      "type": "gate-problem",
+      "data": {
+        "group": "S0",
+        "label": "S0 Blocking Gate",
+        "description": "لا يمكن الانتقال إلى S1 قبل اعتماد تعريف المشكلة من الإنسان",
+        "gateType": "problem",
+        "decisionAuthority": "Human Only",
+        "gateStatus": "pending",
+        "aiPercentage": 0,
+        "humanPercentage": 100,
+        "gateChecklist": [
+          "المشكلة محددة وواضحة — ليست عامة",
+          "جذر المشكلة حوكمي وليس عرضياً",
+          "الأضرار ملموسة ومرتبطة بالواقع",
+          "القيود واضحة ومتفق عليها",
+          "معايير النجاح قابلة للتحقق",
+          "لا حلول تنفيذية في أي نود"
+        ]
+      },
+      "position": { "x": 1095, "y": 540 },
+      "width": 402,
+      "height": 237,
+      "parentId": "group-s0-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "alignment-gate-6",
+      "type": "alignment-gate",
+      "data": {
+        "group": "S0",
+        "label": "Alignment Gate",
+        "description": "Non-blocking: مراجعة سريعة لتأكيد أن الأطراف تفهم نفس تعريف المشكلة قبل التقدم."
+      },
+      "position": { "x": 1395, "y": 795 },
+      "width": 280,
+      "height": 298,
+      "parentId": "group-s0-20260517-dental_clinic",
+      "extent": "parent"
+    },
+    {
+      "id": "evidence-node-7",
+      "type": "evidence-node",
+      "data": {
+        "group": "S0",
+        "label": "Evidence",
+        "mandatory": true,
+        "description": "أدلة داعمة من مرحلة PD: قصة ألم عيادة الأسنان — تداخل مواعيد مريضين عند نفس الطبيب، أخطاء يدوية في كتابة المواعيد، مرضى يغادرون بسبب سوء التنظيم.",
+        "evidenceKey": "s0_docs_pack",
+        "justification": "هذه الأدلة تؤكد أن المشكلة تنظيمية وليست تقنية — غياب مصدر واحد للحقيقة هو السبب الجذري وليس نقص أدوات.",
+        "owner": "صاحب العيادة + الموظفة المسؤولة عن الحجوزات",
+        "provenance": [{"source":"pd_output","confidence":0.95,"derived_from":["pd-summary-1","pd-pain-4"],"validation_status":"human_pending","reasoning":"مباشرة من قصة الألم في PD"}]
+      },
+      "position": { "x": 1320, "y": 75 },
+      "width": 320,
+      "height": 290,
+      "parentId": "group-s0-20260517-dental_clinic",
+      "extent": "parent"
+    }
+  ],
+  "edges": [
+    { "id": "e-s0-insight", "type": "custom", "source": "stage-0-1", "target": "insight-node-2" },
+    { "id": "e-insight-outcome", "type": "custom", "source": "insight-node-2", "target": "outcome-node-3" },
+    { "id": "e-outcome-direction", "type": "custom", "source": "outcome-node-3", "target": "direction-node-4" },
+    { "id": "e-direction-gate", "type": "custom", "source": "direction-node-4", "target": "gate-problem-5" },
+    { "id": "e-gate-alignment", "type": "custom", "source": "gate-problem-5", "target": "alignment-gate-6" },
+    { "id": "e-evidence-gate", "type": "custom", "source": "evidence-node-7", "target": "gate-problem-5", "label": "evidence" }
+  ],
+  "evidence": [],
+  "exportedAt": "2026-05-17T13:00:00.000Z"
+}

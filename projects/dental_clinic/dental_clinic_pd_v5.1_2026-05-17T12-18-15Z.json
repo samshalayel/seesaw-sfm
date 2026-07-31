@@ -1,0 +1,568 @@
+{
+  "nodes": [
+    {
+      "id": "group-pd-20260517-dental_clinic",
+      "type": "group",
+      "data": {
+        "label": "PD — Problem Discovery"
+      },
+      "position": {
+        "x": 120,
+        "y": -600
+      },
+      "width": 2000,
+      "height": 1800,
+      "style": {
+        "width": 2000,
+        "height": 1800,
+        "zIndex": -1
+      }
+    },
+    {
+      "id": "pd-summary-1",
+      "type": "pd-summary-node",
+      "description": "عيادة أسنان صغيرة فيها 3 أطباء. المرضى يتصلون بالتلفون لحجز مواعيد لكن هناك لخبطة. مريضين يجون نفس الوقت، مواعيد تنكتب غلط، والدكتور يسأل 'مين الجاي؟'. المرضى يزعلون والعيادة تخسر زبائن.",
+      "points": [
+        "يتصل المرضى لحجز المواعيد",
+        "الموظفة تسجل الحجوزات على ورقة",
+        "يحدث لخبطة في المواعيد والمسؤولية تعود على الموظفة"
+      ],
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 1,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 2,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 40,
+        "y": 80
+      },
+      "width": 320,
+      "height": 280
+    },
+    {
+      "id": "pd-actors-2",
+      "type": "pd-actors-node",
+      "description": "الأطراف المتأثرة هم الموظفة، الأطباء، والمرضى الذين يواجهون سوء الخدمة بسبب الأخطاء المتكررة في الحجز.",
+      "points": [
+        "الموظفة في العيادة",
+        "الأطباء الثلاثة",
+        "المرضى القادمين للحجز"
+      ],
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [
+            "pd-summary-1"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 1,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [
+            "pd-summary-1"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 2,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [
+            "pd-summary-1"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 420,
+        "y": 80
+      },
+      "width": 300,
+      "height": 240
+    },
+    {
+      "id": "pd-goals-3",
+      "type": "pd-goals-node",
+      "description": "ما نريد تحقيقه هو تقليل الأخطاء في حجز المواعيد، تحسين خدمة المرضى وتقليل الوقت الضائع للأطباء.",
+      "points": [
+        "تقليل الأخطاء في حجز المواعيد",
+        "تحسين فعالية خدمة المرضى",
+        "تقليل الوقت الضائع للأطباء"
+      ],
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-pain-4"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 1,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-pain-4"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 2,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-pain-4"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 760,
+        "y": 80
+      },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-pain-4",
+      "type": "pd-pain-points-node",
+      "description": "الألم الذي يشعر به المرضى والأطباء هو تداخل المواعيد، الأخطاء في التسجيل، والزمن الضائع. This leads to a loss of trust and patients leaving the practice.",
+      "points": [
+        "تداخل المواعيد بين المرضى",
+        "أخطاء في تسجيل المواعيد",
+        "فقدان وقت الأطباء في الاستفسارات"
+      ],
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 1,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 2,
+          "source": "stakeholder_statement",
+          "confidence": 0.9,
+          "derived_from": [],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 1120,
+        "y": 80
+      },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-constraints-5",
+      "type": "pd-constraints-node",
+      "description": "القيود في هذه الحالة هي توفر عدد محدود من الموظفين والأطباء، اعتماد المرضى على الهاتف فقط للحجز ووجود ممارسات راسخة للإجراءات الحالية.",
+      "points": [
+        "عدد محدود من الأطباء",
+        "الاعتماد على الاتصال الهاتفي فقط للحجز",
+        "الإجراءات الحالية المعمول بها في العيادة"
+      ],
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "domain_knowledge",
+          "confidence": 0.75,
+          "derived_from": [],
+          "validation_status": "assumption",
+          "reasoning": ""
+        },
+        {
+          "point_index": 1,
+          "source": "domain_knowledge",
+          "confidence": 0.75,
+          "derived_from": [],
+          "validation_status": "assumption",
+          "reasoning": ""
+        },
+        {
+          "point_index": 2,
+          "source": "domain_knowledge",
+          "confidence": 0.75,
+          "derived_from": [],
+          "validation_status": "assumption",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 40,
+        "y": 420
+      },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-scope-6",
+      "type": "pd-scope-node",
+      "description": "inScope: تقليل الأخطاء، تحسين تجربة المرضى\noutScope: تطوير وسائل حجز غير هاتفية, بناء أدوات للتخطيط أو الأتمتة.",
+      "inScope": [
+        "تقليل الأخطاء",
+        "تحسين تجربة المرضى"
+      ],
+      "outScope": [
+        "تطوير وسائل حجز غير هاتفية",
+        "بناء أدوات للتخطيط"
+      ],
+      "scope_provenance": [
+        {
+          "scope_type": "inScope",
+          "item_index": 0,
+          "point_index": 0,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-goals-3"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "scope_type": "inScope",
+          "item_index": 1,
+          "point_index": 1,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-goals-3"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "scope_type": "outScope",
+          "item_index": 0,
+          "point_index": 0,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-goals-3"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "scope_type": "outScope",
+          "item_index": 1,
+          "point_index": 1,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-goals-3"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 420,
+        "y": 420
+      },
+      "width": 320,
+      "height": 300
+    },
+    {
+      "id": "pd-signals-7",
+      "type": "pd-signals-node",
+      "description": "مؤشرات النجاح هي عدم وجود مريض يصل بسبب خطأ في الجدول الزمني، وتحسين رضا المرضى بشكل واضح.",
+      "points": [
+        "عدم وصول المرضى بسبب أخطاء",
+        "تحسين الرضا العام للمرضى",
+        "انخفاض الشكاوى المتعلقة بالمواعيد"
+      ],
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-goals-3"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 1,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-goals-4"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 2,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-goals-4"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 760,
+        "y": 420
+      },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-unknowns-8",
+      "type": "pd-unknowns-node",
+      "description": "[معلوماتي] كم عدد المرضى الذين يزورون العيادة يومياً؟\n[حدودي] ما أسوأ شيء سيحدث إذا لم تحدث هذه الأخطاء؟\n[معلوماتي] كيف يمكن أن تؤثر هذه الأخطاء على العيادة\n[حدودي] كيف يمكن تقليل تداخل المواعيد بشكل فعال؟",
+      "points": [
+        "كم عدد المرضى الذين يزورون العيادة يومياً؟",
+        "ما أسوأ شيء سيحدث إذا لم تحدث هذه الأخطاء؟",
+        "كيف يمكن أن تؤثر هذه الأخطاء على العيادة؟",
+        "كيف يمكن تقليل تداخل المواعيد بشكل فعال؟"
+      ],
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-summary-1"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 1,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-summary-1"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 2,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-summary-1"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        },
+        {
+          "point_index": 3,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-summary-1"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 1120,
+        "y": 420
+      },
+      "width": 320,
+      "height": 260
+    },
+    {
+      "id": "pd-insight-9",
+      "type": "pd-summary-node",
+      "description": "لا يوجد مصدر موحد للحقيقة التشغيلية المرتبطة بمواعيد المرضى, مما يؤدي إلى الالتباس وعدم التناسق في العملية.",
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-summary-1",
+            "pd-pain-4"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 40,
+        "y": 780
+      },
+      "width": 320,
+      "height": 220
+    },
+    {
+      "id": "pd-outcome-10",
+      "type": "pd-goals-node",
+      "description": "سنجعل الأطباء يعرفون من سيأتي وكيف ستكون الحجوزات، والمرضى سيكونون راضون عن تجربتهم في العيادة.",
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-goals-3",
+            "pd-pain-4"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 420,
+        "y": 780
+      },
+      "width": 320,
+      "height": 220
+    },
+    {
+      "id": "pd-direction-11",
+      "type": "pd-summary-node",
+      "description": "التحرك نحو تحسين إدراك وإدارة مواعيد المرضى في العيادة لتحقيق تجربة أفضل للمرضى والأطباء على السواء.",
+      "provenance": [
+        {
+          "point_index": 0,
+          "source": "ai_inference",
+          "confidence": 0.7,
+          "derived_from": [
+            "pd-insight-9",
+            "pd-outcome-10"
+          ],
+          "validation_status": "human_pending",
+          "reasoning": ""
+        }
+      ],
+      "position": {
+        "x": 760,
+        "y": 780
+      },
+      "width": 320,
+      "height": 220
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-1-2",
+      "type": "custom",
+      "source": "pd-summary-1",
+      "target": "pd-actors-2"
+    },
+    {
+      "id": "e-2-3",
+      "type": "custom",
+      "source": "pd-actors-2",
+      "target": "pd-goals-3"
+    },
+    {
+      "id": "e-3-4",
+      "type": "custom",
+      "source": "pd-goals-3",
+      "target": "pd-pain-4"
+    },
+    {
+      "id": "e-5-6",
+      "type": "custom",
+      "source": "pd-constraints-5",
+      "target": "pd-scope-6"
+    },
+    {
+      "id": "e-6-7",
+      "type": "custom",
+      "source": "pd-scope-6",
+      "target": "pd-signals-7"
+    },
+    {
+      "id": "e-7-8",
+      "type": "custom",
+      "source": "pd-signals-7",
+      "target": "pd-unknowns-8"
+    },
+    {
+      "id": "e-4-9",
+      "type": "custom",
+      "source": "pd-pain-4",
+      "target": "pd-insight-9"
+    },
+    {
+      "id": "e-8-10",
+      "type": "custom",
+      "source": "pd-unknowns-8",
+      "target": "pd-outcome-10"
+    },
+    {
+      "id": "e-9-11",
+      "type": "custom",
+      "source": "pd-insight-9",
+      "target": "pd-direction-11"
+    },
+    {
+      "id": "e-10-11",
+      "type": "custom",
+      "source": "pd-outcome-10",
+      "target": "pd-direction-11"
+    },
+    {
+      "id": "e-11-gate",
+      "type": "custom",
+      "source": "pd-direction-11",
+      "target": "gate-problem-12"
+    },
+    {
+      "id": "e-insight-gate",
+      "type": "custom",
+      "source": "pd-insight-9",
+      "target": "gate-problem-12"
+    }
+  ],
+  "evidence": [],
+  "exportedAt": "2026-05-17T12:18:15.000Z"
+}
