@@ -439,10 +439,13 @@ Now execute the task. Provide a brief Arabic summary when done.`;
     fs.writeFileSync(promptFile, prompt, "utf8");
 
     // Pipe prompt via stdin using Haiku (cheapest model) to save subscription quota
+    // --dangerously-skip-permissions is blocked when running as root (Linux VPS)
     const isWin = process.platform === "win32";
+    const isRoot = process.getuid ? process.getuid() === 0 : false;
+    const skipPerms = isRoot ? "" : " --dangerously-skip-permissions";
     const shellCmd = isWin
       ? `type "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001`
-      : `cat "${promptFile}" | "${claudePath}" -p --dangerously-skip-permissions --model claude-haiku-4-5-20251001`;
+      : `cat "${promptFile}" | "${claudePath}" -p${skipPerms} --model claude-haiku-4-5-20251001`;
 
     // Remove ANTHROPIC_API_KEY (use OAuth subscription) + inject task tokens securely
     const { ANTHROPIC_API_KEY: _removed, ...baseEnv } = process.env as Record<string, string>;
