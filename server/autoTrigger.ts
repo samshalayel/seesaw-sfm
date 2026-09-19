@@ -1105,6 +1105,12 @@ async function scanAndProcess() {
       const statusMatch = config.watchStatuses.some(s => t.status?.toLowerCase() === s.toLowerCase());
       const notProcessed = !processedTaskIds.has(t.id);
       return isAssigned && statusMatch && notProcessed;
+    }).sort((a, b) => {
+      // رتّب حسب order_index من ClickUp، وإذا ما توفّر رتّب حسب الاسم
+      const aOrder = a.order_index ?? a.orderindex ?? 0;
+      const bOrder = b.order_index ?? b.orderindex ?? 0;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (a.name ?? "").localeCompare(b.name ?? "");
     });
 
     console.log(`[AutoTrigger] Found ${matchingTasks.length} new tasks to process`);
