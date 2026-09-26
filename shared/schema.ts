@@ -192,6 +192,23 @@ export const tierModels = pgTable("tier_models", {
   modelName: text("model_name").notNull(), // e.g. "GPT-4o", "Groq Llama"
 });
 
+// ── stage_levels (معايرة النسبة البشري/AI لكل متعلّم × مرحلة) ────────────────
+// humanPercent يبدأ منخفضاً للمبتدئ ويرتفع نحو البروفايل المهني مع النضج.
+// لا تُعتمد أي معايرة قبل توقيع بشري — الأجينت يقترح فقط (Calibration Gate).
+export const stageLevels = pgTable("stage_levels", {
+  id:           serial("id").primaryKey(),
+  roomId:       text("room_id").notNull().references(() => rooms.roomId),
+  stage:        text("stage").notNull(),   // "PD"|"S0"|"S1"|"S2"|"S3"|"S4"|"S5"|"S6"
+
+  humanPercent:    integer("human_percent").notNull().default(10),
+  suggestedPercent: integer("suggested_percent"),  // اقتراح الأجينت، بانتظار التوقيع
+
+  approvedBy:   text("approved_by").notNull().default(""),
+  approvedAt:   timestamp("approved_at"),
+
+  updatedAt:    timestamp("updated_at").notNull().defaultNow(),
+});
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
