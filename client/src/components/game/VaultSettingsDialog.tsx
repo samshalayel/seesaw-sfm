@@ -35,7 +35,7 @@ const ROOM_MAX: Record<string, number> = {
   brC:     2,
 };
 
-const MODEL_PRESETS = ["Groq", "GPT", "Claude", "GLM", "Grok", "Gemini", "Mistral", "OpenRouter", "OpenCode", "v0", "Devin", "HuggingFace", "Other"];
+const MODEL_PRESETS = ["Groq", "GPT", "Claude", "GLM", "Grok", "Gemini", "Mistral", "OpenRouter", "OpenCode", "Mirai", "v0", "Devin", "HuggingFace", "Other"];
 const FREE_MODELS = ["Groq", "GLM", "Gemini", "OpenCode", "v0", "HuggingFace"];
 
 // الموديلات الشائعة على OpenRouter
@@ -56,6 +56,17 @@ const OPENCODE_MODELS = [
   { label: "⚡ Kimi K2.5", value: "kimi-k2.5", free: false },
   { label: "⚡ MiMo-V2-Pro", value: "mimo-v2-pro", free: false },
   { label: "⚡ MiMo-V2-Omni", value: "mimo-v2-omni", free: false },
+];
+
+// موديلات Mirai — وسيط متوافق مع OpenAI (https://api.miraiapi.com/v1)
+// ⚠️ الوسيط لا يلتزم بالموديل المطلوب — قد يرد بموديل مختلف عمّا طلبته
+const MIRAI_MODELS = [
+  { label: "claude-opus-5", value: "claude-opus-5" },
+  { label: "claude-sonnet-5", value: "claude-sonnet-5" },
+  { label: "claude-opus-5.5", value: "claude-opus-5.5" },
+  { label: "claude-fable-5.1", value: "claude-fable-5.1" },
+  { label: "claude-opus-4.8", value: "claude-opus-4.8" },
+  { label: "claude-opus-4.6", value: "claude-opus-4.6" },
 ];
 
 // موديلات v0 (Vercel)
@@ -629,6 +640,9 @@ export function VaultSettingsDialog() {
     if (field === "name" && value === "OpenCode" && !updated[index].modelId) {
       updated[index].modelId = OPENCODE_MODELS[0].value;
     }
+    if (field === "name" && value === "Mirai" && !updated[index].modelId) {
+      updated[index].modelId = MIRAI_MODELS[0].value;
+    }
     if (field === "name" && value === "Devin") {
       updated[index].modelId = DEVIN_MODELS[0].value;
     }
@@ -668,6 +682,9 @@ export function VaultSettingsDialog() {
     // عند اختيار OpenCode تلقائياً حدد GLM-5
     if (field === "name" && value === "OpenCode" && !updated[index].modelId) {
       updated[index].modelId = OPENCODE_MODELS[0].value;
+    }
+    if (field === "name" && value === "Mirai" && !updated[index].modelId) {
+      updated[index].modelId = MIRAI_MODELS[0].value;
     }
     if (field === "name" && value === "v0" && !updated[index].modelId) {
       updated[index].modelId = V0_MODELS[0].value;
@@ -2549,12 +2566,12 @@ export function VaultSettingsDialog() {
                   </div>
                 )}
 
-                {/* حقل اختيار الموديل — يظهر فقط لـ OpenCode أو v0 أو HuggingFace */}
-                {(model.name === "OpenCode" || model.name === "v0" || model.name === "Devin" || model.name === "HuggingFace") && (
+                {/* حقل اختيار الموديل — يظهر فقط لـ OpenCode أو Mirai أو v0 أو HuggingFace */}
+                {(model.name === "OpenCode" || model.name === "Mirai" || model.name === "v0" || model.name === "Devin" || model.name === "HuggingFace") && (
                   <div>
                     <label style={{ ...labelStyle, marginBottom: "6px" }}>الموديل</label>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "6px" }}>
-                      {(model.name === "OpenCode" ? OPENCODE_MODELS : model.name === "Devin" ? DEVIN_MODELS : model.name === "HuggingFace" ? HF_MODELS : V0_MODELS).map((m: any) => (
+                      {(model.name === "OpenCode" ? OPENCODE_MODELS : model.name === "Mirai" ? MIRAI_MODELS : model.name === "Devin" ? DEVIN_MODELS : model.name === "HuggingFace" ? HF_MODELS : V0_MODELS).map((m: any) => (
                         <button
                           key={m.value}
                           onClick={() => updateModel(idx, "modelId", m.value)}
@@ -2929,12 +2946,12 @@ export function VaultSettingsDialog() {
                   </div>
                 )}
 
-                {/* OpenCode / HuggingFace model picker */}
-                {(worker.name === "OpenCode" || worker.name === "Devin" || worker.name === "HuggingFace") && (
+                {/* OpenCode / Mirai / HuggingFace model picker */}
+                {(worker.name === "OpenCode" || worker.name === "Mirai" || worker.name === "Devin" || worker.name === "HuggingFace") && (
                   <div>
                     <label style={{ ...labelStyle, marginBottom: "6px" }}>الموديل</label>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "6px" }}>
-                      {(worker.name === "Devin" ? DEVIN_MODELS : worker.name === "HuggingFace" ? HF_MODELS : OPENCODE_MODELS).map((m) => (
+                      {(worker.name === "Mirai" ? MIRAI_MODELS : worker.name === "Devin" ? DEVIN_MODELS : worker.name === "HuggingFace" ? HF_MODELS : OPENCODE_MODELS).map((m) => (
                         <button
                           key={m.value}
                           onClick={() => updateHallWorker(idx, "modelId", m.value)}

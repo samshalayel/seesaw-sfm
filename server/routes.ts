@@ -25,7 +25,7 @@ try {
 }
 import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs";
 import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY, getWhatsAppConfig, getGoogleConfig } from "./vaultStore";
-import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection, cancelTriggerLog } from "./autoTrigger";
+import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection, cancelTriggerLog, setCliOptions } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
 import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
 import { validateStage, type ValidationResult, type ValidationFailure } from "./sfmQualityValidator";
@@ -43,6 +43,10 @@ const anthropic = new Anthropic({ apiKey: _safeK(process.env.ANTHROPIC_API_KEY, 
 
 function getProviderConfig(modelName: string): { baseURL?: string; defaultModel: string; provider: string } {
   const name = modelName.toLowerCase();
+  // Mirai أولاً: أسماء موديلاته تحتوي claude/gpt فلازم يسبق باقي الفحوصات
+  if (name.includes("mirai") || name.includes("ميراي")) {
+    return { baseURL: "https://api.miraiapi.com/v1", defaultModel: "claude-opus-4.6", provider: "Mirai" };
+  }
   if (name.includes("groq") || name.includes("جروك")) {
     return { baseURL: "https://api.groq.com/openai/v1", defaultModel: "llama-3.1-8b-instant", provider: "Groq" };
   }
@@ -1963,7 +1967,9 @@ export async function registerRoutes(
       const allModels = [...models, ...hallWorkers];
       let modelConfig = allModels.find(m => m.id === robotId) || allModels.find(m => m.name.toLowerCase() === defaultModelName.toLowerCase()) || allModels[0];
       const modelName = (modelConfig?.name || "GPT").toLowerCase();
-      const isClaudeModel = modelName.includes("claude") || modelName.includes("كلود");
+      // Mirai يمر عبر مسار OpenAI-compatible رغم أن اسم موديله قد يحوي claude
+      const isMirai = modelName.includes("mirai") || modelName.includes("ميراي");
+      const isClaudeModel = !isMirai && (modelName.includes("claude") || modelName.includes("كلود"));
 
       // ── التحقق من صلاحية التايرز عند الـ chat ────────────────────────────────
       const chatUser = await storage.getUserByRoomId(roomId);
@@ -2795,10 +2801,22 @@ export async function registerRoutes(
   app.post("/api/auto-trigger/start", async (req, res) => {
     try {
       const roomId = getRoomId(req);
-      const { userId, intervalMinutes, robotId, robotIds, watchStatuses, doneStatus, parallelMode, whatsappNotify } = req.body;
+      const { userId, intervalMinutes, robotId, robotIds, watchStatuses, doneStatus, parallelMode, whatsappNotify,
+              cliModel, cliTimeoutMinutes, cliProjectDir, cliStatusGate, cliKeepApiKey } = req.body;
       if (!userId) return res.status(400).json({ error: "userId is required" });
+      setCliOptions({ cliModel, cliTimeoutMinutes, cliProjectDir, cliStatusGate, cliKeepApiKey });
       startAutoTrigger(userId, intervalMinutes, robotId, watchStatuses, doneStatus, roomId, parallelMode, robotIds, whatsappNotify);
       res.json({ success: true, config: getAutoTriggerConfig() });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // إعدادات robot-3 (Claude CLI): النموذج، المهلة، مجلد المشروع، بوابة STATUS، مفتاح API
+  app.post("/api/auto-trigger/cli-options", async (req, res) => {
+    try {
+      const { cliModel, cliTimeoutMinutes, cliProjectDir, cliStatusGate, cliKeepApiKey } = req.body;
+      res.json({ success: true, config: setCliOptions({ cliModel, cliTimeoutMinutes, cliProjectDir, cliStatusGate, cliKeepApiKey }) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
