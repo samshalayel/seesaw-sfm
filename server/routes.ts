@@ -25,7 +25,7 @@ try {
 }
 import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs";
 import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY, getWhatsAppConfig, getGoogleConfig } from "./vaultStore";
-import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection, cancelTriggerLog, setCliOptions } from "./autoTrigger";
+import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection, cancelTriggerLog } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
 import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
 import { validateStage, type ValidationResult, type ValidationFailure } from "./sfmQualityValidator";
@@ -2801,22 +2801,10 @@ export async function registerRoutes(
   app.post("/api/auto-trigger/start", async (req, res) => {
     try {
       const roomId = getRoomId(req);
-      const { userId, intervalMinutes, robotId, robotIds, watchStatuses, doneStatus, parallelMode, whatsappNotify,
-              cliModel, cliTimeoutMinutes, cliProjectDir, cliStatusGate, cliKeepApiKey } = req.body;
+      const { userId, intervalMinutes, robotId, robotIds, watchStatuses, doneStatus, parallelMode, whatsappNotify } = req.body;
       if (!userId) return res.status(400).json({ error: "userId is required" });
-      setCliOptions({ cliModel, cliTimeoutMinutes, cliProjectDir, cliStatusGate, cliKeepApiKey });
       startAutoTrigger(userId, intervalMinutes, robotId, watchStatuses, doneStatus, roomId, parallelMode, robotIds, whatsappNotify);
       res.json({ success: true, config: getAutoTriggerConfig() });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // إعدادات robot-3 (Claude CLI): النموذج، المهلة، مجلد المشروع، بوابة STATUS، مفتاح API
-  app.post("/api/auto-trigger/cli-options", async (req, res) => {
-    try {
-      const { cliModel, cliTimeoutMinutes, cliProjectDir, cliStatusGate, cliKeepApiKey } = req.body;
-      res.json({ success: true, config: setCliOptions({ cliModel, cliTimeoutMinutes, cliProjectDir, cliStatusGate, cliKeepApiKey }) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
