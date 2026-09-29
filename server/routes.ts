@@ -1716,9 +1716,16 @@ export async function registerRoutes(
         role?: string;
       };
 
+      // الدور والحالة من قاعدة البيانات لا من التوكن — وإلا بقيت ترقية أو إيقاف
+      // بلا أثر حتى تنتهي صلاحية التوكن (30 يوماً)
+      const live = await storage.getUser(payload.userId);
+      if (!live || ((live as any).status || "active") !== "active") {
+        return res.json({ valid: false });
+      }
+
       res.json({
         valid: true,
-        user: { username: payload.username, roomId: payload.roomId, role: payload.role || "user" },
+        user: { username: live.username, roomId: live.roomId, role: live.role || "user" },
       });
     } catch {
       res.json({ valid: false });
@@ -1726,17 +1733,30 @@ export async function registerRoutes(
   });
 
   // ── Admin middleware ──────────────────────────────────────────────────────────
-  const requireAdmin = (req: any, res: any, next: any) => {
+  const requireAdmin = async (req: any, res: any, next: any) => {
     const authHeader = req.headers["authorization"];
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!token) return res.status(401).json({ error: "Unauthorized" });
+    let payload: any;
     try {
-      const payload = jwt.verify(token, jwtSecret) as any;
-      if (payload.role !== "admin") return res.status(403).json({ error: "Admin only" });
-      req.adminPayload = payload;
-      next();
+      payload = jwt.verify(token, jwtSecret);
     } catch {
-      res.status(401).json({ error: "Invalid token" });
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    try {
+      // الدور والحالة من قاعدة البيانات — توكن قديم يحمل دوراً قديماً
+      const user = await storage.getUser(payload.userId);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+      if (((user as any).status || "active") !== "active") {
+        return res.status(403).json({ error: "الحساب غير نشط" });
+      }
+      if ((user.role || "user") !== "admin") {
+        return res.status(403).json({ error: "Admin only" });
+      }
+      req.adminPayload = { ...payload, role: user.role };
+      next();
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   };
 
