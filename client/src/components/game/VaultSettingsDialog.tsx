@@ -35,6 +35,12 @@ const ROOM_MAX: Record<string, number> = {
   brC:     2,
 };
 
+const USER_STATUS_META: Record<string, { label: string; color: string }> = {
+  active:    { label: "نشط",   color: "#22c55e" },
+  suspended: { label: "موقوف", color: "#f59e0b" },
+  cancelled: { label: "ملغى",  color: "#ef4444" },
+};
+
 const MODEL_PRESETS = ["Groq", "GPT", "Claude", "GLM", "Grok", "Gemini", "Mistral", "OpenRouter", "OpenCode", "Mirai", "v0", "Devin", "HuggingFace", "Other"];
 const FREE_MODELS = ["Groq", "GLM", "Gemini", "OpenCode", "v0", "HuggingFace"];
 
@@ -364,6 +370,7 @@ export function VaultSettingsDialog() {
     totalModels: number;
     users: Array<{
       id: number; username: string; roomId: string;
+      status: string; tier: string; role: string;
       companyName: string; modelCount: number;
       models: Array<{ name: string; hasKey: boolean; modelId: string | null }>;
       defaultModel: string; hasSystemPrompt: boolean;
@@ -371,6 +378,14 @@ export function VaultSettingsDialog() {
     }>;
   } | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+
+  // ── إدارة المستخدمين (تبويب الإحصائيات) ─────────────────────────────────────
+  const [uAdding, setUAdding] = useState(false);
+  const [uNew, setUNew] = useState({ username: "", password: "", tier: "free", role: "user", status: "active" });
+  const [uPwFor, setUPwFor] = useState<{ id: number; username: string } | null>(null);
+  const [uPw, setUPw] = useState("");
+  const [uBusy, setUBusy] = useState(false);
+  const [uMsg, setUMsg] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -766,6 +781,87 @@ export function VaultSettingsDialog() {
       setAdminStats(data);
     } catch { }
     setStatsLoading(false);
+  };
+
+  const uFlash = (t: string) => { setUMsg(t); setTimeout(() => setUMsg(""), 3000); };
+
+  const uCreate = async () => {
+    if (!uNew.username.trim() || !uNew.password) { uFlash("✕ اسم المستخدم وكلمة السر مطلوبان"); return; }
+    if (uNew.password.length < 6) { uFlash("✕ كلمة السر 6 أحرف على الأقل"); return; }
+    setUBusy(true);
+    try {
+      const r = await apiFetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(uNew),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        uFlash("✓ تم إنشاء المستخدم");
+        setUAdding(false);
+        setUNew({ username: "", password: "", tier: "free", role: "user", status: "active" });
+        loadStats();
+      } else uFlash("✕ " + (d.error || "خطأ في الإنشاء"));
+    } catch (e: any) { uFlash("✕ " + e.message); }
+    setUBusy(false);
+  };
+
+  const uSetStatus = async (id: number, username: string, status: string) => {
+    const label = USER_STATUS_META[status].label;
+    if (status !== "active" && !confirm(`تغيير حالة "${username}" إلى ${label}؟ لن يستطيع تسجيل الدخول.`)) return;
+    setUBusy(true);
+    try {
+      const r = await apiFetch(`/api/admin/users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (r.ok) { uFlash(`✓ الحالة: ${label}`); loadStats(); }
+      else uFlash("✕ خطأ في تغيير الحالة");
+    } catch (e: any) { uFlash("✕ " + e.message); }
+    setUBusy(false);
+  };
+
+  const uSetTier = async (id: number, tier: string) => {
+    setUBusy(true);
+    try {
+      const r = await apiFetch(`/api/admin/users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      if (r.ok) { uFlash(`✓ التايرز: ${tier}`); loadStats(); }
+      else uFlash("✕ خطأ في تغيير التايرز");
+    } catch (e: any) { uFlash("✕ " + e.message); }
+    setUBusy(false);
+  };
+
+  const uChangePw = async () => {
+    if (!uPwFor) return;
+    if (uPw.length < 6) { uFlash("✕ كلمة السر 6 أحرف على الأقل"); return; }
+    setUBusy(true);
+    try {
+      const r = await apiFetch(`/api/admin/users/${uPwFor.id}/password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: uPw }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { uFlash("✓ تم تغيير كلمة السر"); setUPwFor(null); setUPw(""); }
+      else uFlash("✕ " + (d.error || "خطأ"));
+    } catch (e: any) { uFlash("✕ " + e.message); }
+    setUBusy(false);
+  };
+
+  const uDelete = async (id: number, username: string) => {
+    if (!confirm(`حذف المستخدم "${username}" نهائياً؟ لا يمكن التراجع.`)) return;
+    setUBusy(true);
+    try {
+      const r = await apiFetch(`/api/admin/users/${id}`, { method: "DELETE" });
+      if (r.ok) { uFlash("✓ تم الحذف"); loadStats(); }
+      else uFlash("✕ خطأ في الحذف");
+    } catch (e: any) { uFlash("✕ " + e.message); }
+    setUBusy(false);
   };
 
   const loadWsProjects = async () => {
@@ -3596,6 +3692,23 @@ export function VaultSettingsDialog() {
             {/* Header + refresh */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", direction: "rtl" }}>
               <span style={{ color: "#aaa", fontSize: "13px" }}>إجمالي المستخدمين والموديلات</span>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              {uMsg && (
+                <span style={{ fontSize: "12px", color: uMsg.startsWith("✓") ? "#22c55e" : "#ef4444" }}>{uMsg}</span>
+              )}
+              <button
+                onClick={() => setUAdding(true)}
+                style={{
+                  background: "rgba(34,197,94,0.14)",
+                  border: "1px solid rgba(34,197,94,0.45)",
+                  borderRadius: "8px",
+                  padding: "6px 14px",
+                  color: "#22c55e",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >+ مستخدم</button>
               <button
                 onClick={loadStats}
                 disabled={statsLoading}
@@ -3612,6 +3725,7 @@ export function VaultSettingsDialog() {
               >
                 {statsLoading ? "جاري التحميل..." : "تحديث"}
               </button>
+              </div>
             </div>
 
             {!adminStats && !statsLoading && (
@@ -3662,16 +3776,73 @@ export function VaultSettingsDialog() {
                             </span>
                           )}
                         </div>
-                        <div style={{
-                          background: u.modelCount > 0 ? "#00ff8820" : "#ff444420",
-                          border: `1px solid ${u.modelCount > 0 ? "#00ff8840" : "#ff444440"}`,
-                          borderRadius: "20px",
-                          padding: "2px 10px",
-                          color: u.modelCount > 0 ? "#00ff88" : "#ff4444",
-                          fontSize: "12px",
-                          fontWeight: "bold",
-                        }}>
-                          {u.modelCount} موديل
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <select
+                            value={u.status || "active"}
+                            onChange={(e) => uSetStatus(u.id, u.username, e.target.value)}
+                            disabled={uBusy}
+                            title="حالة الحساب"
+                            style={{
+                              background: `${(USER_STATUS_META[u.status] || USER_STATUS_META.active).color}18`,
+                              border: `1px solid ${(USER_STATUS_META[u.status] || USER_STATUS_META.active).color}55`,
+                              borderRadius: "6px", padding: "3px 6px", fontSize: "11px",
+                              color: (USER_STATUS_META[u.status] || USER_STATUS_META.active).color,
+                              cursor: "pointer", outline: "none",
+                            }}
+                          >
+                            {Object.entries(USER_STATUS_META).map(([k, v]) => (
+                              <option key={k} value={k} style={{ background: "#0e1220" }}>{v.label}</option>
+                            ))}
+                          </select>
+
+                          <select
+                            value={u.tier || "free"}
+                            onChange={(e) => uSetTier(u.id, e.target.value)}
+                            disabled={uBusy}
+                            title="التايرز"
+                            style={{
+                              background: "rgba(255,255,255,0.05)", border: `1px solid ${T.stroke}`,
+                              borderRadius: "6px", padding: "3px 6px", fontSize: "11px",
+                              color: T.textDim, cursor: "pointer", outline: "none",
+                            }}
+                          >
+                            <option value="free" style={{ background: "#0e1220" }}>free</option>
+                            <option value="pro" style={{ background: "#0e1220" }}>pro</option>
+                            <option value="enterprise" style={{ background: "#0e1220" }}>enterprise</option>
+                          </select>
+
+                          <button
+                            onClick={() => { setUPwFor({ id: u.id, username: u.username }); setUPw(""); }}
+                            title="تغيير كلمة السر"
+                            style={{
+                              background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.4)",
+                              borderRadius: "6px", color: "#60a5fa", padding: "3px 8px",
+                              cursor: "pointer", fontSize: "11px",
+                            }}
+                          >🔑</button>
+
+                          <button
+                            onClick={() => uDelete(u.id, u.username)}
+                            title="حذف المستخدم"
+                            disabled={uBusy}
+                            style={{
+                              background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)",
+                              borderRadius: "6px", color: "#ef4444", padding: "3px 8px",
+                              cursor: uBusy ? "not-allowed" : "pointer", fontSize: "11px",
+                            }}
+                          >🗑</button>
+
+                          <div style={{
+                            background: u.modelCount > 0 ? "#00ff8820" : "#ff444420",
+                            border: `1px solid ${u.modelCount > 0 ? "#00ff8840" : "#ff444440"}`,
+                            borderRadius: "20px",
+                            padding: "2px 10px",
+                            color: u.modelCount > 0 ? "#00ff88" : "#ff4444",
+                            fontSize: "12px",
+                            fontWeight: "bold",
+                          }}>
+                            {u.modelCount} موديل
+                          </div>
                         </div>
                       </div>
 
@@ -3718,6 +3889,122 @@ export function VaultSettingsDialog() {
       </div>
 
       </div>{/* end body wrapper */}
+
+      {/* ── إضافة مستخدم ── */}
+      {uAdding && (() => {
+        const fs: React.CSSProperties = { ...inputStyle, marginTop: 6, boxSizing: "border-box" };
+        const ls: React.CSSProperties = { ...labelStyle, marginBottom: 0 };
+        return (
+          <div
+            style={{
+              position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+              justifyContent: "center", zIndex: 300,
+            }}
+            onClick={(e) => { if (e.target === e.currentTarget) setUAdding(false); }}
+          >
+            <div style={{
+              background: "linear-gradient(160deg,#0a0d18,#0e1220)",
+              border: `1px solid ${T.strokeLive}`, borderRadius: 16,
+              padding: "26px 30px", minWidth: 360, direction: "rtl",
+              boxShadow: `0 24px 70px rgba(0,0,0,.7), ${T.glow}`,
+            }}>
+              <div style={{ color: "#22c55e", fontWeight: 800, fontSize: 14, marginBottom: 18 }}>
+                إضافة مستخدم جديد
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+                <label style={ls}>اسم المستخدم
+                  <input value={uNew.username} autoFocus
+                    onChange={(e) => setUNew({ ...uNew, username: e.target.value })} style={fs} />
+                </label>
+                <label style={ls}>كلمة السر (6 أحرف على الأقل)
+                  <input type="password" value={uNew.password}
+                    onChange={(e) => setUNew({ ...uNew, password: e.target.value })} style={fs} />
+                </label>
+                <label style={ls}>الدور
+                  <select value={uNew.role} onChange={(e) => setUNew({ ...uNew, role: e.target.value })}
+                    style={{ ...fs, direction: "ltr", fontFamily: "inherit" }}>
+                    <option value="user" style={{ background: "#0e1220" }}>user</option>
+                    <option value="admin" style={{ background: "#0e1220" }}>admin</option>
+                  </select>
+                </label>
+                <label style={ls}>التايرز
+                  <select value={uNew.tier} onChange={(e) => setUNew({ ...uNew, tier: e.target.value })}
+                    style={{ ...fs, direction: "ltr", fontFamily: "inherit" }}>
+                    <option value="free" style={{ background: "#0e1220" }}>free</option>
+                    <option value="pro" style={{ background: "#0e1220" }}>pro</option>
+                    <option value="enterprise" style={{ background: "#0e1220" }}>enterprise</option>
+                  </select>
+                </label>
+                <label style={ls}>الحالة
+                  <select value={uNew.status} onChange={(e) => setUNew({ ...uNew, status: e.target.value })}
+                    style={{ ...fs, fontFamily: "inherit" }}>
+                    {Object.entries(USER_STATUS_META).map(([k, v]) => (
+                      <option key={k} value={k} style={{ background: "#0e1220" }}>{v.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 22, justifyContent: "flex-start" }}>
+                <button onClick={uCreate} disabled={uBusy} style={{
+                  background: "rgba(34,197,94,0.2)", border: "1px solid rgba(34,197,94,0.55)",
+                  borderRadius: 9, color: "#22c55e", padding: "8px 20px",
+                  cursor: uBusy ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 800,
+                  opacity: uBusy ? .6 : 1,
+                }}>{uBusy ? "..." : "إنشاء"}</button>
+                <button onClick={() => setUAdding(false)} style={{
+                  background: "transparent", border: `1px solid ${T.stroke}`, borderRadius: 9,
+                  color: T.textDim, padding: "8px 18px", cursor: "pointer", fontSize: 12,
+                }}>إلغاء</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── تغيير كلمة السر ── */}
+      {uPwFor && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+            backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+            justifyContent: "center", zIndex: 300,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setUPwFor(null); }}
+        >
+          <div style={{
+            background: "linear-gradient(160deg,#0a0d18,#0e1220)",
+            border: "1px solid rgba(96,165,250,0.4)", borderRadius: 16,
+            padding: "26px 30px", minWidth: 340, direction: "rtl",
+            boxShadow: "0 24px 70px rgba(0,0,0,.7), 0 0 22px rgba(96,165,250,.2)",
+          }}>
+            <div style={{ color: "#60a5fa", fontWeight: 800, fontSize: 14 }}>تغيير كلمة السر</div>
+            <div style={{ color: T.textDim, fontSize: 12, marginTop: 4, marginBottom: 18 }}>{uPwFor.username}</div>
+
+            <label style={{ ...labelStyle, marginBottom: 0 }}>كلمة السر الجديدة (6 أحرف على الأقل)
+              <input
+                type="password" value={uPw} autoFocus
+                onChange={(e) => setUPw(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") uChangePw(); }}
+                style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box" }}
+              />
+            </label>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 22, justifyContent: "flex-start" }}>
+              <button onClick={uChangePw} disabled={uBusy} style={{
+                background: "rgba(96,165,250,0.2)", border: "1px solid rgba(96,165,250,0.55)",
+                borderRadius: 9, color: "#60a5fa", padding: "8px 20px",
+                cursor: uBusy ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 800,
+                opacity: uBusy ? .6 : 1,
+              }}>{uBusy ? "..." : "تغيير"}</button>
+              <button onClick={() => setUPwFor(null)} style={{
+                background: "transparent", border: `1px solid ${T.stroke}`, borderRadius: 9,
+                color: T.textDim, padding: "8px 18px", cursor: "pointer", fontSize: 12,
+              }}>إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── STATUS BAR (رسائل فقط، بدون أزرار) ── */}
       {(saveError || saved || testResult) && (

@@ -3537,7 +3537,7 @@ export async function registerRoutes(
   // ══════════════════════════════════════════════════
   //  ADMIN STATS — كم يوزر دخل وكم موديل لكل يوزر
   // ══════════════════════════════════════════════════
-  app.get("/api/admin/stats", async (_req, res) => {
+  app.get("/api/admin/stats", requireAdmin, async (_req, res) => {
     try {
       const allUsers = await storage.getAllUsers();
       const vaults = await Promise.all(allUsers.map((u) => getVaultSettings(u.roomId)));
@@ -3547,6 +3547,9 @@ export async function registerRoutes(
           id: u.id,
           username: u.username,
           roomId: u.roomId,
+          status: (u as any).status || "active",
+          tier: u.tier || "free",
+          role: u.role || "user",
           companyName: vault.company?.name || "",
           modelCount: vault.models?.length || 0,
           models: vault.models?.map(m => ({
