@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   password:          text("password").notNull(),
   roomId:            text("room_id").notNull().unique(),
   role:              text("role").notNull().default("user"),
+  status:            text("status").notNull().default("active"), // active | suspended | cancelled
   tier:              text("tier").notNull().default("free"),
   subscriptionStart: timestamp("subscription_start"),
   subscriptionEnd:   timestamp("subscription_end"),

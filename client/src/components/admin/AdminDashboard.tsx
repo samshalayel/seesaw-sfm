@@ -7,10 +7,17 @@ interface UserRow {
   username: string;
   roomId: string;
   role: string;
+  status: string;
   tier: string;
   subscriptionEnd: string | null;
   createdAt: string | null;
 }
+
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  active:    { label: "نشط",   color: "#22c55e" },
+  suspended: { label: "موقوف", color: "#f59e0b" },
+  cancelled: { label: "ملغى",  color: "#ef4444" },
+};
 
 interface Stats {
   totalUsers: number;
@@ -66,8 +73,14 @@ export function AdminDashboard() {
   const [editTier, setEditTier] = useState("free");
   const [editRole, setEditRole] = useState("user");
   const [editSubEnd, setEditSubEnd] = useState("");
+  const [editStatus, setEditStatus] = useState("active");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+
+  const [addingUser, setAddingUser] = useState(false);
+  const [newUser, setNewUser] = useState({ username: "", password: "", tier: "free", role: "user", status: "active" });
+  const [pwUser, setPwUser] = useState<UserRow | null>(null);
+  const [newPassword, setNewPassword] = useState("");
 
   const logout = useGame((s) => s.logout);
 
@@ -100,6 +113,65 @@ export function AdminDashboard() {
     setEditTier(u.tier);
     setEditRole(u.role);
     setEditSubEnd(u.subscriptionEnd ? u.subscriptionEnd.slice(0, 10) : "");
+    setEditStatus(u.status || "active");
+  };
+
+  const createUser = async () => {
+    if (!newUser.username.trim() || !newUser.password) { flash("✕ اسم المستخدم وكلمة السر مطلوبان"); return; }
+    if (newUser.password.length < 6) { flash("✕ كلمة السر 6 أحرف على الأقل"); return; }
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(newUser),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        flash("✓ تم إنشاء المستخدم");
+        setAddingUser(false);
+        setNewUser({ username: "", password: "", tier: "free", role: "user", status: "active" });
+        fetchUsers();
+      } else {
+        flash("✕ " + (data.error || "خطأ في الإنشاء"));
+      }
+    } finally { setLoading(false); }
+  };
+
+  const changePassword = async () => {
+    if (!pwUser) return;
+    if (newPassword.length < 6) { flash("✕ كلمة السر 6 أحرف على الأقل"); return; }
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/admin/users/${pwUser.id}/password`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ password: newPassword }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        flash("✓ تم تغيير كلمة السر");
+        setPwUser(null);
+        setNewPassword("");
+      } else {
+        flash("✕ " + (data.error || "خطأ"));
+      }
+    } finally { setLoading(false); }
+  };
+
+  const setStatus = async (u: UserRow, status: string) => {
+    const meta = STATUS_META[status];
+    if (status !== "active" && !confirm(`تغيير حالة "${u.username}" إلى ${meta.label}؟ لن يستطيع تسجيل الدخول.`)) return;
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/admin/users/${u.id}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      if (r.ok) { flash(`✓ الحالة: ${meta.label}`); fetchUsers(); }
+      else flash("✕ خطأ في تغيير الحالة");
+    } finally { setLoading(false); }
   };
 
   const saveUser = async () => {
@@ -112,6 +184,7 @@ export function AdminDashboard() {
         body: JSON.stringify({
           tier: editTier,
           role: editRole,
+          status: editStatus,
           subscriptionEnd: editSubEnd || null,
         }),
       });
@@ -338,10 +411,26 @@ export function AdminDashboard() {
               overflow: "hidden",
             }}
           >
+            {/* شريط الإضافة */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 18px", borderBottom: `1px solid ${borderCol}`,
+            }}>
+              <span style={{ color: "#776a50", fontSize: "12px" }}>{users.length} مستخدم</span>
+              <button
+                onClick={() => setAddingUser(true)}
+                style={{
+                  background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.4)",
+                  borderRadius: "8px", color: "#22c55e", padding: "6px 14px",
+                  cursor: "pointer", fontSize: "12px", fontWeight: 700,
+                }}
+              >+ إضافة مستخدم</button>
+            </div>
+
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr 90px 100px 120px 90px",
+                gridTemplateColumns: "1fr 1fr 90px 100px 90px 110px 150px",
                 padding: "12px 18px",
                 borderBottom: `1px solid ${borderCol}`,
                 color: "#776a50",
@@ -354,6 +443,7 @@ export function AdminDashboard() {
               <span>Room ID</span>
               <span>الدور</span>
               <span>التايرز</span>
+              <span>الحالة</span>
               <span>انتهاء الاشتراك</span>
               <span style={{ textAlign: "center" }}>إجراءات</span>
             </div>
@@ -369,7 +459,7 @@ export function AdminDashboard() {
                 key={u.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 90px 100px 120px 90px",
+                  gridTemplateColumns: "1fr 1fr 90px 100px 90px 110px 150px",
                   padding: "13px 18px",
                   borderBottom: i < users.length - 1 ? `1px solid rgba(196,164,74,0.08)` : "none",
                   alignItems: "center",
@@ -410,6 +500,27 @@ export function AdminDashboard() {
                     {u.tier}
                   </span>
                 </span>
+                <span>
+                  <select
+                    value={u.status || "active"}
+                    onChange={(e) => setStatus(u, e.target.value)}
+                    disabled={loading}
+                    style={{
+                      background: `${(STATUS_META[u.status] || STATUS_META.active).color}18`,
+                      border: `1px solid ${(STATUS_META[u.status] || STATUS_META.active).color}55`,
+                      borderRadius: "6px",
+                      padding: "3px 6px",
+                      fontSize: "11px",
+                      color: (STATUS_META[u.status] || STATUS_META.active).color,
+                      cursor: "pointer",
+                      outline: "none",
+                    }}
+                  >
+                    {Object.entries(STATUS_META).map(([k, v]) => (
+                      <option key={k} value={k} style={{ background: "#12100c", color: v.color }}>{v.label}</option>
+                    ))}
+                  </select>
+                </span>
                 <span style={{ fontSize: "12px", color: "#6b7280" }}>
                   {u.subscriptionEnd ? new Date(u.subscriptionEnd).toLocaleDateString("ar-SA") : "—"}
                 </span>
@@ -427,6 +538,21 @@ export function AdminDashboard() {
                     }}
                   >
                     تعديل
+                  </button>
+                  <button
+                    onClick={() => { setPwUser(u); setNewPassword(""); }}
+                    title="تغيير كلمة السر"
+                    style={{
+                      background: "rgba(96,165,250,0.1)",
+                      border: "1px solid rgba(96,165,250,0.35)",
+                      borderRadius: "6px",
+                      color: "#60a5fa",
+                      padding: "4px 9px",
+                      cursor: "pointer",
+                      fontSize: "11px",
+                    }}
+                  >
+                    🔑
                   </button>
                   {u.role !== "admin" && (
                     <button
@@ -544,6 +670,166 @@ export function AdminDashboard() {
       </div>
 
       {/* Edit User Modal */}
+      {/* ── إضافة مستخدم ── */}
+      {addingUser && (() => {
+        const fieldStyle: React.CSSProperties = {
+          display: "block", width: "100%", marginTop: "6px", padding: "9px 12px",
+          borderRadius: "8px", border: `1px solid ${borderCol}`,
+          background: "rgba(255,255,255,0.04)", color: "#e2d9c0", fontSize: "13px",
+          outline: "none", boxSizing: "border-box",
+        };
+        return (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+            justifyContent: "center", zIndex: 200,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setAddingUser(false); }}
+        >
+          <div style={{
+            background: "linear-gradient(145deg, rgba(26,21,40,0.99), rgba(20,16,32,0.99))",
+            border: `1px solid ${borderCol}`, borderRadius: "16px",
+            padding: "28px 32px", minWidth: "360px", boxShadow: "0 0 60px rgba(0,0,0,0.6)",
+          }}>
+            <div style={{ color: "#22c55e", fontWeight: "bold", fontSize: "14px", letterSpacing: "2px", marginBottom: "20px" }}>
+              إضافة مستخدم جديد
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <label style={{ fontSize: "12px", color: "#776a50" }}>
+                اسم المستخدم
+                <input
+                  value={newUser.username}
+                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                  autoFocus
+                  style={{ ...fieldStyle, direction: "ltr", textAlign: "left" }}
+                />
+              </label>
+
+              <label style={{ fontSize: "12px", color: "#776a50" }}>
+                كلمة السر (6 أحرف على الأقل)
+                <input
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  style={{ ...fieldStyle, direction: "ltr", textAlign: "left" }}
+                />
+              </label>
+
+              <label style={{ fontSize: "12px", color: "#776a50" }}>
+                الدور
+                <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} style={fieldStyle}>
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                </select>
+              </label>
+
+              <label style={{ fontSize: "12px", color: "#776a50" }}>
+                التايرز
+                <select value={newUser.tier} onChange={(e) => setNewUser({ ...newUser, tier: e.target.value })} style={fieldStyle}>
+                  <option value="free">free</option>
+                  <option value="pro">pro</option>
+                  <option value="enterprise">enterprise</option>
+                </select>
+              </label>
+
+              <label style={{ fontSize: "12px", color: "#776a50" }}>
+                الحالة
+                <select value={newUser.status} onChange={(e) => setNewUser({ ...newUser, status: e.target.value })} style={fieldStyle}>
+                  {Object.entries(STATUS_META).map(([k, v]) => (
+                    <option key={k} value={k} style={{ background: "#12100c" }}>{v.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "24px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setAddingUser(false)}
+                style={{
+                  background: "transparent", border: `1px solid ${borderCol}`, borderRadius: "8px",
+                  color: "#776a50", padding: "8px 18px", cursor: "pointer", fontSize: "12px",
+                }}
+              >إلغاء</button>
+              <button
+                onClick={createUser}
+                disabled={loading}
+                style={{
+                  background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.5)",
+                  borderRadius: "8px", color: "#22c55e", padding: "8px 18px",
+                  cursor: loading ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: 700,
+                  opacity: loading ? 0.6 : 1,
+                }}
+              >{loading ? "..." : "إنشاء"}</button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* ── تغيير كلمة السر ── */}
+      {pwUser && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+            justifyContent: "center", zIndex: 200,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setPwUser(null); }}
+        >
+          <div style={{
+            background: "linear-gradient(145deg, rgba(26,21,40,0.99), rgba(20,16,32,0.99))",
+            border: `1px solid ${borderCol}`, borderRadius: "16px",
+            padding: "28px 32px", minWidth: "340px", boxShadow: "0 0 60px rgba(0,0,0,0.6)",
+          }}>
+            <div style={{ color: "#60a5fa", fontWeight: "bold", fontSize: "14px", letterSpacing: "2px", marginBottom: "6px" }}>
+              تغيير كلمة السر
+            </div>
+            <div style={{ color: "#776a50", fontSize: "12px", marginBottom: "20px" }}>
+              {pwUser.username}
+            </div>
+
+            <label style={{ fontSize: "12px", color: "#776a50" }}>
+              كلمة السر الجديدة (6 أحرف على الأقل)
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") changePassword(); }}
+                autoFocus
+                style={{
+                  display: "block", width: "100%", marginTop: "6px", padding: "9px 12px",
+                  borderRadius: "8px", border: `1px solid ${borderCol}`,
+                  background: "rgba(255,255,255,0.04)", color: "#e2d9c0", fontSize: "13px",
+                  direction: "ltr", textAlign: "left", outline: "none", boxSizing: "border-box",
+                }}
+              />
+            </label>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "24px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setPwUser(null)}
+                style={{
+                  background: "transparent", border: `1px solid ${borderCol}`, borderRadius: "8px",
+                  color: "#776a50", padding: "8px 18px", cursor: "pointer", fontSize: "12px",
+                }}
+              >إلغاء</button>
+              <button
+                onClick={changePassword}
+                disabled={loading}
+                style={{
+                  background: "rgba(96,165,250,0.18)", border: "1px solid rgba(96,165,250,0.5)",
+                  borderRadius: "8px", color: "#60a5fa", padding: "8px 18px",
+                  cursor: loading ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: 700,
+                  opacity: loading ? 0.6 : 1,
+                }}
+              >{loading ? "..." : "تغيير"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingUser && (
         <div
           style={{
@@ -592,6 +878,29 @@ export function AdminDashboard() {
                 >
                   <option value="user">user</option>
                   <option value="admin">admin</option>
+                </select>
+              </label>
+
+              <label style={{ fontSize: "12px", color: "#776a50" }}>
+                الحالة
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "9px 12px",
+                    borderRadius: "8px",
+                    border: `1px solid ${borderCol}`,
+                    background: "rgba(255,255,255,0.04)",
+                    color: (STATUS_META[editStatus] || STATUS_META.active).color,
+                    fontSize: "13px",
+                  }}
+                >
+                  {Object.entries(STATUS_META).map(([k, v]) => (
+                    <option key={k} value={k} style={{ background: "#12100c" }}>{v.label}</option>
+                  ))}
                 </select>
               </label>
 

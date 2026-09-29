@@ -1663,6 +1663,17 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Invalid username or password" });
       }
 
+      const status = (user as any).status || "active";
+      if (status !== "active") {
+        console.log(`[Auth] Blocked login for ${user.username} — status: ${status}`);
+        return res.status(403).json({
+          error: status === "suspended"
+            ? "الحساب موقوف مؤقتاً — راجع الإدارة"
+            : "الحساب ملغى",
+          status,
+        });
+      }
+
       const jwtSecret = process.env.JWT_SECRET!;
       const userRole = (user as any).role || "user";
       const token = jwt.sign(
@@ -1739,6 +1750,7 @@ export async function registerRoutes(
         username: u.username,
         roomId: u.roomId,
         role: u.role || "user",
+        status: u.status || "active",
         tier: u.tier || "free",
         subscriptionEnd: u.subscriptionEnd || null,
         createdAt: u.createdAt || null,
@@ -1748,15 +1760,74 @@ export async function registerRoutes(
     }
   });
 
+  const USER_STATUSES = ["active", "suspended", "cancelled"];
+
+  app.post("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const { username, password, tier, role, status } = req.body;
+      if (!username?.trim() || !password) {
+        return res.status(400).json({ error: "اسم المستخدم وكلمة السر مطلوبان" });
+      }
+      if (String(password).length < 6) {
+        return res.status(400).json({ error: "كلمة السر يجب أن تكون 6 أحرف على الأقل" });
+      }
+      if (status && !USER_STATUSES.includes(status)) {
+        return res.status(400).json({ error: "حالة غير صالحة" });
+      }
+      const existing = await storage.getUserByUsername(username.trim());
+      if (existing) return res.status(409).json({ error: "اسم المستخدم مستخدم بالفعل" });
+
+      const roomId = `room-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const user = await storage.createUser({
+        username: username.trim(),
+        password: await bcrypt.hash(password, 10),
+        roomId,
+      });
+      await storage.createRoom(roomId);
+      await storage.updateUser(user.id, {
+        tier: tier || "free",
+        role: role || "user",
+        status: status || "active",
+      });
+
+      console.log(`[Admin] User created: ${user.username}, room: ${roomId}`);
+      res.json({ success: true, id: user.id, roomId });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.put("/api/admin/users/:id", requireAdmin, async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const { tier, role, subscriptionEnd } = req.body;
-      const fields: { tier?: string; role?: string; subscriptionEnd?: Date | null } = {};
+      const { tier, role, status, subscriptionEnd } = req.body;
+      if (status !== undefined && !USER_STATUSES.includes(status)) {
+        return res.status(400).json({ error: "حالة غير صالحة" });
+      }
+      const fields: { tier?: string; role?: string; status?: string; subscriptionEnd?: Date | null } = {};
       if (tier !== undefined) fields.tier = tier;
       if (role !== undefined) fields.role = role;
+      if (status !== undefined) fields.status = status;
       if (subscriptionEnd !== undefined) fields.subscriptionEnd = subscriptionEnd ? new Date(subscriptionEnd) : null;
       await storage.updateUser(id, fields);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/admin/users/:id/password", requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { password } = req.body;
+      if (!password || String(password).length < 6) {
+        return res.status(400).json({ error: "كلمة السر يجب أن تكون 6 أحرف على الأقل" });
+      }
+      const target = await storage.getUser(id);
+      if (!target) return res.status(404).json({ error: "المستخدم غير موجود" });
+
+      await storage.updateUser(id, { password: await bcrypt.hash(password, 10) });
+      console.log(`[Admin] Password changed for user id=${id}`);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

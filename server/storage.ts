@@ -79,10 +79,12 @@ export class DrizzleStorage implements IStorage {
     return db.select().from(users);
   }
 
-  async updateUser(id: number, fields: { tier?: string; role?: string; subscriptionEnd?: Date | null }): Promise<void> {
+  async updateUser(id: number, fields: { tier?: string; role?: string; status?: string; password?: string; subscriptionEnd?: Date | null }): Promise<void> {
     const setFields: Partial<typeof users.$inferInsert> = {};
     if (fields.tier !== undefined) setFields.tier = fields.tier;
     if (fields.role !== undefined) setFields.role = fields.role;
+    if (fields.status !== undefined) setFields.status = fields.status;
+    if (fields.password !== undefined) setFields.password = fields.password;
     if (fields.subscriptionEnd !== undefined) setFields.subscriptionEnd = fields.subscriptionEnd;
     if (Object.keys(setFields).length === 0) return;
     await db.update(users).set(setFields).where(eq(users.id, id));
