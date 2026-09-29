@@ -777,9 +777,17 @@ export function VaultSettingsDialog() {
     setStatsLoading(true);
     try {
       const r = await apiFetch("/api/admin/stats");
-      const data = await r.json();
-      setAdminStats(data);
-    } catch { }
+      const data = await r.json().catch(() => null);
+      if (!r.ok || !Array.isArray(data?.users)) {
+        setAdminStats(null);
+        uFlash(r.status === 403 ? "✕ هذه الصفحة للمدير فقط" : `✕ ${data?.error || "تعذّر تحميل الإحصائيات"}`);
+      } else {
+        setAdminStats(data);
+      }
+    } catch (e: any) {
+      setAdminStats(null);
+      uFlash("✕ " + (e?.message || "خطأ في الاتصال"));
+    }
     setStatsLoading(false);
   };
 
@@ -3756,7 +3764,7 @@ export function VaultSettingsDialog() {
 
                 {/* User rows */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {adminStats.users.map((u) => (
+                  {(adminStats.users ?? []).map((u) => (
                     <div key={u.id} style={{
                       background: "#1a1a2e",
                       border: "1px solid #333",
