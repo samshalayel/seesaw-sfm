@@ -61,12 +61,12 @@ const OPENCODE_MODELS = [
 // موديلات Mirai — وسيط متوافق مع OpenAI (https://api.miraiapi.com/v1)
 // ⚠️ الوسيط لا يلتزم بالموديل المطلوب — قد يرد بموديل مختلف عمّا طلبته
 const MIRAI_MODELS = [
-  { label: "claude-opus-5", value: "claude-opus-5" },
-  { label: "claude-sonnet-5", value: "claude-sonnet-5" },
-  { label: "claude-opus-5.5", value: "claude-opus-5.5" },
-  { label: "claude-fable-5.1", value: "claude-fable-5.1" },
-  { label: "claude-opus-4.8", value: "claude-opus-4.8" },
-  { label: "claude-opus-4.6", value: "claude-opus-4.6" },
+  { label: "claude-opus-5", value: "claude-opus-5", free: false },
+  { label: "claude-sonnet-5", value: "claude-sonnet-5", free: false },
+  { label: "claude-opus-5.5", value: "claude-opus-5.5", free: false },
+  { label: "claude-fable-5.1", value: "claude-fable-5.1", free: false },
+  { label: "claude-opus-4.8", value: "claude-opus-4.8", free: false },
+  { label: "claude-opus-4.6", value: "claude-opus-4.6", free: false },
 ];
 
 // موديلات v0 (Vercel)
@@ -698,26 +698,45 @@ export function VaultSettingsDialog() {
     setModels(updated);
   };
 
-  const accentColor = "#c4a44a";
+  const accentColor = "#22d3ee";
+  // نيون سايبر — طبقة توكنز موحّدة
+  const T = {
+    accent:     "#22d3ee",
+    accentDeep: "#0891b2",
+    accentSoft: "rgba(34,211,238,0.14)",
+    onAccent:   "#04121a",
+    surface:    "rgba(255,255,255,0.03)",
+    stroke:     "rgba(255,255,255,0.08)",
+    strokeLive: "rgba(34,211,238,0.45)",
+    text:       "#e6edf7",
+    textDim:    "#8b98ad",
+    textFaint:  "#5b6779",
+    radius:     12,
+    glow:       "0 0 22px rgba(34,211,238,0.25)",
+  };
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
-    background: "#1a1a2e",
-    border: "1px solid #333",
-    borderRadius: "8px",
-    padding: "10px 14px",
-    color: "white",
-    fontSize: "14px",
+    background: "rgba(255,255,255,0.04)",
+    border: `1px solid ${T.stroke}`,
+    borderRadius: `${T.radius}px`,
+    padding: "11px 14px",
+    color: T.text,
+    fontSize: "13.5px",
     outline: "none",
     direction: "ltr",
     textAlign: "left",
-    fontFamily: "monospace",
+    fontFamily: "'JetBrains Mono',ui-monospace,monospace",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+    transition: "border-color .15s, box-shadow .15s, background .15s",
   };
 
   const labelStyle: React.CSSProperties = {
-    color: "#aaa",
-    fontSize: "13px",
-    marginBottom: "4px",
+    color: T.textDim,
+    fontSize: "12px",
+    fontWeight: 600,
+    letterSpacing: ".01em",
+    marginBottom: "7px",
     direction: "rtl",
     display: "block",
   };
@@ -853,11 +872,37 @@ export function VaultSettingsDialog() {
   return (
     <>
     <style>{`
-      .vault-tab:hover { background: rgba(196,164,74,0.08) !important; color: #c4a44a !important; }
-      .vault-hdr-btn:hover { filter: brightness(1.15); }
+      .vault-tab:hover { background: rgba(34,211,238,0.07) !important; color: #22d3ee !important; }
+      .vault-tab:hover span { filter: none !important; }
+      .vault-hdr-btn:hover { filter: brightness(1.18); transform: translateY(-1px); }
+      .vault-hdr-btn { transition: filter .15s, transform .15s; }
       .vault-close:hover { background: rgba(255,255,255,0.12) !important; color:#fff !important; }
+
+      /* الحقول — حالة تركيز نيون */
+      .vault-scope input:focus,
+      .vault-scope textarea:focus,
+      .vault-scope select:focus {
+        border-color: rgba(34,211,238,0.55) !important;
+        background: rgba(34,211,238,0.06) !important;
+        box-shadow: 0 0 0 3px rgba(34,211,238,0.12), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+      }
+      .vault-scope input:hover:not(:focus),
+      .vault-scope textarea:hover:not(:focus) {
+        border-color: rgba(255,255,255,0.16) !important;
+      }
+      .vault-scope input::placeholder,
+      .vault-scope textarea::placeholder { color: #4d5a6d; }
+
+      /* أشرطة تمرير رفيعة */
+      .vault-scope *::-webkit-scrollbar { width: 8px; height: 8px; }
+      .vault-scope *::-webkit-scrollbar-track { background: transparent; }
+      .vault-scope *::-webkit-scrollbar-thumb {
+        background: rgba(34,211,238,0.18); border-radius: 8px;
+      }
+      .vault-scope *::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.35); }
     `}</style>
     <div
+      className="vault-scope"
       style={{
         position: "fixed",
         left: pos ? pos.x : "50%",
@@ -887,8 +932,9 @@ export function VaultSettingsDialog() {
           alignItems: "center",
           padding: "0 14px",
           height: 52,
-          background: "linear-gradient(135deg,#12100e 0%,#1a1508 50%,#0f110d 100%)",
-          borderBottom: `1px solid ${accentColor}30`,
+          background: "linear-gradient(135deg,#0b1420 0%,#0d1a26 50%,#0a1118 100%)",
+          borderBottom: `1px solid ${accentColor}28`,
+          boxShadow: `0 1px 0 rgba(255,255,255,0.03) inset, 0 6px 24px rgba(0,0,0,0.35)`,
           cursor: "grab",
           flexShrink: 0,
           gap: "10px",
@@ -903,7 +949,7 @@ export function VaultSettingsDialog() {
             border:`1px solid ${accentColor}40`,
             display:"flex", alignItems:"center", justifyContent:"center", fontSize:15,
           }}>🔐</div>
-          <span style={{ color:"#e8d5a0", fontSize:14, fontWeight:800, letterSpacing:"-.01em" }}>
+          <span style={{ color:T.text, fontSize:14, fontWeight:800, letterSpacing:"-.01em" }}>
             إعدادات الخزنة
           </span>
           <span style={{ color:`${accentColor}30`, fontSize:11 }}>⣿</span>
@@ -945,11 +991,11 @@ export function VaultSettingsDialog() {
             onClick={handleSave}
             disabled={saving}
             style={{
-              background: saving ? `${accentColor}60` : `linear-gradient(135deg,${accentColor},#b8922a)`,
+              background: saving ? `${accentColor}60` : `linear-gradient(135deg,${T.accent},${T.accentDeep})`,
               border:"none", borderRadius:8, padding:"5px 16px",
-              color:"#0e0c07", fontSize:12, fontWeight:800,
+              color:T.onAccent, fontSize:12, fontWeight:800,
               cursor: saving ? "not-allowed" : "pointer",
-              boxShadow: saving ? "none" : `0 2px 12px ${accentColor}40`,
+              boxShadow: saving ? "none" : T.glow,
               transition:"filter .15s",
             }}
           >{saving ? "⏳" : "حفظ"}</button>
@@ -993,14 +1039,15 @@ export function VaultSettingsDialog() {
                 }}
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center",
-                  gap: "4px", padding: "10px 4px",
+                  gap: "5px", padding: "11px 4px",
                   background: active
-                    ? `linear-gradient(135deg,${accentColor}20,${accentColor}08)`
+                    ? `linear-gradient(270deg,${T.accentSoft},transparent)`
                     : "transparent",
                   border: "none",
-                  borderLeft: active ? `2.5px solid ${accentColor}` : "2.5px solid transparent",
-                  color: active ? accentColor : "#4a4a5a",
-                  fontSize: "10px", fontWeight: active ? 800 : 400,
+                  borderLeft: active ? `3px solid ${T.accent}` : "3px solid transparent",
+                  boxShadow: active ? `inset 0 0 26px rgba(34,211,238,0.10)` : "none",
+                  color: active ? T.accent : T.textFaint,
+                  fontSize: "10px", fontWeight: active ? 800 : 500,
                   cursor: "pointer", transition: "all 0.15s",
                   textAlign: "center", lineHeight: 1.3,
                   direction: "rtl", position: "relative",
