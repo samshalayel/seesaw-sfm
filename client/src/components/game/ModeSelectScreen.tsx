@@ -63,6 +63,17 @@ export function ModeSelectScreen() {
         justifyContent: "center",
         padding: "0 24px",
       }}>
+        {/* Platform Card — 2D، بلا WebGL */}
+        <ModeCard
+          icon="▤"
+          title="المنصة"
+          subtitle="Platform"
+          description="واجهة ثنائية الأبعاد سريعة — تعمل على أي جهاز وبأي إنترنت، بلا رسوميات ثقيلة"
+          accentColor="#22d3ee"
+          badge="NEW"
+          onClick={() => startTransition(() => setAppMode("platform"))}
+        />
+
         {/* Classic Card */}
         <ModeCard
           icon="🏢"

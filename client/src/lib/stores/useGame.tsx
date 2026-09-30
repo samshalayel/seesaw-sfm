@@ -357,8 +357,8 @@ interface GameState {
   setCompanyInfo: (name: string, logo: string) => void;
   setEntranceBg:  (bg: string) => void;
   fetchCompanyInfo: () => void;
-  appMode: "classic" | "pro" | "showcase" | "toon" | null;
-  setAppMode: (mode: "classic" | "pro" | "showcase" | "toon") => void;
+  appMode: "classic" | "pro" | "showcase" | "toon" | "platform" | null;
+  setAppMode: (mode: "classic" | "pro" | "showcase" | "toon" | "platform" | null) => void;
 }
 
 export const useGame = create<GameState>()(

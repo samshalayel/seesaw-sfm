@@ -43,6 +43,7 @@ const AgoraMeeting = lazy(() => import("./components/game/AgoraMeeting").then(m 
 import { CameraButtons } from "./components/game/CameraButtons";
 import { CityBackground } from "./components/game/CityBackground";
 import { ModeSelectScreen } from "./components/game/ModeSelectScreen";
+import { PlatformApp } from "./platform/PlatformApp";
 import { ShowcaseScene } from "./components/game/ShowcaseScene";
 import { MuseumScene }   from "./components/game/MuseumScene";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
@@ -989,6 +990,7 @@ function App() {
 
   // شاشة اختيار وضع التشغيل — قبل كل شيء
   if (appMode === null) return <ModeSelectScreen />;
+  if (appMode === "platform") return <PlatformApp />;
   if (appMode === "showcase") return <MuseumScene />;
   // ShowcaseScene محفوظة احتياطياً — if (appMode === "showcase-old") return <ShowcaseScene />;
 
