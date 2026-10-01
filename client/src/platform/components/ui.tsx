@@ -13,7 +13,7 @@ export const STAGES = [
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-white/8 bg-white/[0.025] ${className}`}>{children}</div>
+    <div className={`rounded-xl border border-slate-200 bg-white ${className}`}>{children}</div>
   );
 }
 
@@ -21,7 +21,7 @@ export function PageTitle({ title, subtitle, action }: { title: string; subtitle
   return (
     <div className="mb-6 flex items-end justify-between gap-4">
       <div>
-        <h1 className="text-xl font-extrabold tracking-tight text-slate-100">{title}</h1>
+        <h1 className="text-xl font-extrabold tracking-tight text-slate-900">{title}</h1>
         {subtitle && <p className="mt-1 text-[13px] text-slate-500">{subtitle}</p>}
       </div>
       {action}
@@ -31,14 +31,14 @@ export function PageTitle({ title, subtitle, action }: { title: string; subtitle
 
 export function Stat({ label, value, tone = "cyan" }: { label: string; value: ReactNode; tone?: "cyan" | "green" | "amber" }) {
   const tones = {
-    cyan:  "text-cyan-300 border-cyan-400/20 bg-cyan-400/[0.06]",
-    green: "text-emerald-300 border-emerald-400/20 bg-emerald-400/[0.06]",
-    amber: "text-amber-300 border-amber-400/20 bg-amber-400/[0.06]",
+    cyan:  "text-cyan-700 border-cyan-200 bg-cyan-50",
+    green: "text-emerald-700 border-emerald-200 bg-emerald-50",
+    amber: "text-amber-700 border-amber-200 bg-amber-50",
   };
   return (
     <div className={`rounded-xl border px-5 py-4 ${tones[tone]}`}>
       <div className="text-2xl font-extrabold tabular-nums">{value}</div>
-      <div className="mt-1 text-[12px] text-slate-400">{label}</div>
+      <div className="mt-1 text-[12px] text-slate-500">{label}</div>
     </div>
   );
 }
@@ -54,9 +54,9 @@ export function Button({
   variant?: "primary" | "ghost" | "danger"; disabled?: boolean; type?: "button" | "submit";
 }) {
   const v = {
-    primary: "border-cyan-400/50 bg-cyan-400/15 text-cyan-300 hover:bg-cyan-400/25",
-    ghost:   "border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-200",
-    danger:  "border-red-400/40 bg-red-400/10 text-red-300 hover:bg-red-400/20",
+    primary: "border-cyan-400 bg-cyan-100 text-cyan-700 hover:bg-cyan-100",
+    ghost:   "border-slate-300 text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+    danger:  "border-red-300 bg-red-50 text-red-700 hover:bg-red-100",
   }[variant];
   return (
     <button
@@ -83,20 +83,20 @@ export function StageRail({ filled, current }: { filled: Set<string>; current?: 
             title={s.en}
             className={`flex min-w-[104px] flex-1 flex-col gap-1 rounded-lg border px-3 py-2.5 transition-colors ${
               isCurrent
-                ? "border-cyan-400/60 bg-cyan-400/10"
+                ? "border-cyan-500 bg-cyan-50"
                 : done
-                ? "border-emerald-400/30 bg-emerald-400/[0.07]"
-                : "border-white/8 bg-white/[0.02]"
+                ? "border-emerald-300 bg-emerald-50"
+                : "border-slate-200 bg-slate-50"
             }`}
           >
             <span
               className={`text-[11px] font-extrabold tabular-nums ${
-                isCurrent ? "text-cyan-300" : done ? "text-emerald-300" : "text-slate-600"
+                isCurrent ? "text-cyan-700" : done ? "text-emerald-700" : "text-slate-400"
               }`}
             >
               {s.id} {done && "✓"}
             </span>
-            <span className={`text-[11px] leading-tight ${done || isCurrent ? "text-slate-300" : "text-slate-600"}`}>
+            <span className={`text-[11px] leading-tight ${done || isCurrent ? "text-slate-700" : "text-slate-400"}`}>
               {s.label}
             </span>
           </div>

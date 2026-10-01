@@ -59,7 +59,7 @@ export function Dashboard() {
       </div>
 
       <Card>
-        <div className="border-b border-white/5 px-5 py-3.5 text-[13px] font-bold text-slate-300">
+        <div className="border-b border-slate-200 px-5 py-3.5 text-[13px] font-bold text-slate-700">
           خط الإنتاج
         </div>
 
@@ -71,14 +71,14 @@ export function Dashboard() {
             <button
               key={p.projectKey}
               onClick={() => nav(`/projects/${p.projectKey}`)}
-              className="block w-full border-b border-white/5 px-5 py-4 text-right last:border-0 hover:bg-white/[0.02]"
+              className="block w-full border-b border-slate-200 px-5 py-4 text-right last:border-0 hover:bg-slate-50"
             >
               <div className="mb-3 flex items-baseline gap-2.5">
-                <span className="rounded border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] text-cyan-300">
+                <span className="rounded border border-cyan-300 bg-cyan-50 px-2 py-0.5 font-mono text-[11px] text-cyan-700">
                   {p.projectKey}
                 </span>
-                <span className="text-[13px] text-slate-300">{p.name || "بلا اسم"}</span>
-                <span className="mr-auto text-[11px] text-slate-600">
+                <span className="text-[13px] text-slate-700">{p.name || "بلا اسم"}</span>
+                <span className="mr-auto text-[11px] text-slate-400">
                   {(slotsByKey[p.projectKey]?.size ?? 0)}/{STAGES.length}
                 </span>
               </div>

@@ -154,8 +154,8 @@ export function Chat() {
             disabled={streaming}
             className={`rounded-lg border px-3.5 py-2 text-[12px] font-bold transition-colors disabled:opacity-40 ${
               active === r.id
-                ? "border-cyan-400/50 bg-cyan-400/12 text-cyan-300"
-                : "border-white/8 text-slate-500 hover:bg-white/5 hover:text-slate-300"
+                ? "border-cyan-400 bg-cyan-50 text-cyan-700"
+                : "border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
             }`}
           >
             {r.alias || r.name}
@@ -172,8 +172,8 @@ export function Chat() {
               <div
                 className={`max-w-[85%] rounded-xl px-4 py-2.5 text-[13px] leading-relaxed ${
                   m.role === "user"
-                    ? "border border-cyan-400/25 bg-cyan-400/10 text-cyan-50"
-                    : "border border-white/8 bg-white/[0.03] text-slate-200"
+                    ? "border border-cyan-300 bg-cyan-50 text-cyan-900"
+                    : "border border-slate-200 bg-slate-50 text-slate-700"
                 }`}
               >
                 <div className="whitespace-pre-wrap break-words">
@@ -191,10 +191,10 @@ export function Chat() {
         </div>
 
         {err && (
-          <div className="border-t border-red-400/20 bg-red-400/5 px-5 py-2.5 text-[12px] text-red-400">{err}</div>
+          <div className="border-t border-red-200 bg-red-50 px-5 py-2.5 text-[12px] text-red-600">{err}</div>
         )}
 
-        <div className="flex gap-2.5 border-t border-white/5 p-4">
+        <div className="flex gap-2.5 border-t border-slate-200 p-4">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -205,14 +205,14 @@ export function Chat() {
             rows={2}
             disabled={!robots.length}
             dir="rtl"
-            className="flex-1 resize-none rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[13px]
-                       text-slate-200 outline-none transition-colors focus:border-cyan-400/50
-                       placeholder:text-slate-600 disabled:opacity-50"
+            className="flex-1 resize-none rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-[13px]
+                       text-slate-700 outline-none transition-colors focus:border-cyan-500
+                       placeholder:text-slate-400 disabled:opacity-50"
           />
           {streaming ? (
             <button
               onClick={stop}
-              className="shrink-0 self-end rounded-lg border border-red-400/40 bg-red-400/10 px-5 py-2.5 text-[12px] font-bold text-red-300 hover:bg-red-400/20"
+              className="shrink-0 self-end rounded-lg border border-red-300 bg-red-50 px-5 py-2.5 text-[12px] font-bold text-red-700 hover:bg-red-100"
             >
               إيقاف
             </button>
@@ -220,8 +220,8 @@ export function Chat() {
             <button
               onClick={send}
               disabled={!input.trim() || !active}
-              className="shrink-0 self-end rounded-lg border border-cyan-400/50 bg-cyan-400/15 px-5 py-2.5 text-[12px]
-                         font-bold text-cyan-300 transition-colors hover:bg-cyan-400/25 disabled:opacity-40"
+              className="shrink-0 self-end rounded-lg border border-cyan-400 bg-cyan-100 px-5 py-2.5 text-[12px]
+                         font-bold text-cyan-700 transition-colors hover:bg-cyan-100 disabled:opacity-40"
             >
               إرسال
             </button>

@@ -44,7 +44,7 @@ export function Projects() {
     } catch (e: any) { setErr(e.message); }
   };
 
-  const field = "w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5 text-[13px] text-slate-200 outline-none focus:border-cyan-400/50 focus:bg-cyan-400/[0.06]";
+  const field = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-[13px] text-slate-700 outline-none focus:border-cyan-500 focus:bg-cyan-50";
 
   return (
     <>
@@ -62,26 +62,26 @@ export function Projects() {
           <button
             key={p.projectKey}
             onClick={() => nav(`/projects/${p.projectKey}`)}
-            className="flex w-full items-center gap-3 border-b border-white/5 px-5 py-4 text-right last:border-0 hover:bg-white/[0.02]"
+            className="flex w-full items-center gap-3 border-b border-slate-200 px-5 py-4 text-right last:border-0 hover:bg-slate-50"
           >
-            <span className="rounded border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] text-cyan-300">
+            <span className="rounded border border-cyan-300 bg-cyan-50 px-2 py-0.5 font-mono text-[11px] text-cyan-700">
               {p.projectKey}
             </span>
-            <span className="text-[13px] text-slate-300">{p.name || "بلا اسم"}</span>
-            <span className="mr-auto text-slate-600">‹</span>
+            <span className="text-[13px] text-slate-700">{p.name || "بلا اسم"}</span>
+            <span className="mr-auto text-slate-400">‹</span>
           </button>
         ))}
       </Card>
 
       {adding && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) setAdding(false); }}
         >
-          <div dir="rtl" className="w-full max-w-sm rounded-2xl border border-cyan-400/25 bg-[#0a0f1a] p-7 shadow-2xl">
-            <h2 className="mb-5 text-[14px] font-extrabold text-cyan-300">مشروع جديد</h2>
+          <div dir="rtl" className="w-full max-w-sm rounded-2xl border border-cyan-300 bg-white p-7 shadow-2xl">
+            <h2 className="mb-5 text-[14px] font-extrabold text-cyan-700">مشروع جديد</h2>
 
-            <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">
+            <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">
               الرمز (حتى 6 أحرف)
             </label>
             <input
@@ -92,7 +92,7 @@ export function Projects() {
               dir="ltr"
             />
 
-            <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">الاسم</label>
+            <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">الاسم</label>
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -100,7 +100,7 @@ export function Projects() {
               className={field}
             />
 
-            {err && <p className="mt-3 text-[12px] text-red-400">{err}</p>}
+            {err && <p className="mt-3 text-[12px] text-red-600">{err}</p>}
 
             <div className="mt-6 flex gap-2.5">
               <Button variant="primary" onClick={create}>إنشاء</Button>

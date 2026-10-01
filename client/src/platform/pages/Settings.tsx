@@ -75,8 +75,8 @@ const SECTIONS = [
 ] as const;
 
 const field =
-  "w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5 text-[13px] text-slate-200 " +
-  "outline-none transition-colors focus:border-cyan-400/50 focus:bg-cyan-400/[0.06] placeholder:text-slate-600";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-[13px] text-slate-700 " +
+  "outline-none transition-colors focus:border-cyan-500 focus:bg-cyan-50 placeholder:text-slate-400";
 
 const genCode = () => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -93,7 +93,7 @@ function Field({
   const saved = value === MASK;
   return (
     <div>
-      <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">{label}</label>
+      <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">{label}</label>
       <input
         type={type} value={value} placeholder={placeholder} maxLength={maxLength}
         onChange={(e) => onChange(e.target.value)}
@@ -101,7 +101,7 @@ function Field({
         className={`${field} ${ltr ? "text-left font-mono" : ""}`}
       />
       {(hint || saved) && (
-        <p className="mt-1 text-[11px] text-slate-600">
+        <p className="mt-1 text-[11px] text-slate-400">
           {saved ? "محفوظ — اتركه كما هو للإبقاء عليه" : hint}
         </p>
       )}
@@ -122,27 +122,27 @@ function ModelCard({
   onRemove: () => void; onMakeDefault?: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <select
           value={PROVIDERS.includes(m.name) ? m.name : "Other"}
           onChange={(e) => onPatch("name", e.target.value)}
-          className="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[12px] text-slate-200 outline-none"
+          className="cursor-pointer rounded-lg border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-[12px] text-slate-700 outline-none"
         >
-          {PROVIDERS.map((p) => <option key={p} value={p} className="bg-[#0a0f1a]">{p}</option>)}
+          {PROVIDERS.map((p) => <option key={p} value={p} className="bg-white">{p}</option>)}
         </select>
 
         {onMakeDefault && (isDefault ? (
-          <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-300">★ افتراضي</span>
+          <span className="rounded border border-cyan-300 bg-cyan-50 px-2 py-1 text-[11px] text-cyan-700">★ افتراضي</span>
         ) : (
           <button onClick={onMakeDefault}
-            className="rounded border border-white/10 px-2 py-1 text-[11px] text-slate-500 hover:text-slate-300">
+            className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-500 hover:text-slate-900">
             اجعله افتراضياً
           </button>
         ))}
 
         <button onClick={onRemove}
-          className="mr-auto rounded border border-red-400/35 bg-red-400/10 px-2 py-1 text-[11px] text-red-300 hover:bg-red-400/20">
+          className="mr-auto rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] text-red-700 hover:bg-red-100">
           حذف
         </button>
       </div>
@@ -154,7 +154,7 @@ function ModelCard({
           <Field label="المفتاح" type="password" value={m.apiKey ?? ""} onChange={(v) => onPatch("apiKey", v)} />
         </div>
         <div className="sm:col-span-2">
-          <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">تعليمات خاصة</label>
+          <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">تعليمات خاصة</label>
           <textarea
             value={m.systemPrompt ?? ""} rows={3} dir="rtl"
             onChange={(e) => onPatch("systemPrompt", e.target.value)}
@@ -162,13 +162,13 @@ function ModelCard({
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">الغرفة</label>
+          <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">الغرفة</label>
           <select
             value={m.roomAssignment ?? "main"}
             onChange={(e) => onPatch("roomAssignment", e.target.value)}
             className={`${field} cursor-pointer`}
           >
-            {ROOM_ASSIGNMENTS.map((r) => <option key={r.v} value={r.v} className="bg-[#0a0f1a]">{r.l}</option>)}
+            {ROOM_ASSIGNMENTS.map((r) => <option key={r.v} value={r.v} className="bg-white">{r.l}</option>)}
           </select>
         </div>
       </div>
@@ -256,7 +256,7 @@ export function Settings() {
         subtitle="كل الإعدادات محفوظة لكل غرفة على حدة"
         action={
           <div className="flex items-center gap-3">
-            {msg && <span className={`text-[12px] ${msg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{msg}</span>}
+            {msg && <span className={`text-[12px] ${msg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{msg}</span>}
             <Button variant="primary" onClick={save} disabled={saving}>{saving ? "…" : "حفظ"}</Button>
           </div>
         }
@@ -269,8 +269,8 @@ export function Settings() {
             onClick={() => setSection(s.id)}
             className={`rounded-lg border px-3.5 py-2 text-[12px] font-bold transition-colors ${
               section === s.id
-                ? "border-cyan-400/50 bg-cyan-400/12 text-cyan-300"
-                : "border-white/8 text-slate-500 hover:bg-white/5 hover:text-slate-300"
+                ? "border-cyan-400 bg-cyan-50 text-cyan-700"
+                : "border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
             }`}
           >
             {s.label}
@@ -287,7 +287,7 @@ export function Settings() {
               onChange={(v) => patch({ company: { ...vault.company, logo: v } })} />
             {vault.company?.logo && (
               <img src={vault.company.logo} alt=""
-                className="h-20 w-auto self-start rounded-lg border border-white/10 bg-white/5 object-contain p-2" />
+                className="h-20 w-auto self-start rounded-lg border border-slate-300 bg-slate-100 object-contain p-2" />
             )}
             <Field label="خلفية شاشة الدخول" placeholder="https://…" value={vault.loginBg ?? ""}
               onChange={(v) => patch({ loginBg: v })} />
@@ -351,7 +351,7 @@ export function Settings() {
                 <span className="text-[12px] text-slate-500">
                   {list.length} عنصر
                   {key === "models" && (
-                    <> · الافتراضي: <span className="text-cyan-300">{vault.defaultModel || "—"}</span></>
+                    <> · الافتراضي: <span className="text-cyan-700">{vault.defaultModel || "—"}</span></>
                   )}
                 </span>
                 <Button variant="primary" onClick={() => addTo(key)}>+ إضافة</Button>
@@ -409,7 +409,7 @@ export function Settings() {
 
             <div className="grid gap-3">
               {(vault.humans ?? []).map((h) => (
-                <div key={h.id} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+                <div key={h.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="الاسم" ltr={false} value={h.name} onChange={(v) => patchHuman(h.id, "name", v)} />
                     <Field label="الدور" ltr={false} value={h.role} onChange={(v) => patchHuman(h.id, "role", v)} />
@@ -417,26 +417,26 @@ export function Settings() {
 
                   <div className="mt-3 flex flex-wrap items-end gap-2">
                     <div className="flex-1">
-                      <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">الغرفة</label>
+                      <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">الغرفة</label>
                       <select
                         value={h.roomAssignment}
                         onChange={(e) => patchHuman(h.id, "roomAssignment", e.target.value)}
                         className={`${field} cursor-pointer`}
                       >
-                        {ROOM_ASSIGNMENTS.map((r) => <option key={r.v} value={r.v} className="bg-[#0a0f1a]">{r.l}</option>)}
+                        {ROOM_ASSIGNMENTS.map((r) => <option key={r.v} value={r.v} className="bg-white">{r.l}</option>)}
                       </select>
                     </div>
 
                     <div>
-                      <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">كود الانضمام</label>
+                      <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">كود الانضمام</label>
                       <div className="flex items-center gap-1.5">
-                        <span className="rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-2.5 font-mono text-[13px] text-cyan-300">
+                        <span className="rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-2.5 font-mono text-[13px] text-cyan-700">
                           {h.joinCode}
                         </span>
                         <button onClick={() => patchHuman(h.id, "joinCode", genCode())} title="توليد كود جديد"
-                          className="rounded-lg border border-white/10 px-2.5 py-2.5 text-[12px] text-slate-400 hover:text-slate-200">↻</button>
+                          className="rounded-lg border border-slate-300 px-2.5 py-2.5 text-[12px] text-slate-500 hover:text-slate-900">↻</button>
                         <button onClick={() => copyLink(h.joinCode)} title="نسخ رابط الدعوة"
-                          className="rounded-lg border border-white/10 px-2.5 py-2.5 text-[12px] text-slate-400 hover:text-slate-200">
+                          className="rounded-lg border border-slate-300 px-2.5 py-2.5 text-[12px] text-slate-500 hover:text-slate-900">
                           {copied === h.joinCode ? "✓" : "⧉"}
                         </button>
                       </div>
@@ -444,7 +444,7 @@ export function Settings() {
 
                     <button
                       onClick={() => patch({ humans: vault.humans.filter((x) => x.id !== h.id) })}
-                      className="rounded-lg border border-red-400/35 bg-red-400/10 px-3 py-2.5 text-[12px] text-red-300 hover:bg-red-400/20"
+                      className="rounded-lg border border-red-300 bg-red-50 px-3 py-2.5 text-[12px] text-red-700 hover:bg-red-100"
                     >حذف</button>
                   </div>
                 </div>
@@ -471,7 +471,7 @@ export function Settings() {
         {section === "comms" && (
           <div className="grid max-w-lg gap-6">
             <div className="grid gap-4">
-              <h3 className="text-[13px] font-bold text-slate-300">واتساب</h3>
+              <h3 className="text-[13px] font-bold text-slate-700">واتساب</h3>
               <Field label="Instance ID" value={wa.instanceId}
                 onChange={(v) => patch({ whatsapp: { ...wa, instanceId: v } })} />
               <Field label="التوكن" type="password" value={wa.token}
@@ -480,8 +480,8 @@ export function Settings() {
                 onChange={(v) => patch({ whatsapp: { ...wa, phone: v } })} />
             </div>
 
-            <div className="grid gap-4 border-t border-white/5 pt-6">
-              <h3 className="text-[13px] font-bold text-slate-300">Agora — المحادثة الصوتية</h3>
+            <div className="grid gap-4 border-t border-slate-200 pt-6">
+              <h3 className="text-[13px] font-bold text-slate-700">Agora — المحادثة الصوتية</h3>
               <Field label="App ID" type="password" value={agora.appId}
                 onChange={(v) => patch({ agora: { ...agora, appId: v } })} />
               <Field label="App Certificate" type="password" value={agora.appCertificate}
@@ -491,7 +491,7 @@ export function Settings() {
         )}
       </Card>
 
-      <p className="mt-4 text-[11px] text-slate-600">
+      <p className="mt-4 text-[11px] text-slate-400">
         الحقول التي تظهر فيها {MASK} محفوظة مسبقاً — تُرسل كما هي ولا تُستبدل ما لم تُغيّرها.
       </p>
     </>

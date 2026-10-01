@@ -37,7 +37,7 @@ export function ProjectDetail() {
 
   return (
     <>
-      <button onClick={() => nav("/projects")} className="mb-3 text-[12px] text-slate-500 hover:text-slate-300">
+      <button onClick={() => nav("/projects")} className="mb-3 text-[12px] text-slate-500 hover:text-slate-900">
         › المشاريع
       </button>
 
@@ -51,7 +51,7 @@ export function ProjectDetail() {
       </div>
 
       <Card>
-        <div className="border-b border-white/5 px-5 py-3.5 text-[13px] font-bold text-slate-300">
+        <div className="border-b border-slate-200 px-5 py-3.5 text-[13px] font-bold text-slate-700">
           المراحل
         </div>
 
@@ -64,45 +64,45 @@ export function ProjectDetail() {
           const isOpen = open === s.id;
 
           return (
-            <div key={s.id} className="border-b border-white/5 last:border-0">
+            <div key={s.id} className="border-b border-slate-200 last:border-0">
               <button
                 onClick={() => setOpen(isOpen ? null : s.id)}
-                className="flex w-full items-center gap-3 px-5 py-4 text-right hover:bg-white/[0.02]"
+                className="flex w-full items-center gap-3 px-5 py-4 text-right hover:bg-slate-50"
               >
                 <span
                   className={`grid h-7 w-9 shrink-0 place-items-center rounded font-mono text-[11px] font-extrabold ${
-                    done ? "bg-emerald-400/15 text-emerald-300" : "bg-white/5 text-slate-600"
+                    done ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"
                   }`}
                 >
                   {s.id}
                 </span>
 
                 <div className="min-w-0">
-                  <div className="text-[13px] text-slate-300">{s.label}</div>
-                  <div className="text-[11px] text-slate-600">{s.en}</div>
+                  <div className="text-[13px] text-slate-700">{s.label}</div>
+                  <div className="text-[11px] text-slate-400">{s.en}</div>
                 </div>
 
                 {gate && (
-                  <span className="hidden rounded border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-300 sm:inline">
+                  <span className="hidden rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 sm:inline">
                     ⚿ {gate}
                   </span>
                 )}
 
-                <span className={`mr-auto text-[11px] ${done ? "text-emerald-400" : "text-slate-600"}`}>
+                <span className={`mr-auto text-[11px] ${done ? "text-emerald-600" : "text-slate-400"}`}>
                   {done ? "مكتملة" : "—"}
                 </span>
               </button>
 
               {isOpen && (
-                <div className="border-t border-white/5 bg-black/20 px-5 py-4 text-[12px]">
+                <div className="border-t border-slate-200 bg-slate-50 px-5 py-4 text-[12px]">
                   {done ? (
                     <div className="space-y-1.5">
-                      <div className="text-slate-400">
-                        الملف: <span className="font-mono text-slate-300">{slot.filename}</span>
+                      <div className="text-slate-500">
+                        الملف: <span className="font-mono text-slate-700">{slot.filename}</span>
                       </div>
                       {slot.githubPath && (
-                        <div className="text-slate-400">
-                          المسار: <span className="font-mono text-slate-300">{slot.githubPath}</span>
+                        <div className="text-slate-500">
+                          المسار: <span className="font-mono text-slate-700">{slot.githubPath}</span>
                         </div>
                       )}
                       {slot.updatedAt && (
@@ -116,7 +116,7 @@ export function ProjectDetail() {
                   )}
 
                   {gate && (
-                    <p className="mt-3 text-[11px] text-amber-300/80">
+                    <p className="mt-3 text-[11px] text-amber-700">
                       لا يمكن اعتماد هذه المرحلة آلياً — تتطلب توقيعاً بشرياً.
                     </p>
                   )}

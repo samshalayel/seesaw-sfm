@@ -23,16 +23,16 @@ const ROBOTS = [
 ];
 
 const STATUS_TONE: Record<string, string> = {
-  done:    "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-  success: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-  running: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
-  failed:  "border-red-400/30 bg-red-400/10 text-red-300",
-  error:   "border-red-400/30 bg-red-400/10 text-red-300",
+  done:    "border-emerald-300 bg-emerald-50 text-emerald-700",
+  success: "border-emerald-300 bg-emerald-50 text-emerald-700",
+  running: "border-cyan-300 bg-cyan-50 text-cyan-700",
+  failed:  "border-red-300 bg-red-50 text-red-700",
+  error:   "border-red-300 bg-red-50 text-red-700",
 };
 
 const field =
-  "rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5 text-[13px] text-slate-200 " +
-  "outline-none transition-colors focus:border-cyan-400/50";
+  "rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-[13px] text-slate-700 " +
+  "outline-none transition-colors focus:border-cyan-500";
 
 export function Monitor() {
   const [config, setConfig] = useState<Config | null>(null);
@@ -122,7 +122,7 @@ export function Monitor() {
         action={
           <div className="flex items-center gap-3">
             {msg && (
-              <span className={`text-[12px] ${msg.startsWith("✓") ? "text-emerald-400" : msg.startsWith("⏳") ? "text-cyan-400" : "text-red-400"}`}>
+              <span className={`text-[12px] ${msg.startsWith("✓") ? "text-emerald-600" : msg.startsWith("⏳") ? "text-cyan-400" : "text-red-600"}`}>
                 {msg}
               </span>
             )}
@@ -140,29 +140,29 @@ export function Monitor() {
 
       {/* ── التحكم ── */}
       <Card className="mb-6 p-5">
-        <h2 className="mb-4 text-[13px] font-bold text-slate-300">التشغيل</h2>
+        <h2 className="mb-4 text-[13px] font-bold text-slate-700">التشغيل</h2>
 
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
-            <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">راقب مهام</label>
+            <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">راقب مهام</label>
             <select
               value={selUser ?? ""}
               onChange={(e) => setSelUser(Number(e.target.value) || null)}
               disabled={running}
               className={`${field} w-full cursor-pointer disabled:opacity-50`}
             >
-              <option value="" className="bg-[#0a0f1a]">اختر عضو الفريق</option>
+              <option value="" className="bg-white">اختر عضو الفريق</option>
               {members.map((m) => (
-                <option key={m.id} value={m.id} className="bg-[#0a0f1a]">{m.username || m.email}</option>
+                <option key={m.id} value={m.id} className="bg-white">{m.username || m.email}</option>
               ))}
             </select>
             {members.length === 0 && (
-              <p className="mt-1 text-[11px] text-amber-400/80">لا يوجد أعضاء — تحقق من توكن ClickUp</p>
+              <p className="mt-1 text-[11px] text-amber-700">لا يوجد أعضاء — تحقق من توكن ClickUp</p>
             )}
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">فحص كل (دقيقة)</label>
+            <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">فحص كل (دقيقة)</label>
             <input
               type="number" min={1} max={60} value={interval}
               onChange={(e) => setIntervalMin(Number(e.target.value) || 1)}
@@ -172,7 +172,7 @@ export function Monitor() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[12px] font-semibold text-slate-400">الموديل</label>
+            <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">الموديل</label>
             <select
               value={robot}
               onChange={(e) => setRobot(e.target.value)}
@@ -180,7 +180,7 @@ export function Monitor() {
               className={`${field} w-full cursor-pointer disabled:opacity-50`}
             >
               {ROBOTS.map((r) => (
-                <option key={r.id} value={r.id} className="bg-[#0a0f1a]">{r.label}</option>
+                <option key={r.id} value={r.id} className="bg-white">{r.label}</option>
               ))}
             </select>
           </div>
@@ -205,7 +205,7 @@ export function Monitor() {
 
       {/* ── السجل ── */}
       <Card>
-        <div className="border-b border-white/5 px-5 py-3.5 text-[13px] font-bold text-slate-300">
+        <div className="border-b border-slate-200 px-5 py-3.5 text-[13px] font-bold text-slate-700">
           سجل التنفيذ
         </div>
 
@@ -213,21 +213,21 @@ export function Monitor() {
         {!loading && logs.length === 0 && <Empty>لا توجد سجلات</Empty>}
 
         {!loading && logs.map((l) => (
-          <div key={l.id} className="border-b border-white/5 px-5 py-3.5 last:border-0">
+          <div key={l.id} className="border-b border-slate-200 px-5 py-3.5 last:border-0">
             <div className="flex items-center gap-3">
               <span className={`shrink-0 rounded border px-2 py-0.5 text-[10px] ${
-                STATUS_TONE[l.status?.toLowerCase()] || "border-white/10 bg-white/5 text-slate-400"
+                STATUS_TONE[l.status?.toLowerCase()] || "border-slate-300 bg-slate-100 text-slate-500"
               }`}>
                 {l.status}
               </span>
-              <span className="truncate text-[12px] text-slate-300">{l.taskName}</span>
+              <span className="truncate text-[12px] text-slate-700">{l.taskName}</span>
               {l.startedAt && (
-                <span className="mr-auto shrink-0 text-[11px] text-slate-600">
+                <span className="mr-auto shrink-0 text-[11px] text-slate-400">
                   {new Date(l.startedAt).toLocaleTimeString("ar")}
                 </span>
               )}
             </div>
-            {l.error && <p className="mt-1.5 text-[11px] text-red-400/90">{l.error}</p>}
+            {l.error && <p className="mt-1.5 text-[11px] text-red-600">{l.error}</p>}
           </div>
         ))}
       </Card>
