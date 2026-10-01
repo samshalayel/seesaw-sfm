@@ -435,6 +435,25 @@ export function TopRightPanel() {
         />
       )}
 
+      {/* ── 🚪 خروج — متاح في كل الأوضاع، لا يعتمد على القرب من الباب ── */}
+      <button
+        onClick={() => useGame.getState().openLogoutKeypad()}
+        title="إنهاء الجلسة والخروج"
+        style={{
+          width: "42px", height: "42px", borderRadius: "10px",
+          border: "1.5px solid #ef444455",
+          background: "rgba(30,10,12,0.75)",
+          color: "#ef4444",
+          cursor: "pointer", display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          lineHeight: 1, gap: "2px", backdropFilter: "blur(6px)",
+          transition: "all 0.15s",
+        }}
+      >
+        <span style={{ fontSize: "16px" }}>🚪</span>
+        <span style={{ fontSize: "7px", opacity: 0.75 }}>خروج</span>
+      </button>
+
       {/* ── 📹 غرفة الاجتماعات ──────────────────────────────────── */}
       <div style={{ position: "relative" }}>
         {panel === "office" && (

@@ -5,6 +5,7 @@ import { useState } from "react";
 
 export function LogoutDoor() {
   const isExteriorView = useGame((s) => s.isExteriorView);
+  const openLogoutKeypad = useGame((s) => s.openLogoutKeypad);
   const [hovered, setHovered] = useState(false);
 
   const doorTexture = useTexture("/images/door.png");
@@ -29,6 +30,12 @@ export function LogoutDoor() {
 
       <mesh
         position={[0, -0.1, 0.01]}
+        onClick={(e) => {
+          // النقر يعمل في كل الأوضاع — وضع كلاسيك لا يركّب Player فلا يوجد كشف قرب
+          e.stopPropagation();
+          document.body.style.cursor = "default";
+          openLogoutKeypad();
+        }}
         onPointerEnter={() => {
           setHovered(true);
           document.body.style.cursor = "pointer";
