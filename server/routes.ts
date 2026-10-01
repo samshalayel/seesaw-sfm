@@ -2315,7 +2315,8 @@ export async function registerRoutes(
           let response;
           try {
             response = await claudeClient.messages.create({
-              model: "claude-sonnet-4-20250514",
+              // احترم الموديل المختار في الخزنة — البوابات الوسيطة لها أسماء موديلات خاصة
+              model: modelConfig?.modelId?.trim() || "claude-sonnet-4-20250514",
               max_tokens: 8192,
               ...(systemPrompt ? { system: systemPrompt } : {}),
               // أوقف tools عند انتقال المراحل — السيرفر حقن المحتوى مباشرة
@@ -2326,9 +2327,18 @@ export async function registerRoutes(
             console.error("[Claude] API error:", claudeError.message);
             const ceMsg = claudeError.message || "";
             const isCtx = ceMsg.includes("context_length_exceeded") || ceMsg.includes("maximum context length") || ceMsg.includes("context window") || ceMsg.includes("too many tokens") || ceMsg.includes("prompt is too long");
+            const isRate = ceMsg.includes("rate_limit") || ceMsg.includes("429") || ceMsg.includes("限额");
+            const isAuth = ceMsg.includes("authentication") || ceMsg.includes("invalid x-api-key") || ceMsg.includes("401");
+            const isModel = ceMsg.includes("not_found_error") || ceMsg.includes("model:") || ceMsg.includes("404");
             const errContent = isCtx
               ? `\n⚠️ الرسالة أو تاريخ المحادثة أطول من نافذة السياق للموديل. امسح المحادثة وأعد الإرسال.`
-              : `\n⚠️ خطأ في الاتصال بكلود: ${ceMsg.substring(0, 150)}`;
+              : isRate
+              ? `\n⏳ انتهت حصة المفتاح لهذه الفترة. انتظر حتى تتجدد، أو بدّل لموديل آخر من الخزنة.`
+              : isAuth
+              ? `\n🔑 المفتاح مرفوض. راجع مفتاح هذا الموديل في الخزنة.`
+              : isModel
+              ? `\n🔎 المزوّد لا يعرف اسم الموديل المطلوب. راجع «معرّف الموديل» في الخزنة.`
+              : `\n⚠️ خطأ في الاتصال: ${ceMsg.substring(0, 150)}`;
             res.write(`data: ${JSON.stringify({ content: errContent })}\n\n`);
             break;
           }

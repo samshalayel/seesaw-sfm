@@ -2734,6 +2734,19 @@ export function VaultSettingsDialog() {
                   </div>
                 )}
 
+                {/* SmartCloud — بوابة خاصة، أسماء موديلاتها يحددها السيرفر فيُكتب الاسم يدوياً */}
+                {model.name === "SmartCloud" && (
+                  <div>
+                    <label style={{ ...labelStyle, marginBottom: "6px" }}>معرّف الموديل</label>
+                    <input
+                      value={model.modelId || ""}
+                      onChange={(e) => updateModel(idx, "modelId", e.target.value)}
+                      placeholder="اسم الموديل كما يعرّفه سيرفرك"
+                      style={{ ...inputStyle, marginBottom: "10px" }}
+                    />
+                  </div>
+                )}
+
                 {/* حقل اختيار الموديل — يظهر فقط لـ OpenCode أو Mirai أو v0 أو HuggingFace */}
                 {(model.name === "OpenCode" || model.name === "Mirai" || model.name === "v0" || model.name === "Devin" || model.name === "HuggingFace") && (
                   <div>
