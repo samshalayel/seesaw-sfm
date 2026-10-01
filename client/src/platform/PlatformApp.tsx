@@ -7,10 +7,12 @@ import { ProjectDetail } from "./pages/ProjectDetail";
 import { Monitor } from "./pages/Monitor";
 import { Users } from "./pages/Users";
 import { Settings } from "./pages/Settings";
+import { Chat } from "./pages/Chat";
 
 const NAV = [
   { to: "/dashboard", icon: "◧", label: "لوحة القيادة" },
   { to: "/projects",  icon: "▤", label: "المشاريع" },
+  { to: "/chat",      icon: "◇", label: "الروبوتات" },
   { to: "/monitor",   icon: "◈", label: "المراقب" },
   { to: "/settings",  icon: "⚙", label: "الإعدادات" },
   { to: "/users",     icon: "◉", label: "المستخدمون", adminOnly: true },
@@ -100,6 +102,7 @@ function Shell() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:key" element={<ProjectDetail />} />
+            <Route path="/chat" element={<Chat />} />
             <Route path="/monitor" element={<Monitor />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/users" element={isAdmin ? <Users /> : <Navigate to="/dashboard" replace />} />
