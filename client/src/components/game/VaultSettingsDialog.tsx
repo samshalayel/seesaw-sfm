@@ -41,7 +41,7 @@ const USER_STATUS_META: Record<string, { label: string; color: string }> = {
   cancelled: { label: "ملغى",  color: "#ef4444" },
 };
 
-const MODEL_PRESETS = ["Groq", "GPT", "Claude", "GLM", "Grok", "Gemini", "Mistral", "OpenRouter", "OpenCode", "Mirai", "v0", "Devin", "HuggingFace", "Other"];
+const MODEL_PRESETS = ["Groq", "GPT", "Claude", "GLM", "Grok", "Gemini", "Mistral", "OpenRouter", "OpenCode", "Mirai", "SmartCloud", "v0", "Devin", "HuggingFace", "Other"];
 const FREE_MODELS = ["Groq", "GLM", "Gemini", "OpenCode", "v0", "HuggingFace"];
 
 // الموديلات الشائعة على OpenRouter

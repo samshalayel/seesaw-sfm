@@ -5,7 +5,7 @@ import { Card, PageTitle, Empty, Button } from "../components/ui";
 const MASK = "••••••••";
 
 const PROVIDERS = [
-  "Groq", "GPT", "Claude", "Mirai", "Gemini", "GLM",
+  "Groq", "GPT", "Claude", "Mirai", "SmartCloud", "Gemini", "GLM",
   "Grok", "Mistral", "OpenRouter", "OpenCode", "HuggingFace", "v0", "Devin", "Other",
 ];
 

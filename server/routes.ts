@@ -2060,7 +2060,9 @@ export async function registerRoutes(
       const modelName = (modelConfig?.name || "GPT").toLowerCase();
       // Mirai يمر عبر مسار OpenAI-compatible رغم أن اسم موديله قد يحوي claude
       const isMirai = modelName.includes("mirai") || modelName.includes("ميراي");
-      const isClaudeModel = !isMirai && (modelName.includes("claude") || modelName.includes("كلود"));
+      // SmartCloud: بوابة متوافقة مع Anthropic على /v1/messages — تمر عبر مسار Claude مع baseURL مخصص
+      const isSmartCloud = modelName.includes("smartcloud") || modelName.includes("سمارت كلاود");
+      const isClaudeModel = !isMirai && (isSmartCloud || modelName.includes("claude") || modelName.includes("كلود"));
 
       // ── التحقق من صلاحية التايرز عند الـ chat ────────────────────────────────
       const chatUser = await storage.getUserByRoomId(roomId);
@@ -2272,11 +2274,12 @@ export async function registerRoutes(
       };
 
       if (isClaudeModel) {
+        const claudeBaseURL = isSmartCloud ? "https://api.mwapi.dev" : undefined;
         const claudeClient = modelConfig?.apiKey
-          ? new Anthropic({ apiKey: modelConfig.apiKey })
+          ? new Anthropic({ apiKey: modelConfig.apiKey, ...(claudeBaseURL ? { baseURL: claudeBaseURL } : {}) })
           : anthropic;
 
-        console.log(`[Claude] Using API key: ${modelConfig?.apiKey ? "vault" : "env"}`);
+        console.log(`[Claude] Using API key: ${modelConfig?.apiKey ? "vault" : "env"}${claudeBaseURL ? ` via ${claudeBaseURL}` : ""}`);
 
         res.write(`data: ${JSON.stringify({ content: "" })}\n\n`);
         let totalInputTokens = 0;
