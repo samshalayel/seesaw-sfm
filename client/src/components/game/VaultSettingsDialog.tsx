@@ -65,14 +65,31 @@ const OPENCODE_MODELS = [
 ];
 
 // موديلات Mirai — وسيط متوافق مع OpenAI (https://api.miraiapi.com/v1)
-// ⚠️ الوسيط لا يلتزم بالموديل المطلوب — قد يرد بموديل مختلف عمّا طلبته
+// الترتيب حسب معامل الاستهلاك (ratio) تصاعدياً — الأرخص أولاً
+// ⚠️ الوسيط لا يلتزم دائماً بالموديل المطلوب — قد يرد بموديل مختلف
 const MIRAI_MODELS = [
-  { label: "claude-opus-5", value: "claude-opus-5", free: false },
-  { label: "claude-sonnet-5", value: "claude-sonnet-5", free: false },
-  { label: "claude-opus-5.5", value: "claude-opus-5.5", free: false },
-  { label: "claude-fable-5.1", value: "claude-fable-5.1", free: false },
-  { label: "claude-opus-4.8", value: "claude-opus-4.8", free: false },
-  { label: "claude-opus-4.6", value: "claude-opus-4.6", free: false },
+  { label: "hy3 · 0.5x",                   value: "hy3",                   free: true  },
+  { label: "claude-sonnet-5 · 0.5x",       value: "claude-sonnet-5",       free: true  },
+  { label: "gpt-5.6-luna · 0.5x",          value: "gpt-5.6-luna",          free: true  },
+  { label: "deepseek-v4-flash · 0.5x",     value: "deepseek-v4-flash",     free: true  },
+  { label: "deepseek-v4.1-flash · 0.8x",   value: "deepseek-v4.1-flash",   free: true  },
+  { label: "claude-opus-4.6 · 1x",         value: "claude-opus-4.6",       free: false },
+  { label: "claude-opus-4.7 · 1x",         value: "claude-opus-4.7",       free: false },
+  { label: "claude-opus-4.8 · 1x",         value: "claude-opus-4.8",       free: false },
+  { label: "deepseek-v4-pro · 1x",         value: "deepseek-v4-pro",       free: false },
+  { label: "glm-5.3-flash · 1x",           value: "glm-5.3-flash",         free: false },
+  { label: "gpt-5.6-terra · 1.2x",         value: "gpt-5.6-terra",         free: false },
+  { label: "claude-opus-5 · 1.5x",         value: "claude-opus-5",         free: false },
+  { label: "qwen3.8-max · 1.5x",           value: "qwen3.8-max",           free: false },
+  { label: "gpt-5.6-sol · 2x",             value: "gpt-5.6-sol",           free: false },
+  { label: "kimi-k3 · 2x",                 value: "kimi-k3",               free: false },
+  { label: "swe-2 · 2x",                   value: "swe-2",                 free: false },
+  { label: "gpt-6-astra · 3.5x",           value: "gpt-6-astra",           free: false },
+  { label: "claude-fable-5 · 3.5x",        value: "claude-fable-5",        free: false },
+  { label: "gpt-6-sol · 3.5x",             value: "gpt-6-sol",             free: false },
+  { label: "claude-fable-5.1 · 4x",        value: "claude-fable-5.1",      free: false },
+  { label: "claude-opus-5.5 · 6.5x",       value: "claude-opus-5.5",       free: false },
+  { label: "ccmax-claude-opus-5.5 · 35x",  value: "ccmax-claude-opus-5.5", free: false },
 ];
 
 // موديلات v0 (Vercel)

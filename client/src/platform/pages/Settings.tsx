@@ -9,6 +9,32 @@ const PROVIDERS = [
   "Grok", "Mistral", "OpenRouter", "OpenCode", "HuggingFace", "v0", "Devin", "Other",
 ];
 
+// كتالوج Mirai — مرتّب حسب معامل الاستهلاك تصاعدياً
+const MIRAI_MODELS: Array<[string, string]> = [
+  ["hy3", "0.5x"],
+  ["claude-sonnet-5", "0.5x"],
+  ["gpt-5.6-luna", "0.5x"],
+  ["deepseek-v4-flash", "0.5x"],
+  ["deepseek-v4.1-flash", "0.8x"],
+  ["claude-opus-4.6", "1x"],
+  ["claude-opus-4.7", "1x"],
+  ["claude-opus-4.8", "1x"],
+  ["deepseek-v4-pro", "1x"],
+  ["glm-5.3-flash", "1x"],
+  ["gpt-5.6-terra", "1.2x"],
+  ["claude-opus-5", "1.5x"],
+  ["qwen3.8-max", "1.5x"],
+  ["gpt-5.6-sol", "2x"],
+  ["kimi-k3", "2x"],
+  ["swe-2", "2x"],
+  ["gpt-6-astra", "3.5x"],
+  ["claude-fable-5", "3.5x"],
+  ["gpt-6-sol", "3.5x"],
+  ["claude-fable-5.1", "4x"],
+  ["claude-opus-5.5", "6.5x"],
+  ["ccmax-claude-opus-5.5", "35x"],
+];
+
 const ROOM_ASSIGNMENTS = [
   { v: "main",   l: "الصالة الرئيسية" },
   { v: "stage0", l: "S0 — المشكلة" },
@@ -149,7 +175,27 @@ function ModelCard({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="الاسم الظاهر" ltr={false} value={m.alias ?? ""} onChange={(v) => onPatch("alias", v)} />
-        <Field label="معرّف الموديل" value={m.modelId ?? ""} placeholder="claude-opus-5" onChange={(v) => onPatch("modelId", v)} />
+
+        {m.name === "Mirai" ? (
+          <div>
+            <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">
+              الموديل <span className="font-normal text-slate-400">· المعامل = مضاعف الاستهلاك</span>
+            </label>
+            <select
+              value={m.modelId ?? ""}
+              onChange={(e) => onPatch("modelId", e.target.value)}
+              className={`${field} cursor-pointer font-mono`}
+              dir="ltr"
+            >
+              <option value="" className="bg-white">— اختر موديلاً —</option>
+              {MIRAI_MODELS.map(([id, ratio]) => (
+                <option key={id} value={id} className="bg-white">{id} · {ratio}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <Field label="معرّف الموديل" value={m.modelId ?? ""} placeholder="claude-opus-5" onChange={(v) => onPatch("modelId", v)} />
+        )}
         <div className="sm:col-span-2">
           <Field label="المفتاح" type="password" value={m.apiKey ?? ""} onChange={(v) => onPatch("apiKey", v)} />
         </div>
