@@ -99,7 +99,37 @@ export function StageKeypadOverlay() {
   const [error, setError]       = useState(false);
   const [checking, setChecking] = useState(false);
   const [success, setSuccess]   = useState(false);
+  const [busyJobs, setBusyJobs] = useState(0);
   const containerRef            = useRef<HTMLDivElement>(null);
+
+  // الخروج لا يتطلب كوداً — الأكواد تحمي الدخول لا المغادرة
+  const confirmExit = async () => {
+    if (checking) return;
+    setChecking(true);
+    setError(false);
+    try {
+      const jobsRes = await apiFetch("/api/jobs");
+      const jobs = await jobsRes.json();
+      const active = Array.isArray(jobs)
+        ? jobs.filter((j: any) => j.status === "pending" || j.status === "running")
+        : [];
+      if (active.length > 0) {
+        setBusyJobs(active.length);
+        setError(true);
+        setChecking(false);
+        return;
+      }
+    } catch { }
+    try {
+      await apiFetch("/api/session/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    } catch { }
+    clearAllChats();
+    doLogout();
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -130,35 +160,11 @@ export function StageKeypadOverlay() {
         const data = await res.json();
         if (data.success) {
           setSuccess(true);
-          if (logoutOpen) {
-            // بعد التحقق: تحقق من المهام الخلفية ثم اخرج
-            setTimeout(async () => {
-              try {
-                const jobsRes = await apiFetch("/api/jobs");
-                const jobs = await jobsRes.json();
-                const active = jobs.filter((j: any) => j.status === "pending" || j.status === "running");
-                if (active.length > 0) {
-                  setError(true);
-                  setSuccess(false);
-                  setCode("");
-                  setTimeout(() => setError(false), 2000);
-                  setChecking(false);
-                  return;
-                }
-              } catch {}
-              try {
-                await apiFetch("/api/session/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-              } catch {}
-              clearAllChats();
-              doLogout();
-            }, 400);
-          } else {
-            unlock();
-            setTimeout(() => {
-              close();
-              setSuccess(false);
-            }, 500);
-          }
+          unlock();
+          setTimeout(() => {
+            close();
+            setSuccess(false);
+          }, 500);
         } else {
           setError(true);
           setTimeout(() => { setCode(""); setError(false); }, 800);
@@ -179,6 +185,11 @@ export function StageKeypadOverlay() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (logoutOpen) {
+      if (e.key === "Enter") confirmExit();
+      else if (e.key === "Escape") close();
+      return;
+    }
     if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
     else if (e.key === "Backspace" || e.key === "Delete") handleClear();
     else if (e.key === "Escape") close();
@@ -232,11 +243,69 @@ export function StageKeypadOverlay() {
             {doorLabel}
           </div>
           <div style={{ color: "#556", fontSize: "10px", letterSpacing: "2px", fontFamily: "monospace" }}>
-            SECURE ACCESS
+            {logoutOpen ? "END SESSION" : "SECURE ACCESS"}
           </div>
         </div>
 
-        {/* keypad card */}
+        {/* ── الخروج: تأكيد مباشر بلا كود ── */}
+        {logoutOpen ? (
+          <div style={{
+            background: "rgba(10,14,22,0.95)",
+            borderRadius: "14px",
+            padding: "26px 28px",
+            border: `1px solid ${accentColor}33`,
+            boxShadow: `0 0 40px #0006, 0 0 60px ${accentColor}08`,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "18px",
+            minWidth: "300px", direction: "rtl",
+          }}>
+            <div style={{ color: "#cbd5e1", fontSize: "14px", textAlign: "center", lineHeight: 1.7 }}>
+              هل تريد إنهاء الجلسة والخروج؟
+            </div>
+
+            {error && (
+              <div style={{
+                background: "#f59e0b18", border: "1px solid #f59e0b55", borderRadius: "9px",
+                padding: "10px 14px", color: "#f59e0b", fontSize: "12px",
+                textAlign: "center", lineHeight: 1.6,
+              }}>
+                ⏳ لديك {busyJobs} مهمة قيد التنفيذ.<br />
+                انتظر انتهاءها حتى لا يضيع العمل.
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+              <button
+                onClick={confirmExit}
+                disabled={checking}
+                style={{
+                  flex: 1, background: `${accentColor}22`, border: `1px solid ${accentColor}`,
+                  borderRadius: "10px", padding: "11px 0", color: accentColor,
+                  fontSize: "13px", fontWeight: 700,
+                  cursor: checking ? "not-allowed" : "pointer", opacity: checking ? 0.6 : 1,
+                  fontFamily: "'Almarai', Inter, sans-serif",
+                }}
+              >
+                {checking ? "..." : "خروج"}
+              </button>
+              <button
+                onClick={close}
+                style={{
+                  flex: 1, background: "transparent", border: "1px solid #ffffff22",
+                  borderRadius: "10px", padding: "11px 0", color: "#94a3b8",
+                  fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                  fontFamily: "'Almarai', Inter, sans-serif",
+                }}
+              >
+                البقاء
+              </button>
+            </div>
+
+            <div style={{ color: "#475569", fontSize: "10px", fontFamily: "monospace" }}>
+              ESC للإلغاء
+            </div>
+          </div>
+        ) : (
+        /* keypad card */
         <div style={{
           background: "rgba(10,14,22,0.95)",
           borderRadius: "14px",
@@ -301,8 +370,9 @@ export function StageKeypadOverlay() {
             )}
           </div>
         </div>
+        )}
 
-        {!success && (
+        {!logoutOpen && !success && (
           <div style={{ color: "#445", fontSize: "12px", fontFamily: "Inter, sans-serif", direction: "rtl" }}>
             أدخل رمز الدخول · ESC للرجوع
           </div>
