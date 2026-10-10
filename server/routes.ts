@@ -2442,8 +2442,10 @@ export async function registerRoutes(
         const isGPT = provider === "OpenAI";
         // ZhipuAI GLM-4+ supports function calling
         const isZhipuAI = provider === "ZhipuAI";
+        // OpenRouter وMirai يمرّران function calling للموديل الخلفي كما هو
+        const isToolCapableProxy = provider === "OpenRouter" || provider === "Mirai";
         // أوقف tools عند انتقال المراحل — السيرفر حقن المحتوى مباشرة
-        const useTools = (isGPT || isZhipuAI) && !transitionMatch;
+        const useTools = (isGPT || isZhipuAI || isToolCapableProxy) && !transitionMatch;
 
         console.log(`[${provider}] Using model: ${modelId}, tools: ${useTools}, apiKey: ${modelConfig?.apiKey ? "vault" : "env"}`);
         let gptTotalInput = 0;
