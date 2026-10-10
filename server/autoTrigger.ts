@@ -13,6 +13,8 @@ import { getRepos, getRepoContents, createOrUpdateFile, getAuthenticatedUser } f
 import { getClickUpSummary, searchTasksByName, getFullWorkspaceStructure, createTask } from "./clickup";
 import { getGitHubToken, getClickUpToken, getGitHubOwner, getGitHubRepo, getModelByName, getVpsConfig, getModels, getWhatsAppConfig, getAgentRouterKey } from "./vaultStore";
 import { storage } from "./storage";
+import { planTasks } from "./taskPlanner";
+import { getClickUpListId } from "./vaultStore";
 import type { ModelConfig } from "./vaultStore";
 import { Client as SshClient } from "ssh2";
 import { extractSkillsFromTags, buildSkillsSection, formatActiveSkills, renderLandingPage } from "./skills.js";
@@ -1112,6 +1114,21 @@ async function scanAndProcess() {
       if (aOrder !== bOrder) return aOrder - bOrder;
       return (a.name ?? "").localeCompare(b.name ?? "");
     });
+
+    // ─── محرك الانتقاء: الأولوية + الاعتماديات (AI) + قيود صلبة ─────────────────
+    if (matchingTasks.length > 1) {
+      try {
+        const listId = await getClickUpListId(triggerRoomId);
+        const plan = await planTasks(matchingTasks, { roomId: triggerRoomId, listId });
+        const byId = new Map(matchingTasks.map((t: any) => [t.id, t]));
+        const ordered = plan.ordered.map((id) => byId.get(id)).filter(Boolean);
+        matchingTasks.splice(0, matchingTasks.length, ...ordered);
+        const blockedN = Object.keys(plan.blocked).length;
+        console.log(`[AutoTrigger] Plan (${plan.source}${plan.model ? " · " + plan.model : ""}): ${ordered.map((t: any) => t.name).join(" → ")}${blockedN ? ` | blocked: ${blockedN}` : ""}`);
+      } catch (e: any) {
+        console.error("[AutoTrigger] planner error, keeping default order:", e.message);
+      }
+    }
 
     console.log(`[AutoTrigger] Found ${matchingTasks.length} new tasks to process`);
 

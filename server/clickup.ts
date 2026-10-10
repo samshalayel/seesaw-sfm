@@ -347,3 +347,27 @@ export async function getClickUpSummary(roomId?: string): Promise<string> {
     return `Error fetching ClickUp data: ${err.message}`;
   }
 }
+
+/** كل مهام القائمة بما فيها المكتملة، مع الاعتماديات والترتيب — لمحرك الانتقاء */
+export async function getListTasksForPlanning(listId: string, roomId?: string): Promise<any[]> {
+  const out: any[] = [];
+  for (let page = 0; page < 10; page++) {
+    const data = await clickupFetch(`/list/${listId}/task?archived=false&include_closed=true&subtasks=true&page=${page}`, roomId);
+    const tasks = data.tasks || [];
+    for (const t of tasks) {
+      out.push({
+        id: t.id,
+        name: t.name,
+        description: (t.description || "").slice(0, 600),
+        status: (t.status?.status || "").toLowerCase(),
+        priority: t.priority?.priority || null,
+        orderindex: t.orderindex ?? null,
+        dependsOn: (t.dependencies || [])
+          .filter((d: any) => d.task_id === t.id && d.depends_on)
+          .map((d: any) => d.depends_on),
+      });
+    }
+    if (tasks.length < 100) break;
+  }
+  return out;
+}

@@ -25,6 +25,7 @@ try {
 }
 import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs";
 import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY, getWhatsAppConfig, getGoogleConfig } from "./vaultStore";
+import { getLastPlan } from "./taskPlanner";
 import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection, cancelTriggerLog } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
 import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
@@ -2914,6 +2915,10 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  app.get("/api/auto-trigger/plan", (_req, res) => {
+    res.json(getLastPlan() ?? { ordered: [], blocked: {}, reasons: {}, names: {}, source: "deterministic", at: null });
   });
 
   app.post("/api/auto-trigger/stop", async (_req, res) => {

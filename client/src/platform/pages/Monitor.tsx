@@ -12,6 +12,10 @@ interface Config {
   watchStatuses: string[]; doneStatus: string;
 }
 interface Member { id: number; username: string; email?: string }
+interface Plan {
+  ordered: string[]; blocked: Record<string, string>; reasons: Record<string, string>;
+  names: Record<string, string>; source: string; model?: string; at: string | null;
+}
 
 const ROBOTS = [
   { id: "robot-1", label: "GPT-4o" },
@@ -38,6 +42,7 @@ export function Monitor() {
   const [config, setConfig] = useState<Config | null>(null);
   const [logs, setLogs] = useState<TriggerLog[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -61,6 +66,8 @@ export function Monitor() {
         if (c.robotId) setRobot(c.robotId);
       }
       setLogs(Array.isArray(l) ? l : []);
+      const p = await apiFetch("/api/auto-trigger/plan").then((r) => r.json()).catch(() => null);
+      if (p && Array.isArray(p.ordered)) setPlan(p);
     } catch { }
 
     if (withMembers) {
@@ -202,6 +209,32 @@ export function Monitor() {
           </p>
         )}
       </Card>
+
+      {/* ── خطة التنفيذ ── */}
+      {plan && plan.ordered.length > 0 && (
+        <Card className="mb-6">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
+            <span className="text-[13px] font-bold text-slate-700">خطة التنفيذ</span>
+            <span className="text-[11px] text-slate-400">
+              {plan.source === "ai" ? `ترتيب ذكي · ${plan.model ?? ""}` : "ترتيب حتمي"}
+            </span>
+          </div>
+          {plan.ordered.map((id, i) => (
+            <div key={id} className="flex items-baseline gap-3 border-b border-slate-200 px-5 py-2.5 last:border-0">
+              <span className="w-5 shrink-0 text-[11px] font-bold tabular-nums text-cyan-700">{i + 1}</span>
+              <span className="text-[12px] text-slate-700">{plan.names[id] ?? id}</span>
+              {plan.reasons[id] && <span className="mr-auto text-[11px] text-slate-400">{plan.reasons[id]}</span>}
+            </div>
+          ))}
+          {Object.entries(plan.blocked).map(([id, why]) => (
+            <div key={id} className="flex items-baseline gap-3 border-t border-slate-200 bg-amber-50 px-5 py-2.5">
+              <span className="w-5 shrink-0 text-[11px]">⛔</span>
+              <span className="text-[12px] text-slate-700">{plan.names[id] ?? id}</span>
+              <span className="mr-auto text-[11px] text-amber-700">ينتظر: {why}</span>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {/* ── السجل ── */}
       <Card>
