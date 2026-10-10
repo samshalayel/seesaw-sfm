@@ -427,7 +427,8 @@ export const useGame = create<GameState>()(
       setRoomId(user.roomId);
       const savedAvatar = localStorage.getItem("selectedAvatar") || "lite";
       set((state) => {
-        if (state.phase === "locked") {
+        // المدير القادم من لوحة الإدارة (phase=admin) يُعامل كأنه أمام الباب
+        if (state.phase === "locked" || (enterRoom && state.phase === "admin")) {
           return {
             phase: skipAvatarSelect ? "playing" : "avatar_select",
             user,
