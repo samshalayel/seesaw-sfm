@@ -554,7 +554,10 @@ export function TopRightPanel() {
                         onClick={() => setSelRobots(prev =>
                           on
                             ? prev.length > 1 ? prev.filter(x => x !== r.id) : prev // لا تشيل الأخير
-                            : [...prev, r.id]
+                            // أول اختيار لموديل خزنة يستبدل الافتراضي غير المُعدَّل بدل أن يُضاف جنبه
+                            : (r.id.startsWith("vault:") && prev.length === 1 && prev[0] === "robot-1")
+                              ? [r.id]
+                              : [...prev, r.id]
                         )}
                         style={{
                           flex: 1, padding: "6px 4px", borderRadius: "7px", cursor: "pointer",
