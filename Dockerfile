@@ -4,7 +4,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# المشروع يعتمد على vite 5 وبعض الإضافات تطلب vite 6+ كـ peer؛ التنصيب القديم كان متساهلاً بهالنقطة
+RUN npm ci --legacy-peer-deps
 COPY . .
 RUN npm run build
 
