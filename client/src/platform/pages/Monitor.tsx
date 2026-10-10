@@ -12,6 +12,7 @@ interface Config {
   watchStatuses: string[]; doneStatus: string;
 }
 interface Member { id: number; username: string; email?: string }
+interface VaultModel { id: string; name: string; provider: string; alias?: string; modelId?: string }
 interface Plan {
   ordered: string[]; blocked: Record<string, string>; reasons: Record<string, string>;
   names: Record<string, string>; source: string; model?: string; at: string | null;
@@ -43,6 +44,7 @@ export function Monitor() {
   const [logs, setLogs] = useState<TriggerLog[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [vaultModels, setVaultModels] = useState<VaultModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -71,6 +73,10 @@ export function Monitor() {
     } catch { }
 
     if (withMembers) {
+      try {
+        const vm = await apiFetch("/api/auto-trigger/vault-models").then((r) => r.json()).catch(() => []);
+        if (Array.isArray(vm)) setVaultModels(vm);
+      } catch { }
       try {
         const r = await apiFetch("/api/clickup/members");
         const d = await r.json().catch(() => null);
@@ -186,9 +192,18 @@ export function Monitor() {
               disabled={running}
               className={`${field} w-full cursor-pointer disabled:opacity-50`}
             >
-              {ROBOTS.map((r) => (
-                <option key={r.id} value={r.id} className="bg-white">{r.label}</option>
-              ))}
+              <optgroup label="الروبوتات الجاهزة">
+                {ROBOTS.map((r) => (
+                  <option key={r.id} value={r.id} className="bg-white">{r.label}</option>
+                ))}
+              </optgroup>
+              {vaultModels.length > 0 && (
+                <optgroup label="موديلات الخزنة">
+                  {vaultModels.map((m) => (
+                    <option key={m.id} value={`vault:${m.id}`} className="bg-white">✦ {m.alias || m.name}{m.modelId ? ` · ${m.modelId}` : ""}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         </div>

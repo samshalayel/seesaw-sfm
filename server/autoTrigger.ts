@@ -644,6 +644,9 @@ Execute everything autonomously without asking for clarification.`;
 
 // ─── كشف مزوّد الذكاء الاصطناعي من اسم/موديل الموديل ────────────────────────
 function detectProvider(model: ModelConfig): "openai" | "anthropic" | "gemini" {
+  const pname = model.name.toLowerCase();
+  if (pname.includes("smartcloud")) return "anthropic";
+  if (pname.includes("openrouter") || pname.includes("mirai") || pname.includes("groq")) return "openai";
   const text = (model.name + " " + (model.modelId || "") + " " + (model.alias || "")).toLowerCase();
   if (text.includes("claude") || text.includes("anthropic") || text.includes("sonnet") || text.includes("haiku") || text.includes("opus"))
     return "anthropic";
@@ -664,14 +667,27 @@ async function processTaskWithModel(task: any, log: TriggerLog, model: ModelConf
   const provider = detectProvider(model);
   log.modelUsed = model.name;
 
-  const oaiClient  = provider === "openai"  ? new OpenAI({ apiKey: model.apiKey }) : openai;
-  const antClient  = provider === "anthropic" ? new Anthropic({ apiKey: model.apiKey }) : anthropic;
+  const pn = model.name.toLowerCase();
+  const proxyBase = pn.includes("openrouter") ? "https://openrouter.ai/api/v1"
+    : pn.includes("mirai") ? "https://api.miraiapi.com/v1"
+    : pn.includes("groq") ? "https://api.groq.com/openai/v1"
+    : undefined;
+  const oaiClient  = provider === "openai"
+    ? new OpenAI({
+        apiKey: model.apiKey,
+        ...(proxyBase ? { baseURL: proxyBase } : {}),
+        ...(pn.includes("openrouter") ? { defaultHeaders: { "HTTP-Referer": "https://sillar.us", "X-Title": "Sillar Office" } } : {}),
+      })
+    : openai;
+  const antClient  = provider === "anthropic"
+    ? new Anthropic({ apiKey: model.apiKey, ...(pn.includes("smartcloud") ? { baseURL: "https://api.mwapi.dev" } : {}) })
+    : anthropic;
   const gemClient  = provider === "gemini"
     ? new OpenAI({ apiKey: model.apiKey, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" })
     : gemini;
 
   const robotOverride = provider === "anthropic" ? "robot-2" : provider === "gemini" ? "robot-4" : "robot-1";
-  await processTaskWithAI(task, log, { robotId: robotOverride, openaiClient: oaiClient, anthropicClient: antClient, geminiClient: gemClient });
+  await processTaskWithAI(task, log, { robotId: robotOverride, openaiClient: oaiClient, anthropicClient: antClient, geminiClient: gemClient, modelId: model.modelId });
 }
 
 interface ProcessOpts {
@@ -679,6 +695,7 @@ interface ProcessOpts {
   openaiClient?:     OpenAI;
   anthropicClient?:  Anthropic;
   geminiClient?:     OpenAI;
+  modelId?:          string;   // موديل الخزنة المختار — يتجاوز الأسماء الثابتة
 }
 
 async function processTaskWithAI(task: any, log: TriggerLog, opts: ProcessOpts = {}) {
@@ -959,7 +976,7 @@ You must actually execute tool calls — do not describe what you will do, just 
         }
 
         const response = await _anthropic.messages.create({
-          model: "claude-sonnet-4-20250514",
+          model: opts.modelId?.trim() || "claude-sonnet-4-20250514",
           max_tokens: 2048,
           system: systemPrompt,
           tools: taskAnthropicTools,
@@ -1008,7 +1025,7 @@ You must actually execute tool calls — do not describe what you will do, just 
         }
 
         const response = await _gemini.chat.completions.create({
-          model: "gemini-2.0-flash",
+          model: opts.modelId?.trim() || "gemini-2.0-flash",
           messages,
           tools: taskOpenaiTools,
           max_tokens: 2048,
@@ -1052,7 +1069,7 @@ You must actually execute tool calls — do not describe what you will do, just 
         }
 
         const response = await _openai.chat.completions.create({
-          model: "gpt-4o",
+          model: opts.modelId?.trim() || "gpt-4o",
           messages,
           tools: taskOpenaiTools,
           max_completion_tokens: 2048,
@@ -1218,13 +1235,16 @@ async function scanAndProcess() {
       if (activeRobots.length === 1) {
         // مودل واحد — نمرر robotId صراحةً عبر overrideRobotId
         const rId = activeRobots[0];
+        const vaultPick = rId.startsWith("vault:")
+          ? (await getModels(triggerRoomId)).find(m => m.id === rId.slice(6) && m.apiKey.trim())
+          : undefined;
         const log: TriggerLog = {
           id: generateId(), taskId: task.id, taskName: task.name,
           status: "running", result: "", toolsUsed: [],
           startedAt: Date.now(), completedAt: null, error: null,
-          modelUsed: rId,
+          modelUsed: vaultPick ? vaultPick.name : rId,
         };
-        await runOne(task, log, undefined, rId);
+        if (vaultPick) await runOne(task, log, vaultPick); else await runOne(task, log, undefined, rId);
       } else {
         // متعدد — شغّل كل المودلات بالتوازي على نفس المهمة
         console.log(`[AutoTrigger] 🔀 Multi-model: task "${task.name}" → [${activeRobots.join(", ")}]`);
@@ -1344,11 +1364,11 @@ export function triggerScanNow(roomId?: string) {
 }
 
 // إرجاع موديلات الخزنة التي لديها API Key (للـ UI)
-export async function getAvailableVaultModels(roomId?: string): Promise<{ id: string; name: string; provider: string }[]> {
+export async function getAvailableVaultModels(roomId?: string): Promise<{ id: string; name: string; provider: string; alias: string; modelId: string }[]> {
   const models = await getModels(roomId || triggerRoomId);
   return models
     .filter(m => m.apiKey.trim())
-    .map(m => ({ id: m.id, name: m.name, provider: detectProvider(m) }));
+    .map(m => ({ id: m.id, name: m.name, provider: detectProvider(m), alias: m.alias || "", modelId: m.modelId || "" }));
 }
 
 export async function testVpsConnection(roomId?: string): Promise<{ connected: boolean; output?: string; error?: string }> {
