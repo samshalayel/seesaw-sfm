@@ -14,7 +14,7 @@ FROM build AS tools
 
 # ── runtime: بلا أدوات بناء ولا devDependencies ───────────────────────────────
 FROM build AS prune
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev --legacy-peer-deps
 
 FROM node:20-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=3001
