@@ -1,0 +1,74 @@
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+    image: seesaw-app:latest
+    container_name: seesaw-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 1g
+    networks: [web, internal]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.seesaw.rule=Host(`seesaw.sillar.us`)
+      - traefik.http.routers.seesaw.entrypoints=websecure
+      - traefik.http.routers.seesaw.tls=true
+      - traefik.http.routers.seesaw.tls.certresolver=cf
+      - traefik.http.services.seesaw.loadbalancer.server.port=3001
+    volumes:
+      - ./data:/app/data
+      - ./vaults:/app/.vaults
+      - ./museum-uploads:/app/client/public/museum-uploads
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  db:
+    image: postgres:16-alpine
+    container_name: seesaw-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: seesaw
+      POSTGRES_USER: seesaw
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    mem_limit: 512m
+    networks: [internal]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seesaw -d seesaw"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # docker compose --profile tools run --rm migrate
+  migrate:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: tools
+    env_file: .env
+    networks: [internal]
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["npx", "drizzle-kit", "push"]
+
+networks:
+  web:
+    external: true
+  internal:
+
+volumes:
+  pgdata:

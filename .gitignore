@@ -13,6 +13,7 @@ vite.config.ts.*
 .env
 .env.local
 .env.*
+!.env.example
 
 # Large assets
 attached_assets/

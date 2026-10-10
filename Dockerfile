@@ -1,0 +1,27 @@
+# ── build: يحتاج أدوات C++ لوحدات bcrypt و ssh2 الأصلية ──────────────────────
+FROM node:20-bookworm-slim AS build
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# ── أدوات الصيانة (drizzle-kit) — تُستخدم فقط عبر: docker compose --profile tools run migrate
+FROM build AS tools
+
+# ── runtime: بلا أدوات بناء ولا devDependencies ───────────────────────────────
+FROM build AS prune
+RUN npm prune --omit=dev
+
+FROM node:20-bookworm-slim AS runtime
+ENV NODE_ENV=production PORT=3001
+WORKDIR /app
+COPY --from=prune /app/node_modules ./node_modules
+COPY --from=prune /app/package.json ./package.json
+COPY --from=prune /app/dist ./dist
+RUN mkdir -p data .vaults client/public/museum-uploads && chown -R node:node /app
+USER node
+EXPOSE 3001
+CMD ["node", "dist/index.cjs"]
