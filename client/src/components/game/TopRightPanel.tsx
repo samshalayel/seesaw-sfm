@@ -204,6 +204,7 @@ export function TopRightPanel() {
   const [config, setConfig]   = useState<TriggerConfig | null>(null);
   const [logs, setLogs]       = useState<TriggerLog[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [vaultModels, setVaultModels] = useState<{ id: string; name: string; alias?: string; modelId?: string }[]>([]);
   const [selUser, setSelUser] = useState<number | null>(null);
   const [trigInterval, setTrigInterval] = useState(5);
   const [selRobots, setSelRobots] = useState<string[]>(["robot-1"]);
@@ -230,6 +231,7 @@ export function TopRightPanel() {
   useEffect(() => {
     fetchTriggerData(true); // isInit=true → يحدّث الـ dropdown
     apiFetch("/api/clickup/members").then(r => r.json()).then(d => setMembers(Array.isArray(d) ? d : d.members ?? [])).catch(() => {});
+    apiFetch("/api/auto-trigger/vault-models").then(r => r.json()).then(d => setVaultModels(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -538,7 +540,14 @@ export function TopRightPanel() {
                     { id: "robot-5", label: "Devin 🤖",      color: "#f97316" },
                     { id: "robot-6", label: "AgentRouter 🔀", color: "#a78bfa" },
                     { id: "robot-7", label: "Multi-Agent 🧠", color: "#34d399" },
-                  ] as const).map(r => {
+                  ] as ReadonlyArray<{ id: string; label: string; color: string }>).concat(
+                    // موديلات الخزنة — تُشغَّل بمفتاحها ومعرّفها الخاصين (يشمل OpenRouter المجاني)
+                    vaultModels.map(m => ({
+                      id: `vault:${m.id}`,
+                      label: `✦ ${m.alias || m.name}`,
+                      color: "#2dd4bf",
+                    }))
+                  ).map(r => {
                     const on = selRobots.includes(r.id);
                     return (
                       <button key={r.id}

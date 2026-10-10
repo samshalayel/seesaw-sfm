@@ -1262,7 +1262,12 @@ async function scanAndProcess() {
 
           // نمرر robotId مباشرة عبر opts — لا نمس config.robotId المشترك
           await refreshClients();
-          await processTaskWithAI(task, log, { robotId: rId });
+          const vaultM = rId.startsWith("vault:")
+            ? (await getModels(triggerRoomId)).find(m => m.id === rId.slice(6) && m.apiKey.trim())
+            : undefined;
+          if (rId.startsWith("vault:") && !vaultM) { log.status = "failed"; log.error = "موديل الخزنة غير موجود أو بلا مفتاح"; log.completedAt = Date.now(); return; }
+          if (vaultM) { log.modelUsed = vaultM.name; await processTaskWithModel(task, log, vaultM); }
+          else await processTaskWithAI(task, log, { robotId: rId });
 
           // ارفق النتيجة
           if (log.result || log.error) {
