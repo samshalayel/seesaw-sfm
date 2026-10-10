@@ -282,7 +282,7 @@ interface GameState {
   teleportTarget: { x: number; z: number; lookAtX?: number; lookAtZ?: number } | null;
   setTeleportTarget: (t: { x: number; z: number; lookAtX?: number; lookAtZ?: number } | null) => void;
 
-  unlock: (user: UserInfo, skipAvatarSelect?: boolean) => void;
+  unlock: (user: UserInfo, skipAvatarSelect?: boolean, enterRoom?: boolean) => void;
   confirmAvatar: (avatarId: string) => void;
   clearAutoEnter: () => void;
   start: () => void;
@@ -418,8 +418,9 @@ export const useGame = create<GameState>()(
     cameraMode: "city",
     cameraResetToken: 0,
 
-    unlock: (user: UserInfo, skipAvatarSelect = false) => {
-      if (user.role === "admin") {
+    unlock: (user: UserInfo, skipAvatarSelect = false, enterRoom = false) => {
+      // enterRoom: المدير يدخل غرفته بدل لوحة الإدارة، ويحتفظ بدوره admin
+      if (user.role === "admin" && !enterRoom) {
         set({ phase: "admin", user });
         return;
       }

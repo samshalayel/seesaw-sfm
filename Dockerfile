@@ -22,6 +22,8 @@ WORKDIR /app
 COPY --from=prune /app/node_modules ./node_modules
 COPY --from=prune /app/package.json ./package.json
 COPY --from=prune /app/dist ./dist
+# يُقرأ وقت التشغيل نسبةً لمجلد العمل (server/routes.ts)
+COPY --from=prune /app/server/sfm_templates.json ./server/sfm_templates.json
 RUN mkdir -p data .vaults client/public/museum-uploads && chown -R node:node /app
 USER node
 EXPOSE 3001

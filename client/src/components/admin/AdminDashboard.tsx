@@ -83,6 +83,8 @@ export function AdminDashboard() {
   const [newPassword, setNewPassword] = useState("");
 
   const logout = useGame((s) => s.logout);
+  const unlock = useGame((s) => s.unlock);
+  const adminUser = useGame((s) => s.user);
 
   const fetchUsers = useCallback(async () => {
     const r = await fetch("/api/admin/users", { headers: authHeaders() });
@@ -313,6 +315,24 @@ export function AdminDashboard() {
             >
               {msg}
             </div>
+          )}
+          {adminUser?.roomId && adminUser.roomId !== "room-admin" && (
+            <button
+              onClick={() => unlock(adminUser, true, true)}
+              title="الدخول إلى غرفتي مع الاحتفاظ بصلاحيات المدير"
+              style={{
+                background: "rgba(34,211,238,0.1)",
+                border: "1px solid rgba(34,211,238,0.35)",
+                borderRadius: "8px",
+                color: "#22d3ee",
+                padding: "7px 16px",
+                cursor: "pointer",
+                fontSize: "12px",
+                marginLeft: "8px",
+              }}
+            >
+              🚪 دخول غرفتي
+            </button>
           )}
           <button
             onClick={handleLogout}
