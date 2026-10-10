@@ -666,6 +666,13 @@ async function processTaskWithModel(task: any, log: TriggerLog, model: ModelConf
 
   const provider = detectProvider(model);
   log.modelUsed = model.name;
+  // بوابة SmartCloud لها كتالوجها الخاص — لا يوجد اسم افتراضي آمن، فنفشل بوضوح بدل التخمين
+  if (model.name.toLowerCase().includes("smartcloud") && !(model.modelId || "").trim()) {
+    log.status = "failed";
+    log.error = `الموديل "${model.alias || model.name}" بلا معرّف موديل. حدّد المعرّف من الإعدادات (مثل claude-sonnet-5).`;
+    log.completedAt = Date.now();
+    return;
+  }
 
   const pn = model.name.toLowerCase();
   const proxyBase = pn.includes("openrouter") ? "https://openrouter.ai/api/v1"

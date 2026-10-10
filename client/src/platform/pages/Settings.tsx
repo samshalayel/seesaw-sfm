@@ -35,6 +35,8 @@ const MIRAI_MODELS: Array<[string, string]> = [
   ["ccmax-claude-opus-5.5", "35x"],
 ];
 
+const SMARTCLOUD_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-sonnet-5", "claude-sonnet-5-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5", "claude-opus-5-5"];
+
 const ROOM_ASSIGNMENTS = [
   { v: "main",   l: "الصالة الرئيسية" },
   { v: "stage0", l: "S0 — المشكلة" },
@@ -176,7 +178,15 @@ function ModelCard({
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="الاسم الظاهر" ltr={false} value={m.alias ?? ""} onChange={(v) => onPatch("alias", v)} />
 
-        {m.name === "Mirai" ? (
+        {m.name === "SmartCloud" ? (
+          <div>
+            <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">الموديل</label>
+            <select value={m.modelId ?? ""} onChange={(e) => onPatch("modelId", e.target.value)} className={`${field} cursor-pointer font-mono`} dir="ltr">
+              <option value="" className="bg-white">— اختر موديلاً —</option>
+              {SMARTCLOUD_MODELS.map((id) => <option key={id} value={id} className="bg-white">{id}</option>)}
+            </select>
+          </div>
+        ) : m.name === "Mirai" ? (
           <div>
             <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">
               الموديل <span className="font-normal text-slate-400">· المعامل = مضاعف الاستهلاك</span>

@@ -2739,12 +2739,19 @@ export function VaultSettingsDialog() {
                   <div>
                     <label style={{ ...labelStyle, marginBottom: "6px" }}>معرّف الموديل</label>
                     <input
+                      list="smartcloud-models"
                       value={model.modelId || ""}
                       onChange={(e) => updateModel(idx, "modelId", e.target.value)}
-                      placeholder="اسم الموديل كما يعرّفه سيرفرك"
+                      placeholder="اختر من القائمة أو اكتب الاسم"
                       style={{ ...inputStyle, marginBottom: "10px" }}
                     />
                   </div>
+                )}
+
+                {model.name === "SmartCloud" && (
+                  <datalist id="smartcloud-models">
+                    {["claude-haiku-4-5-20251001","claude-sonnet-4-6","claude-sonnet-5","claude-sonnet-5-5","claude-opus-4-6","claude-opus-4-7","claude-opus-4-8","claude-opus-5","claude-opus-5-5"].map(id => <option key={id} value={id} />)}
+                  </datalist>
                 )}
 
                 {/* حقل اختيار الموديل — يظهر فقط لـ OpenCode أو Mirai أو v0 أو HuggingFace */}
