@@ -843,6 +843,15 @@ export function AdminDashboard() {
               </label>
             </div>
 
+            {msg && (
+              <div style={{
+                marginTop: "16px", padding: "9px 12px", borderRadius: "8px", fontSize: "12px",
+                background: msg.startsWith("✓") ? "rgba(74,222,128,0.1)" : "rgba(239,68,68,0.1)",
+                border: `1px solid ${msg.startsWith("✓") ? "rgba(74,222,128,0.35)" : "rgba(239,68,68,0.35)"}`,
+                color: msg.startsWith("✓") ? "#4ade80" : "#ef4444",
+              }}>{msg}</div>
+            )}
+
             <div style={{ display: "flex", gap: "10px", marginTop: "24px", justifyContent: "flex-end" }}>
               <button
                 onClick={() => setAddingUser(false)}
@@ -905,6 +914,15 @@ export function AdminDashboard() {
                 }}
               />
             </label>
+
+            {msg && (
+              <div style={{
+                marginTop: "16px", padding: "9px 12px", borderRadius: "8px", fontSize: "12px",
+                background: msg.startsWith("✓") ? "rgba(74,222,128,0.1)" : "rgba(239,68,68,0.1)",
+                border: `1px solid ${msg.startsWith("✓") ? "rgba(74,222,128,0.35)" : "rgba(239,68,68,0.35)"}`,
+                color: msg.startsWith("✓") ? "#4ade80" : "#ef4444",
+              }}>{msg}</div>
+            )}
 
             <div style={{ display: "flex", gap: "10px", marginTop: "24px", justifyContent: "flex-end" }}>
               <button
