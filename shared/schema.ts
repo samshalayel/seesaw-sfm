@@ -223,3 +223,10 @@ export type RoomModel         = typeof roomModels.$inferSelect;
 export type RoomPlaylistItem  = typeof roomPlaylist.$inferSelect;
 export type WorkspaceProject  = typeof projects.$inferSelect;
 export type ProjectPlaybook   = typeof projectPlaybooks.$inferSelect;
+
+// ── app_settings (إعدادات عامة بنمط مفتاح/قيمة — يديرها المدير) ──────────────────
+export const appSettings = pgTable("app_settings", {
+  key:       text("key").primaryKey(),
+  value:     text("value").notNull().default(""),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});

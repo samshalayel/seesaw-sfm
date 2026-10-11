@@ -35,7 +35,7 @@ function computeStats(users: UserRow[]): Stats {
   return { totalUsers: users.length, byTier, byRole };
 }
 
-type Tab = "users" | "tiers";
+type Tab = "users" | "tiers" | "defaults";
 
 const TIERS = ["free", "pro", "enterprise"];
 const MODEL_OPTIONS = [
@@ -86,6 +86,34 @@ export function AdminDashboard() {
   const unlock = useGame((s) => s.unlock);
   const adminUser = useGame((s) => s.user);
 
+  // ── الموديل الافتراضي لكل تاير ──────────────────────────────────────────────
+  type DefModel = { enabled: boolean; provider: string; modelId: string; alias: string; apiKey: string; hasKey?: boolean };
+  const [defModels, setDefModels] = useState<Record<string, DefModel>>({});
+  const [defMsg, setDefMsg] = useState<Record<string, string>>({});
+  const DEF_PROVIDERS = ["OpenRouter", "Groq", "GPT", "Claude", "Gemini", "GLM", "Mistral", "Mirai", "SmartCloud", "OpenCode", "HuggingFace", "Grok"];
+
+  const loadDefModels = useCallback(async () => {
+    const r = await fetch("/api/admin/default-models", { headers: authHeaders() });
+    if (r.ok) setDefModels(await r.json());
+  }, []);
+
+  const patchDef = (tier: string, part: Partial<DefModel>) =>
+    setDefModels((m) => ({ ...m, [tier]: { ...m[tier], ...part } }));
+
+  const saveDef = async (tier: string) => {
+    const d = defModels[tier];
+    setDefMsg((m) => ({ ...m, [tier]: "…" }));
+    try {
+      const r = await fetch(`/api/admin/default-models/${tier}`, {
+        method: "PUT", headers: authHeaders(), body: JSON.stringify(d),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) { setDefModels(data.models); setDefMsg((m) => ({ ...m, [tier]: "✓ تم الحفظ" })); fetchTierModels(); }
+      else setDefMsg((m) => ({ ...m, [tier]: "✕ " + (data.error || "فشل") }));
+    } catch (e: any) { setDefMsg((m) => ({ ...m, [tier]: "✕ " + e.message })); }
+    setTimeout(() => setDefMsg((m) => ({ ...m, [tier]: "" })), 3500);
+  };
+
   const fetchUsers = useCallback(async () => {
     const r = await fetch("/api/admin/users", { headers: authHeaders() });
     if (r.ok) {
@@ -103,7 +131,8 @@ export function AdminDashboard() {
   useEffect(() => {
     fetchUsers();
     fetchTierModels();
-  }, [fetchUsers, fetchTierModels]);
+    loadDefModels();
+  }, [fetchUsers, fetchTierModels, loadDefModels]);
 
   const flash = (text: string) => {
     setMsg(text);
@@ -400,7 +429,7 @@ export function AdminDashboard() {
             width: "fit-content",
           }}
         >
-          {(["users", "tiers"] as Tab[]).map((t) => (
+          {(["users", "tiers", "defaults"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -416,7 +445,7 @@ export function AdminDashboard() {
                 transition: "all 0.2s",
               }}
             >
-              {t === "users" ? "المستخدمون" : "إعدادات التايرز"}
+              {t === "users" ? "المستخدمون" : t === "tiers" ? "إعدادات التايرز" : "الموديل الافتراضي"}
             </button>
           ))}
         </div>
@@ -597,6 +626,56 @@ export function AdminDashboard() {
         )}
 
         {/* Tiers Tab */}
+        {/* Default model per tier */}
+        {tab === "defaults" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ color: "#776a50", fontSize: "12px", lineHeight: 1.7 }}>
+              الموديل اللي بينزرع تلقائياً بغرفة كل مستخدم جديد حسب تايرزه. المفتاح مشترك بين كل مستخدمي التاير،
+              فاستخدم مفتاحاً مخصصاً وله سقف رصيد من لوحة المزوّد. القيم تُحفظ في قاعدة البيانات لا في الكود،
+              وبتسري على المستخدمين الجدد فقط، مش على الحاليين.
+            </div>
+            {TIERS.map((tier) => {
+              const d = defModels[tier] || { enabled: false, provider: "OpenRouter", modelId: "", alias: "", apiKey: "" };
+              const fld: React.CSSProperties = {
+                display: "block", width: "100%", marginTop: "6px", padding: "9px 12px", borderRadius: "8px",
+                border: `1px solid ${borderCol}`, background: "rgba(255,255,255,0.04)", color: "#e2d9c0",
+                fontSize: "13px", outline: "none", boxSizing: "border-box", direction: "ltr", textAlign: "left",
+              };
+              return (
+                <div key={tier} style={{ background: cardBg, border: `1px solid ${borderCol}`, borderRadius: "14px", padding: "18px 22px", opacity: d.enabled ? 1 : 0.75 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                    <span style={{ color: tierColor[tier] || gold, fontWeight: "bold", letterSpacing: "2px", fontSize: "13px" }}>{tier.toUpperCase()}</span>
+                    <label style={{ display: "flex", alignItems: "center", gap: "8px", color: "#a89a76", fontSize: "12px", cursor: "pointer" }}>
+                      <input type="checkbox" checked={!!d.enabled} onChange={(e) => patchDef(tier, { enabled: e.target.checked })} />
+                      مفعّل
+                    </label>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    <label style={{ fontSize: "12px", color: "#776a50" }}>المزوّد
+                      <select value={d.provider} onChange={(e) => patchDef(tier, { provider: e.target.value })} style={fld}>
+                        {DEF_PROVIDERS.map((p) => <option key={p} value={p} style={{ background: "#12100c" }}>{p}</option>)}
+                      </select>
+                    </label>
+                    <label style={{ fontSize: "12px", color: "#776a50" }}>معرّف الموديل
+                      <input value={d.modelId} placeholder="z-ai/glm-5.3-flash" onChange={(e) => patchDef(tier, { modelId: e.target.value })} style={fld} />
+                    </label>
+                    <label style={{ fontSize: "12px", color: "#776a50" }}>الاسم الظاهر
+                      <input value={d.alias} placeholder="GLM" onChange={(e) => patchDef(tier, { alias: e.target.value })} style={{ ...fld, direction: "rtl", textAlign: "right" }} />
+                    </label>
+                    <label style={{ fontSize: "12px", color: "#776a50" }}>مفتاح الـAPI {d.hasKey && <span style={{ color: "#4ade80" }}>· محفوظ</span>}
+                      <input type="password" value={d.apiKey} placeholder={d.hasKey ? "اتركه كما هو للإبقاء على المحفوظ" : "الصق المفتاح"} onChange={(e) => patchDef(tier, { apiKey: e.target.value })} style={fld} />
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "14px" }}>
+                    <button onClick={() => saveDef(tier)} style={{ background: "rgba(196,164,74,0.15)", border: `1px solid ${borderCol}`, borderRadius: "8px", color: gold, padding: "7px 20px", cursor: "pointer", fontSize: "12px", fontWeight: 700 }}>حفظ</button>
+                    {defMsg[tier] && <span style={{ fontSize: "12px", color: defMsg[tier].startsWith("✓") ? "#4ade80" : defMsg[tier].startsWith("✕") ? "#ef4444" : "#a89a76" }}>{defMsg[tier]}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {tab === "tiers" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {TIERS.map((tier) => (

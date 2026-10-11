@@ -26,6 +26,7 @@ try {
 import { submitJob, getJobs, getJob, clearCompletedJobs } from "./backgroundJobs";
 import { getVaultSettings, setVaultSettings, getModels, getHallWorkers, getDefaultModel, setDefaultModel, getSystemPrompt, getManagerDoorCode, DEFAULT_GROQ_KEY, getWhatsAppConfig, getGoogleConfig } from "./vaultStore";
 import { getLastPlan } from "./taskPlanner";
+import { seedDefaultModel, saveDefaultModelConfig, getAllDefaultModelsMasked, TIERS as DEFAULT_MODEL_TIERS } from "./defaultModel";
 import { startAutoTrigger, stopAutoTrigger, getAutoTriggerConfig, getTriggerLogs, clearProcessedTasks, triggerScanNow, getAvailableVaultModels, testVpsConnection, cancelTriggerLog } from "./autoTrigger";
 import { buildExtractPrompt, buildFillPrompt, S0_FACTS_SCHEMA, S1_FACTS_SCHEMA, S2_FACTS_SCHEMA } from "./sfmFactExtractor";
 import { createProject, getProjects, getNextVersion, recordStageFile, getStageFiles, setPipelineSlot, getPipelineSlots, detectSlotFromPath, PIPELINE_SLOTS } from "./projectStore";
@@ -1624,6 +1625,7 @@ export async function registerRoutes(
       });
 
       await storage.createRoom(roomId);
+      await seedDefaultModel(roomId, "free").catch((e) => console.error("[DefaultModel] seed failed:", e.message));
 
       const jwtSecret = process.env.JWT_SECRET!;
       const token = jwt.sign(
@@ -1810,6 +1812,7 @@ export async function registerRoutes(
         role: role || "user",
         status: status || "active",
       });
+      await seedDefaultModel(roomId, tier || "free").catch((e) => console.error("[DefaultModel] seed failed:", e.message));
 
       console.log(`[Admin] User created: ${user.username}, room: ${roomId}`);
       res.json({ success: true, id: user.id, roomId });
@@ -1869,6 +1872,32 @@ export async function registerRoutes(
     try {
       const data = await storage.getTierModels();
       res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── الموديل الافتراضي لكل تاير (المزوّد + الموديل + المفتاح) ──────────────────
+  app.get("/api/admin/default-models", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await getAllDefaultModelsMasked());
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/admin/default-models/:tier", requireAdmin, async (req, res) => {
+    try {
+      const tier = req.params.tier;
+      if (!(DEFAULT_MODEL_TIERS as readonly string[]).includes(tier)) {
+        return res.status(400).json({ error: "تاير غير صالح" });
+      }
+      const { enabled, provider, modelId, alias, apiKey } = req.body || {};
+      if (enabled && !String(provider || "").trim()) {
+        return res.status(400).json({ error: "اختر المزوّد" });
+      }
+      await saveDefaultModelConfig(tier, { enabled, provider, modelId, alias, apiKey });
+      res.json({ success: true, models: await getAllDefaultModelsMasked() });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

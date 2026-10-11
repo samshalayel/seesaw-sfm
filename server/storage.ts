@@ -1,6 +1,6 @@
 import { db } from "./db";
 import {
-  users, rooms, roomModels, roomPlaylist, tierModels, projects, projectPlaybooks,
+  users, rooms, roomModels, roomPlaylist, tierModels, projects, projectPlaybooks, appSettings,
   type User, type InsertUser, type Room, type RoomModel, type RoomPlaylistItem, type WorkspaceProject, type ProjectPlaybook,
 } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
@@ -32,6 +32,8 @@ export interface IStorage {
   // Tier Models
   getTierModels(): Promise<Record<string, string[]>>;
   setTierModels(data: Record<string, string[]>): Promise<void>;
+  getSetting(key: string): Promise<string | undefined>;
+  setSetting(key: string, value: string): Promise<void>;
 
   // Workspace Projects
   getWorkspaceProjects(roomId: string): Promise<WorkspaceProject[]>;
@@ -185,6 +187,16 @@ export class DrizzleStorage implements IStorage {
       result[row.tier].push(row.modelName);
     }
     return result;
+  }
+
+  async getSetting(key: string): Promise<string | undefined> {
+    const r = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return r[0]?.value;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await db.insert(appSettings).values({ key, value })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
   }
 
   async setTierModels(data: Record<string, string[]>): Promise<void> {
